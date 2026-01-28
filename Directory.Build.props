@@ -1,0 +1,28 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Enforce code style during build -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- Analysis settings -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!-- Nullable reference types -->
+    <Nullable>enable</Nullable>
+
+    <!-- Warnings -->
+    <WarningLevel>9999</WarningLevel>
+    <NoWarn>$(NoWarn);CS1591</NoWarn> <!-- Missing XML comments - we're not documenting everything -->
+
+    <!-- Deterministic builds for reproducibility -->
+    <Deterministic>true</Deterministic>
+
+    <!-- Use latest C# language version -->
+    <LangVersion>latest</LangVersion>
+
+    <!-- Enable implicit usings -->
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

@@ -399,3 +399,29 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+.idea/
+
+###############################
+# ExcelDNA specific           #
+###############################
+
+# ExcelDNA packed add-in files (build output)
+*.xll
+*.xll64
+*-packed.xll
+*-packed.xll64
+
+# ExcelDNA integration files that may be auto-generated
+*-AddIn*.dna
+
+###############################
+# Project specific            #
+###############################
+
+# Local development settings
+appsettings.Development.json
+appsettings.Local.json
+
+# Secrets
+*.secrets.json
+secrets/
