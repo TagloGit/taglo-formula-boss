@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="formula-boss.csproj" />
+  <Project Path="..\formula-boss.Tests\formula-boss.Tests.csproj" />
 </Solution>
