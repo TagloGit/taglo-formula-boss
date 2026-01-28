@@ -5,10 +5,12 @@
     <RootNamespace>FormulaBoss</RootNamespace>
     <ExcelDnaPackCompressResources>false</ExcelDnaPackCompressResources>
     <ExcelDna64Bit>true</ExcelDna64Bit>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ExcelDna.AddIn" Version="1.*" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" />
   </ItemGroup>
 
 </Project>

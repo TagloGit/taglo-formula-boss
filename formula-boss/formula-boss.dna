@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <DnaLibrary Name="Formula Boss" RuntimeVersion="v4.0">
-  <ExternalLibrary Path="formula-boss.dll" ExplicitExports="false" LoadFromBytes="true" Pack="true" />
+  <ExternalLibrary Path="formula-boss.dll" ExplicitExports="false" LoadFromBytes="true" Pack="true" ExplicitRegistration="true" />
 </DnaLibrary>
