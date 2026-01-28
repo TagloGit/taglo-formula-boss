@@ -5,14 +5,20 @@ using ExcelDna.Integration;
 
 using FormulaBoss.Compilation;
 using FormulaBoss.Functions;
+using FormulaBoss.Interception;
 
 namespace FormulaBoss;
 
 /// <summary>
 /// Excel add-in entry point. Handles registration of static and dynamic UDFs.
 /// </summary>
-public class AddIn : IExcelAddIn
+public sealed class AddIn : IExcelAddIn, IDisposable
 {
+    private DynamicCompiler? _compiler;
+    private FormulaPipeline? _pipeline;
+    private FormulaInterceptor? _interceptor;
+    private bool _disposed;
+
     public void AutoOpen()
     {
         try
@@ -20,12 +26,11 @@ public class AddIn : IExcelAddIn
             // Register static functions (ColorFunctions)
             RegisterStaticFunctions();
 
-            // Phase 2: Compile and register a test dynamic UDF
-            var stopwatch = Stopwatch.StartNew();
-            DynamicCompiler.CompileAndRegisterTestFunction();
-            stopwatch.Stop();
+            // Defer event hookup until Excel is fully initialized
+            // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
+            ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
 
-            Debug.WriteLine($"Dynamic compilation completed in {stopwatch.ElapsedMilliseconds}ms");
+            Debug.WriteLine("Formula Boss add-in loaded successfully");
         }
         catch (Exception ex)
         {
@@ -33,9 +38,43 @@ public class AddIn : IExcelAddIn
         }
     }
 
+    private void InitializeInterception()
+    {
+        try
+        {
+            // Initialize the dynamic compilation infrastructure
+            _compiler = new DynamicCompiler();
+            _pipeline = new FormulaPipeline(_compiler);
+            _interceptor = new FormulaInterceptor(_pipeline);
+
+            // Start listening for worksheet changes
+            _interceptor.Start();
+
+            Debug.WriteLine("Formula Boss interception initialized");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"InitializeInterception error: {ex}");
+        }
+    }
+
     public void AutoClose()
     {
-        // Cleanup if needed
+        Dispose();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _interceptor?.Dispose();
+        _interceptor = null;
+        _pipeline = null;
+        _compiler = null;
+        _disposed = true;
     }
 
     /// <summary>

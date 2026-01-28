@@ -22,6 +22,25 @@ public class DynamicCompiler
         "netstandard"
     ];
 
+    private readonly HashSet<string> _registeredUdfs = [];
+
+    /// <summary>
+    /// Compiles C# source code and registers all UDFs in it.
+    /// Returns a list of compilation errors, or empty list on success.
+    /// </summary>
+    public virtual List<string> CompileAndRegister(string source)
+    {
+        var (assembly, errors) = CompileSourceWithErrors(source);
+
+        if (assembly == null)
+        {
+            return errors;
+        }
+
+        RegisterFunctionsFromAssembly(assembly);
+        return [];
+    }
+
     /// <summary>
     /// Compiles and registers a test function to validate the Roslyn + ExcelDNA pipeline.
     /// </summary>
@@ -53,13 +72,22 @@ public class DynamicCompiler
             return;
         }
 
-        RegisterFunctionsFromAssembly(assembly);
+        RegisterFunctionsFromAssemblyStatic(assembly);
     }
 
     /// <summary>
     /// Compiles C# source code to an in-memory assembly.
     /// </summary>
     public static Assembly? CompileSource(string source)
+    {
+        var (assembly, _) = CompileSourceWithErrors(source);
+        return assembly;
+    }
+
+    /// <summary>
+    /// Compiles C# source code to an in-memory assembly, returning errors if compilation fails.
+    /// </summary>
+    private static (Assembly? Assembly, List<string> Errors) CompileSourceWithErrors(string source)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
 
@@ -79,14 +107,16 @@ public class DynamicCompiler
         {
             var errors = result.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => d.GetMessage(CultureInfo.InvariantCulture));
+                .Select(d => d.GetMessage(CultureInfo.InvariantCulture))
+                .ToList();
 
             Debug.WriteLine($"Compilation failed:\n{string.Join("\n", errors)}");
-            return null;
+            return (null, errors);
         }
 
         ms.Seek(0, SeekOrigin.Begin);
-        return AssemblyLoadContext.Default.LoadFromStream(ms);
+        var assembly = AssemblyLoadContext.Default.LoadFromStream(ms);
+        return (assembly, []);
     }
 
     /// <summary>
@@ -103,20 +133,170 @@ public class DynamicCompiler
             {
                 var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
                 if (RequiredAssemblies.Contains(assemblyName) ||
-                    assemblyName.StartsWith("System.", StringComparison.Ordinal))
+                    assemblyName.StartsWith("System.", StringComparison.Ordinal) ||
+                    assemblyName.StartsWith("Microsoft.CSharp", StringComparison.Ordinal))
                 {
                     references.Add(MetadataReference.CreateFromFile(assemblyPath));
                 }
             }
         }
 
+        // Add ExcelDNA reference - handle embedded assembly case
+        AddExcelDnaReference(references);
+
         return references;
+    }
+
+    /// <summary>
+    /// Adds ExcelDNA assembly reference, handling the case where it's loaded from embedded resources.
+    /// </summary>
+    private static void AddExcelDnaReference(List<MetadataReference> references)
+    {
+        var excelDnaAssembly = typeof(ExcelFunctionAttribute).Assembly;
+
+        // Try using Location first (works when not packed)
+        if (!string.IsNullOrEmpty(excelDnaAssembly.Location))
+        {
+            references.Add(MetadataReference.CreateFromFile(excelDnaAssembly.Location));
+            Debug.WriteLine($"Using ExcelDNA from Location: {excelDnaAssembly.Location}");
+            return;
+        }
+
+        // When packed into XLL, Location is empty - search for the DLL
+        // Build list of paths to search
+        var searchPaths = new List<string>
+        {
+            AppDomain.CurrentDomain.BaseDirectory,
+            Path.GetDirectoryName(typeof(DynamicCompiler).Assembly.Location) ?? "",
+            Environment.CurrentDirectory
+        };
+
+        // Add NuGet packages cache paths
+        var nugetCache = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".nuget", "packages", "exceldna.integration");
+
+        if (Directory.Exists(nugetCache))
+        {
+            // Find available versions and search each
+            foreach (var versionDir in Directory.GetDirectories(nugetCache))
+            {
+                // Try common target framework monikers
+                searchPaths.Add(Path.Combine(versionDir, "lib", "net6.0-windows7.0"));
+                searchPaths.Add(Path.Combine(versionDir, "lib", "net6.0"));
+                searchPaths.Add(Path.Combine(versionDir, "lib", "netstandard2.0"));
+            }
+        }
+
+        foreach (var basePath in searchPaths)
+        {
+            if (string.IsNullOrEmpty(basePath))
+            {
+                continue;
+            }
+
+            var dllPath = Path.Combine(basePath, "ExcelDna.Integration.dll");
+            if (File.Exists(dllPath))
+            {
+                references.Add(MetadataReference.CreateFromFile(dllPath));
+                Debug.WriteLine($"Found ExcelDna.Integration.dll at: {dllPath}");
+                return;
+            }
+        }
+
+        // Last resort: read assembly bytes from memory
+        try
+        {
+            var assemblyBytes = GetAssemblyBytesFromMemory(excelDnaAssembly);
+            if (assemblyBytes != null)
+            {
+                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
+                Debug.WriteLine("Created ExcelDNA reference from memory image");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to get assembly bytes from memory: {ex.Message}");
+        }
+
+        Debug.WriteLine("WARNING: Could not add ExcelDNA assembly reference - compilation may fail");
+    }
+
+    /// <summary>
+    /// Attempts to read assembly bytes from a loaded assembly using reflection.
+    /// </summary>
+    private static byte[]? GetAssemblyBytesFromMemory(Assembly assembly)
+    {
+        // Try to get the raw assembly image using Module.ResolveSignature trick
+        // or by reading from the ManifestModule
+        try
+        {
+            var module = assembly.ManifestModule;
+
+            // Use reflection to access internal/private methods that can give us the image
+            var fullyQualifiedName = module.FullyQualifiedName;
+
+            // If it's a file path, try reading it
+            if (File.Exists(fullyQualifiedName))
+            {
+                return File.ReadAllBytes(fullyQualifiedName);
+            }
+
+            // Check if the assembly was loaded from a byte array (has no file backing)
+            // In this case, we need to use Marshal to copy from the loaded image
+            var peImageField = typeof(Assembly).GetField("_peImage",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            if (peImageField != null && peImageField.GetValue(assembly) is byte[] peImage)
+            {
+                return peImage;
+            }
+        }
+        catch
+        {
+            // Ignore reflection failures
+        }
+
+        return null;
     }
 
     /// <summary>
     /// Registers all public static methods from the compiled assembly as Excel UDFs.
     /// </summary>
-    private static void RegisterFunctionsFromAssembly(Assembly assembly)
+    private void RegisterFunctionsFromAssembly(Assembly assembly)
+    {
+        foreach (var type in assembly.GetExportedTypes())
+        {
+            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
+
+            foreach (var method in methods)
+            {
+                // Skip if already registered
+                if (_registeredUdfs.Contains(method.Name))
+                {
+                    Debug.WriteLine($"UDF already registered: {method.Name}");
+                    continue;
+                }
+
+                try
+                {
+                    RegisterMethod(method);
+                    _registeredUdfs.Add(method.Name);
+                    Debug.WriteLine($"Registered dynamic UDF: {method.Name}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to register {method.Name}: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Static version for test functions (doesn't track UDFs).
+    /// </summary>
+    private static void RegisterFunctionsFromAssemblyStatic(Assembly assembly)
     {
         foreach (var type in assembly.GetExportedTypes())
         {
@@ -142,10 +322,11 @@ public class DynamicCompiler
     /// </summary>
     private static void RegisterMethod(MethodInfo method)
     {
+        // Create function attribute - all dynamically compiled UDFs use the method name
         var funcAttr = new ExcelFunctionAttribute
         {
             Name = method.Name,
-            Description = $"Dynamically compiled function: {method.Name}"
+            Description = $"Dynamic UDF: {method.Name}"
         };
 
         var parameters = method.GetParameters();
@@ -153,7 +334,12 @@ public class DynamicCompiler
 
         foreach (var param in parameters)
         {
-            argAttrs.Add(new ExcelArgumentAttribute { Name = param.Name });
+            // All transpiled UDFs expect range references, so set AllowReference = true
+            argAttrs.Add(new ExcelArgumentAttribute
+            {
+                Name = param.Name,
+                AllowReference = true
+            });
         }
 
         var delegateType = CreateDelegateType(method);

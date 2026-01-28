@@ -207,11 +207,14 @@ public class TranspilerTests
     #region Code Generation - Structure
 
     [Fact]
-    public void Transpiler_GeneratesCode_WithExcelFunctionAttribute()
+    public void Transpiler_GeneratesCode_WithoutExcelDnaAttributes()
     {
+        // We don't generate ExcelDNA attributes in the code anymore due to assembly identity issues.
+        // Registration is handled manually via RegisterDelegates in DynamicCompiler.
         var result = Transpile("data.values.toArray()");
 
-        Assert.Contains("[ExcelFunction(", result.SourceCode);
+        Assert.DoesNotContain("[ExcelFunction(", result.SourceCode);
+        Assert.DoesNotContain("[ExcelArgument(", result.SourceCode);
     }
 
     [Fact]
@@ -223,29 +226,25 @@ public class TranspilerTests
     }
 
     [Fact]
-    public void Transpiler_GeneratesCode_WithAllowReferenceAttribute()
-    {
-        var result = Transpile("data.values.toArray()");
-
-        Assert.Contains("[ExcelArgument(AllowReference = true)]", result.SourceCode);
-    }
-
-    [Fact]
     public void Transpiler_GeneratesCode_WithUsingStatements()
     {
         var result = Transpile("data.values.toArray()");
 
         Assert.Contains("using System;", result.SourceCode);
         Assert.Contains("using System.Linq;", result.SourceCode);
-        Assert.Contains("using ExcelDna.Integration;", result.SourceCode);
+        // Note: We avoid using ExcelDna.Integration due to assembly identity mismatch issues
+        Assert.DoesNotContain("using ExcelDna.Integration;", result.SourceCode);
     }
 
     [Fact]
-    public void Transpiler_ObjectModel_IncludesInteropUsage()
+    public void Transpiler_ObjectModel_UsesDynamicTyping()
     {
         var result = Transpile("data.cells.toArray()");
 
-        Assert.Contains("Microsoft.Office.Interop.Excel", result.SourceCode);
+        // Object model path uses reflection to get Excel Application to avoid assembly identity issues
+        Assert.Contains("GetType(\"ExcelDna.Integration.ExcelDnaUtil\")", result.SourceCode);
+        Assert.Contains("dynamic app = appProperty?.GetValue(null)", result.SourceCode);
+        Assert.Contains("dynamic range", result.SourceCode);
     }
 
     [Fact]

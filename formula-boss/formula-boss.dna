@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <DnaLibrary Name="Formula Boss" RuntimeVersion="v4.0">
   <ExternalLibrary Path="formula-boss.dll" ExplicitExports="false" LoadFromBytes="true" Pack="true" ExplicitRegistration="true" />
+
+  <!-- Keep ExcelDna.Integration.dll unpacked so Roslyn can reference it for dynamic compilation -->
+  <Reference Path="ExcelDna.Integration.dll" Pack="false" />
 </DnaLibrary>
