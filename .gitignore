@@ -425,3 +425,4 @@ appsettings.Local.json
 # Secrets
 *.secrets.json
 secrets/
+/.claude
