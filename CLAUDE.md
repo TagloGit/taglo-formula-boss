@@ -9,7 +9,7 @@ Formula Boss is an Excel add-in that allows power users to write inline expressi
 ## Build Commands
 
 ```bash
-# Build the solution (requires .NET 10 SDK)
+# Build the solution (requires .NET 6 SDK)
 dotnet build formula-boss/formula-boss.slnx
 
 # Run tests (when tests exist)
@@ -18,8 +18,8 @@ dotnet test formula-boss/formula-boss.slnx
 
 ## Architecture
 
-**Tech Stack (proposed):**
-- .NET 10 / C# 14
+**Tech Stack:**
+- .NET 6 / C# 10 (ExcelDNA 1.9 compatibility)
 - ExcelDNA - Native C API integration for high-performance UDFs
 - Roslyn (Microsoft.CodeAnalysis.CSharp) - Runtime C# compilation
 - Microsoft.Office.Interop.Excel - Excel object model access for cell properties (color, formatting)

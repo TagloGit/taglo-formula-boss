@@ -1,8 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net6.0-windows</TargetFramework>
     <RootNamespace>FormulaBoss</RootNamespace>
+    <ExcelDnaPackCompressResources>false</ExcelDnaPackCompressResources>
+    <ExcelDna64Bit>true</ExcelDna64Bit>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ExcelDna.AddIn" Version="1.*" />
+  </ItemGroup>
 
 </Project>
