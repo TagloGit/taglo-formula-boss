@@ -422,6 +422,9 @@ FodyWeavers.xsd
 appsettings.Development.json
 appsettings.Local.json
 
+# Launch settings (machine-specific)
+**/Properties/launchSettings.json
+
 # Secrets
 *.secrets.json
 secrets/
