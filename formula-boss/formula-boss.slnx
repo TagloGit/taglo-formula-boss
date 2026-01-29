@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="formula-boss.csproj" />
   <Project Path="..\formula-boss.Tests\formula-boss.Tests.csproj" />
+  <Project Path="..\formula-boss.IntegrationTests\formula-boss.IntegrationTests.csproj" />
 </Solution>
