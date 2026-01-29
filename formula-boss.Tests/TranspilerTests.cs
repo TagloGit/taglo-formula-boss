@@ -237,13 +237,15 @@ public class TranspilerTests
     }
 
     [Fact]
-    public void Transpiler_ObjectModel_UsesDynamicTyping()
+    public void Transpiler_ObjectModel_UsesInlineReflection()
     {
         var result = Transpile("data.cells.toArray()");
 
-        // Object model path uses reflection to get Excel Application to avoid assembly identity issues
-        Assert.Contains("GetType(\"ExcelDna.Integration.ExcelDnaUtil\")", result.SourceCode);
-        Assert.Contains("dynamic app = appProperty?.GetValue(null)", result.SourceCode);
+        // Object model path uses inline reflection for ExcelReference → Range conversion
+        Assert.Contains("ExcelDnaUtil", result.SourceCode);
+        // Uses property-based address building instead of XlCall
+        Assert.Contains("RowFirst", result.SourceCode);
+        Assert.Contains("ColumnFirst", result.SourceCode);
         Assert.Contains("dynamic range", result.SourceCode);
     }
 
@@ -279,7 +281,7 @@ public class TranspilerTests
         var result = Transpile("data.values.where(v => v > 0).toArray()");
 
         Assert.False(result.RequiresObjectModel);
-        Assert.Contains(".Where(v => (v > 0))", result.SourceCode);
+        Assert.Contains(".Where(v => (Convert.ToDouble(v) > 0))", result.SourceCode);
         Assert.Contains(".ToArray()", result.SourceCode);
     }
 

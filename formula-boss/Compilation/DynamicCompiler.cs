@@ -144,7 +144,44 @@ public class DynamicCompiler
         // Add ExcelDNA reference - handle embedded assembly case
         AddExcelDnaReference(references);
 
+        // Add reference to formula-boss.dll for RuntimeHelpers
+        AddFormulaBossReference(references);
+
         return references;
+    }
+
+    /// <summary>
+    /// Adds a reference to the formula-boss assembly containing RuntimeHelpers.
+    /// </summary>
+    private static void AddFormulaBossReference(List<MetadataReference> references)
+    {
+        var formulaBossAssembly = typeof(RuntimeHelpers).Assembly;
+
+        // Try using Location first
+        if (!string.IsNullOrEmpty(formulaBossAssembly.Location))
+        {
+            references.Add(MetadataReference.CreateFromFile(formulaBossAssembly.Location));
+            Debug.WriteLine($"Using FormulaBoss from Location: {formulaBossAssembly.Location}");
+            return;
+        }
+
+        // If Location is empty (packed assembly), try to read from memory
+        try
+        {
+            var assemblyBytes = GetAssemblyBytesFromMemory(formulaBossAssembly);
+            if (assemblyBytes != null)
+            {
+                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
+                Debug.WriteLine("Created FormulaBoss reference from memory image");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to get FormulaBoss assembly bytes from memory: {ex.Message}");
+        }
+
+        Debug.WriteLine("WARNING: Could not add FormulaBoss assembly reference - compilation may fail");
     }
 
     /// <summary>

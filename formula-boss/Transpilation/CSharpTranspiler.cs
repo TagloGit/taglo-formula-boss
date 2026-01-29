@@ -130,8 +130,28 @@ public class CSharpTranspiler
     {
         var left = TranspileExpression(binary.Left);
         var right = TranspileExpression(binary.Right);
+
+        // For comparison operators in value-only path, lambda parameters are objects
+        // and need to be cast to double for numeric comparisons
+        var isComparison = binary.Operator is ">" or "<" or ">=" or "<=" or "==" or "!=";
+        if (isComparison && !_requiresObjectModel)
+        {
+            // Cast lambda parameters to double for numeric comparisons
+            if (IsLambdaParameter(binary.Left) && IsNumericLiteral(binary.Right))
+            {
+                left = $"Convert.ToDouble({left})";
+            }
+
+            if (IsLambdaParameter(binary.Right) && IsNumericLiteral(binary.Left))
+            {
+                right = $"Convert.ToDouble({right})";
+            }
+        }
+
         return $"({left} {binary.Operator} {right})";
     }
+
+    private static bool IsNumericLiteral(Expression expr) => expr is NumberLiteral;
 
     private string TranspileUnary(UnaryExpr unary)
     {
@@ -181,6 +201,13 @@ public class CSharpTranspiler
     {
         var target = TranspileExpression(call.Target);
         var args = call.Arguments.Select(TranspileExpression).ToList();
+
+        // If calling a LINQ method directly on the source (without .values or .cells),
+        // implicitly use .values - e.g., data.where(...) becomes __values__.Where(...)
+        if (target == "__source__")
+        {
+            target = "__values__";
+        }
 
         // Map DSL methods to C#/LINQ equivalents
         return call.Method.ToLowerInvariant() switch
@@ -232,7 +259,8 @@ public class CSharpTranspiler
 
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Linq;");
-        sb.AppendLine("// Note: Avoiding direct ExcelDna.Integration usage due to assembly identity issues");
+        sb.AppendLine("using System.Reflection;");
+        sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine();
         sb.AppendLine("public static class GeneratedUdf");
         sb.AppendLine("{");
@@ -253,34 +281,67 @@ public class CSharpTranspiler
 
     private static void GenerateObjectModelMethod(StringBuilder sb, string methodName, string expressionCode)
     {
-        // No attributes - registration is handled manually via RegisterDelegates
+        // Generate the ExcelDNA entry point - uses reflection to avoid assembly identity issues
         sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
-        sb.AppendLine("            // Get Excel Application via reflection to avoid assembly identity issues");
-        sb.AppendLine("            var excelDnaUtilType = rangeRef.GetType().Assembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
-        sb.AppendLine("            var appProperty = excelDnaUtilType?.GetProperty(\"Application\");");
+        sb.AppendLine("            // Get Range via reflection to avoid assembly identity issues");
+        sb.AppendLine("            if (rangeRef?.GetType()?.Name != \"ExcelReference\")");
+        sb.AppendLine("                return \"ERROR: Expected ExcelReference, got \" + (rangeRef?.GetType()?.Name ?? \"null\");");
+        sb.AppendLine();
+        sb.AppendLine("            var excelDnaAssembly = rangeRef.GetType().Assembly;");
+        sb.AppendLine("            var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
+        sb.AppendLine("            var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
         sb.AppendLine("            dynamic app = appProperty?.GetValue(null);");
         sb.AppendLine("            if (app == null) return \"ERROR: Could not get Excel Application\";");
         sb.AppendLine();
-        sb.AppendLine("            dynamic range;");
-        sb.AppendLine("            var typeName = rangeRef?.GetType()?.Name;");
-        sb.AppendLine("            if (typeName == \"ExcelReference\")");
-        sb.AppendLine("            {");
-        sb.AppendLine("                // Call xlfReftext via reflection to get the address");
-        sb.AppendLine("                var xlCallType = rangeRef.GetType().Assembly.GetType(\"ExcelDna.Integration.XlCall\");");
-        sb.AppendLine("                var excelMethod = xlCallType?.GetMethod(\"Excel\", new[] { typeof(int), typeof(object[]) });");
-        sb.AppendLine("                var xlfReftext = 111; // XlCall.xlfReftext constant");
-        sb.AppendLine("                var refText = (string)excelMethod?.Invoke(null, new object[] { xlfReftext, new object[] { rangeRef, true } });");
-        sb.AppendLine("                range = app.Range[refText];");
-        sb.AppendLine("            }");
-        sb.AppendLine("            else");
-        sb.AppendLine("            {");
-        sb.AppendLine("                return \"ERROR: Expected ExcelReference, got \" + typeName;");
-        sb.AppendLine("            }");
+        sb.AppendLine("            // Get range address using ExcelReference's own methods instead of XlCall");
+        sb.AppendLine("            var sheetIdProp = rangeRef.GetType().GetProperty(\"SheetId\");");
+        sb.AppendLine("            var rowFirstProp = rangeRef.GetType().GetProperty(\"RowFirst\");");
+        sb.AppendLine("            var rowLastProp = rangeRef.GetType().GetProperty(\"RowLast\");");
+        sb.AppendLine("            var colFirstProp = rangeRef.GetType().GetProperty(\"ColumnFirst\");");
+        sb.AppendLine("            var colLastProp = rangeRef.GetType().GetProperty(\"ColumnLast\");");
         sb.AppendLine();
-        sb.AppendLine("            var __cells__ = ((System.Collections.IEnumerable)range.Cells).Cast<dynamic>();");
+        sb.AppendLine("            var rowFirst = (int)rowFirstProp.GetValue(rangeRef) + 1;");
+        sb.AppendLine("            var rowLast = (int)rowLastProp.GetValue(rangeRef) + 1;");
+        sb.AppendLine("            var colFirst = (int)colFirstProp.GetValue(rangeRef) + 1;");
+        sb.AppendLine("            var colLast = (int)colLastProp.GetValue(rangeRef) + 1;");
+        sb.AppendLine();
+        sb.AppendLine("            // Convert column numbers to letters");
+        sb.AppendLine("            Func<int, string> colToLetter = (col) => {");
+        sb.AppendLine("                string result = \"\";");
+        sb.AppendLine("                while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
+        sb.AppendLine("                return result;");
+        sb.AppendLine("            };");
+        sb.AppendLine();
+        sb.AppendLine("            string address;");
+        sb.AppendLine("            if (rowFirst == rowLast && colFirst == colLast)");
+        sb.AppendLine("                address = colToLetter(colFirst) + rowFirst;");
+        sb.AppendLine("            else");
+        sb.AppendLine("                address = colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
+        sb.AppendLine();
+        sb.AppendLine("            dynamic range = app.Range[address];");
+        sb.Append("            return ").Append(methodName).AppendLine("_Core(range);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        catch (Exception ex)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return \"ERROR: \" + ex.GetType().Name + \": \" + ex.Message;");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Generate the testable core method (takes Range directly, no ExcelDNA dependencies)
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Core computation logic - can be called directly with an Excel Range for testing.");
+        sb.AppendLine("    /// </summary>");
+        sb.Append("    public static object ").Append(methodName).AppendLine("_Core(dynamic range)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        try");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // Build cell list manually - COM collections don't work well with LINQ Cast<T>");
+        sb.AppendLine("            var __cells__ = new System.Collections.Generic.List<dynamic>();");
+        sb.AppendLine("            foreach (dynamic cell in range.Cells) __cells__.Add(cell);");
         sb.AppendLine();
 
         // Replace placeholders and generate the result
@@ -289,9 +350,52 @@ public class CSharpTranspiler
             .Replace("__cells__", "__cells__")
             .Replace("__values__", "range.Value");
 
-        sb.Append("            var result = ").Append(code).AppendLine(";");
+        sb.Append("            object result = ").Append(code).AppendLine(";");
         sb.AppendLine();
-        sb.AppendLine("            return NormalizeResult(result);");
+        sb.AppendLine("            // Normalize result inline");
+        sb.AppendLine("            if (result == null) return string.Empty;");
+        sb.AppendLine("            if (result is string || result is double || result is int || result is bool) return result;");
+        sb.AppendLine("            if (result is object[,]) return result;");
+        sb.AppendLine("            if (result is System.Collections.IEnumerable enumerable && !(result is string))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var list = enumerable.Cast<object>().ToList();");
+        sb.AppendLine("                if (list.Count == 0) return string.Empty;");
+        sb.AppendLine("                var output = new object[list.Count, 1];");
+        sb.AppendLine("                for (var i = 0; i < list.Count; i++)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var item = list[i];");
+        sb.AppendLine("                    // If item is a COM cell object, extract its Value");
+        sb.AppendLine("                    if (item != null && item.GetType().IsCOMObject)");
+        sb.AppendLine("                        output[i, 0] = ((dynamic)item).Value ?? string.Empty;");
+        sb.AppendLine("                    else");
+        sb.AppendLine("                        output[i, 0] = item ?? string.Empty;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                return output;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        catch (Exception ex)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return \"ERROR: \" + ex.GetType().Name + \": \" + ex.Message;");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+    }
+
+    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode)
+    {
+        // Generate the ExcelDNA entry point (uses RuntimeHelpers for ExcelReference → values conversion)
+        sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        try");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // Get values via reflection to avoid assembly identity issues");
+        sb.AppendLine("            if (rangeRef?.GetType()?.Name != \"ExcelReference\")");
+        sb.AppendLine("                return \"ERROR: Expected ExcelReference, got \" + (rangeRef?.GetType()?.Name ?? \"null\");");
+        sb.AppendLine("            var getValueMethod = rangeRef.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
+        sb.AppendLine("            var rawResult = getValueMethod?.Invoke(rangeRef, null);");
+        sb.AppendLine("            var values = rawResult is object[,] arr ? arr : new object[,] { { rawResult } };");
+        sb.AppendLine();
+        sb.Append("            return ").Append(methodName).AppendLine("_Core(values);");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
         sb.AppendLine("        {");
@@ -300,39 +404,14 @@ public class CSharpTranspiler
         sb.AppendLine("    }");
         sb.AppendLine();
 
-        // Add the normalize helper
-        GenerateNormalizeHelper(sb);
-    }
-
-    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode)
-    {
-        // No attributes needed - we register manually via RegisterDelegates
-        sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
+        // Generate the testable core method (takes values directly, no ExcelDNA dependencies)
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Core computation logic - can be called directly with a values array for testing.");
+        sb.AppendLine("    /// </summary>");
+        sb.Append("    public static object ").Append(methodName).AppendLine("_Core(object[,] values)");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
-        sb.AppendLine("            // Use reflection to avoid assembly mismatch with ExcelReference");
-        sb.AppendLine("            object[,] values;");
-        sb.AppendLine("            var typeName = rangeRef?.GetType()?.Name;");
-        sb.AppendLine("            if (typeName == \"ExcelReference\")");
-        sb.AppendLine("            {");
-        sb.AppendLine("                // Call GetValue via reflection to avoid type mismatch");
-        sb.AppendLine("                var getValueMethod = rangeRef.GetType().GetMethod(\"GetValue\");");
-        sb.AppendLine("                var val = getValueMethod?.Invoke(rangeRef, null);");
-        sb.AppendLine("                if (val is object[,] arr)");
-        sb.AppendLine("                    values = arr;");
-        sb.AppendLine("                else");
-        sb.AppendLine("                    values = new object[1, 1] { { val } };");
-        sb.AppendLine("            }");
-        sb.AppendLine("            else if (rangeRef is object[,] arr)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                values = arr;");
-        sb.AppendLine("            }");
-        sb.AppendLine("            else");
-        sb.AppendLine("            {");
-        sb.AppendLine("                values = new object[1, 1] { { rangeRef } };");
-        sb.AppendLine("            }");
-        sb.AppendLine();
         sb.AppendLine("            var __values__ = values.Cast<object>();");
         sb.AppendLine();
 
@@ -341,39 +420,27 @@ public class CSharpTranspiler
             .Replace("__source__", "values")
             .Replace("__values__", "__values__");
 
-        sb.Append("            var result = ").Append(code).AppendLine(";");
+        sb.Append("            object result = ").Append(code).AppendLine(";");
         sb.AppendLine();
-        sb.AppendLine("            return NormalizeResult(result);");
+        sb.AppendLine("            // Normalize result inline");
+        sb.AppendLine("            if (result == null) return string.Empty;");
+        sb.AppendLine("            if (result is string || result is double || result is int || result is bool) return result;");
+        sb.AppendLine("            if (result is object[,]) return result;");
+        sb.AppendLine("            if (result is System.Collections.IEnumerable enumerable && !(result is string))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var list = enumerable.Cast<object>().ToList();");
+        sb.AppendLine("                if (list.Count == 0) return string.Empty;");
+        sb.AppendLine("                // Always return as 2D array for Excel spill (removed single-item special case)");
+        sb.AppendLine("                var output = new object[list.Count, 1];");
+        sb.AppendLine("                for (var i = 0; i < list.Count; i++) output[i, 0] = list[i] ?? string.Empty;");
+        sb.AppendLine("                return output;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            return result;");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
         sb.AppendLine("        {");
         sb.AppendLine("            return \"ERROR: \" + ex.GetType().Name + \": \" + ex.Message;");
         sb.AppendLine("        }");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-
-        // Add the normalize helper
-        GenerateNormalizeHelper(sb);
-    }
-
-    private static void GenerateNormalizeHelper(StringBuilder sb)
-    {
-        sb.AppendLine("    private static object NormalizeResult(object result)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        if (result == null) return \"\";");
-        sb.AppendLine("        if (result is string) return result;");
-        sb.AppendLine("        if (result is object[,]) return result;");
-        sb.AppendLine("        if (result is System.Collections.IEnumerable enumerable)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            var list = enumerable.Cast<object>().ToList();");
-        sb.AppendLine("            if (list.Count == 0) return \"\";");
-        sb.AppendLine("            if (list.Count == 1) return list[0] ?? \"\";");
-        sb.AppendLine("            var output = new object[list.Count, 1];");
-        sb.AppendLine("            for (int i = 0; i < list.Count; i++)");
-        sb.AppendLine("                output[i, 0] = list[i] ?? \"\";");
-        sb.AppendLine("            return output;");
-        sb.AppendLine("        }");
-        sb.AppendLine("        return result;");
         sb.AppendLine("    }");
     }
 

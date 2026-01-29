@@ -187,8 +187,9 @@ public class FormulaInterceptor : IDisposable
             var newFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
             Debug.WriteLine($"Rewriting formula to: {newFormula}");
 
-            // Set the cell formula (this will trigger another SheetChange, but _isProcessing guards us)
-            cell.Formula = newFormula;
+            // Set the cell formula using Formula2 to enable dynamic array spilling
+            // (Formula would add implicit intersection @ operator, preventing spill)
+            cell.Formula2 = newFormula;
 
             // Clear any previous error comment
             ClearCellComment(cell);
