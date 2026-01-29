@@ -29,16 +29,19 @@ dotnet test formula-boss/formula-boss.slnx
 
 ### Usage
 
-Type a formula with backtick expressions. The formula must start with `'=` (quote prefix) to prevent Excel from evaluating it immediately:
+1. Create a named range in Excel (e.g., select `A1:A100`, then type `data` in the Name Box)
+2. Type a formula with backtick expressions. The formula must start with `'=` (quote prefix):
 
 ```
-'=SUM(`A1:A10.values.where(v => v > 0)`)
+'=SUM(`data.values.where(v => v > 0)`)
 ```
 
 When you press Enter, Formula Boss:
 1. Detects the backtick expression
 2. Parses and compiles it to a UDF
-3. Rewrites your formula to: `=SUM(__udf_abc123(A1:A10))`
+3. Rewrites your formula to: `=SUM(__udf_abc123(data))`
+
+**Note:** Currently only named ranges work. Cell references like `A1:A10` are not yet supported.
 
 ## DSL Syntax
 
@@ -90,21 +93,23 @@ When you press Enter, Formula Boss:
 
 ### Examples
 
+First, create a named range called `data` pointing to your data range (e.g., `A1:A100`).
+
 ```
 # Sum positive values
-'=SUM(`A1:A100.values.where(v => v > 0)`)
+'=SUM(`data.values.where(v => v > 0)`)
 
 # Filter by cell color (yellow = index 6)
-'=`A1:A100.cells.where(c => c.color == 6).select(c => c.value).toArray()`
+'=`data.cells.where(c => c.color == 6).select(c => c.value).toArray()`
 
 # Get values from bold cells
-'=`A1:A100.cells.where(c => c.bold).select(c => c.value).toArray()`
+'=`data.cells.where(c => c.bold).select(c => c.value).toArray()`
 
 # Top 5 values
-'=`A1:A100.values.orderByDesc(v => v).take(5).toArray()`
+'=`data.values.orderByDesc(v => v).take(5).toArray()`
 
 # Count cells matching condition
-'=`A1:A100.values.where(v => v > 50 && v < 100).count()`
+'=`data.values.where(v => v > 50 && v < 100).count()`
 ```
 
 ## Architecture
@@ -141,10 +146,11 @@ User types formula with backticks
 
 ## Known Limitations
 
-1. **Quote prefix required**: Formulas must start with `'=` to prevent Excel from evaluating before interception
-2. **No IntelliSense**: The DSL editor is just Excel's formula bar - no autocomplete or syntax highlighting yet
-3. **Object model is slow**: Using `.cells` accesses the Excel object model via COM interop; prefer `.values` when possible
-4. **Single range input**: Each backtick expression takes one range reference as input
+1. **Named ranges only**: Cell references like `A1:A10` don't work yet - the parser doesn't handle `:`. Create a named range first.
+2. **Quote prefix required**: Formulas must start with `'=` to prevent Excel from evaluating before interception
+3. **No IntelliSense**: The DSL editor is just Excel's formula bar - no autocomplete or syntax highlighting yet
+4. **Object model is slow**: Using `.cells` accesses the Excel object model via COM interop; prefer `.values` when possible
+5. **Single range input**: Each backtick expression takes one range reference as input
 
 ## Future Roadmap
 
