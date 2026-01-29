@@ -12,7 +12,7 @@ Formula Boss is an Excel add-in that allows power users to write inline expressi
 # Build the solution (requires .NET 6 SDK)
 dotnet build formula-boss/formula-boss.slnx
 
-# Run tests (when tests exist)
+# Run tests
 dotnet test formula-boss/formula-boss.slnx
 ```
 

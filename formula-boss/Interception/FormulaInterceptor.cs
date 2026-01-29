@@ -84,14 +84,9 @@ public class FormulaInterceptor : IDisposable
             foreach (var cell in target.Cells)
             {
                 var cellText = cell.Formula as string;
-                if (BacktickExtractor.IsBacktickFormula(cellText))
+                if (BacktickExtractor.IsBacktickFormula(cellText) && cell.Address is string address)
                 {
-                    // Store the cell address to process later
-                    var address = cell.Address as string;
-                    if (address != null)
-                    {
-                        cellsToProcess.Add(address);
-                    }
+                    cellsToProcess.Add(address);
                 }
             }
 
