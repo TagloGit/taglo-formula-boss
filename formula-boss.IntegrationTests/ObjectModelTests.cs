@@ -43,6 +43,52 @@ public class ObjectModelTests : IClassFixture<ExcelTestFixture>
         Assert.Equal(2, arr.GetLength(0)); // 25 and 30
     }
 
+    [Fact]
+    public void Cells_WhereColor_Max_ReturnsMaxValue()
+    {
+        // Arrange: cells with values 10, 20, 30, 40, 50 - color cells 2 and 4 yellow
+        var range = _excel.CreateUniqueRange(new object[,] { { 10 }, { 20 }, { 30 }, { 40 }, { 50 } });
+        _excel.SetCellColor(range, 2, 1, 6); // Row 2 (value 20) = Yellow
+        _excel.SetCellColor(range, 4, 1, 6); // Row 4 (value 40) = Yellow
+
+        var compilation = TestHelpers.CompileExpression("data.cells.where(c => c.color == 6).max()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithRange(compilation.CoreMethod!, range);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.NotNull(result);
+        Assert.Equal(40.0, Convert.ToDouble(result));
+    }
+
+    [Fact]
+    public void Cells_WhereColor_Sum_ReturnsSumOfValues()
+    {
+        // Arrange
+        var range = _excel.CreateUniqueRange(new object[,] { { 10 }, { 20 }, { 30 }, { 40 }, { 50 } });
+        _excel.SetCellColor(range, 2, 1, 6); // Row 2 (value 20) = Yellow
+        _excel.SetCellColor(range, 4, 1, 6); // Row 4 (value 40) = Yellow
+
+        var compilation = TestHelpers.CompileExpression("data.cells.where(c => c.color == 6).sum()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithRange(compilation.CoreMethod!, range);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        _output.WriteLine($"Result type: {result?.GetType()?.FullName ?? "null"}");
+        Assert.NotNull(result);
+        Assert.False(result is string s && s.StartsWith("ERROR"), $"UDF returned error: {result}");
+        Assert.Equal(60.0, Convert.ToDouble(result)); // 20 + 40
+    }
+
     #endregion
 
     #region Helpers

@@ -221,18 +221,28 @@ public class CSharpTranspiler
             "skip" => $"{target}.Skip({string.Join(", ", args)})",
             "distinct" => $"{target}.Distinct()",
             // For numeric aggregations, cast objects to double
+            // On object model path, items might be COM cells - extract .Value if so
+            // Use Aggregate() with explicit types to avoid dynamic type inference issues
             "sum" => args.Count > 0
                 ? $"{target}.Sum({string.Join(", ", args)})"
-                : $"{target}.Select(x => Convert.ToDouble(x)).Sum()",
+                : _requiresObjectModel
+                    ? $"{target}.Aggregate(0.0, (acc, x) => acc + Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x))"
+                    : $"{target}.Select(x => Convert.ToDouble(x)).Sum()",
             "avg" or "average" => args.Count > 0
                 ? $"{target}.Average({string.Join(", ", args)})"
-                : $"{target}.Select(x => Convert.ToDouble(x)).Average()",
+                : _requiresObjectModel
+                    ? $"((Func<double>)(() => {{ var items = {target}.ToList(); return items.Count == 0 ? 0.0 : items.Aggregate(0.0, (acc, x) => acc + Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x)) / items.Count; }}))()"
+                    : $"{target}.Select(x => Convert.ToDouble(x)).Average()",
             "min" => args.Count > 0
                 ? $"{target}.Min({string.Join(", ", args)})"
-                : $"{target}.Select(x => Convert.ToDouble(x)).Min()",
+                : _requiresObjectModel
+                    ? $"{target}.Aggregate(double.MaxValue, (acc, x) => Math.Min(acc, Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x)))"
+                    : $"{target}.Select(x => Convert.ToDouble(x)).Min()",
             "max" => args.Count > 0
                 ? $"{target}.Max({string.Join(", ", args)})"
-                : $"{target}.Select(x => Convert.ToDouble(x)).Max()",
+                : _requiresObjectModel
+                    ? $"{target}.Aggregate(double.MinValue, (acc, x) => Math.Max(acc, Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x)))"
+                    : $"{target}.Select(x => Convert.ToDouble(x)).Max()",
             "count" => $"{target}.Count()",
             "first" => $"{target}.First()",
             "firstordefault" => $"{target}.FirstOrDefault()",
