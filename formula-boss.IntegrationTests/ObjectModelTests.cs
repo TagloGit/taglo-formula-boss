@@ -1,11 +1,11 @@
-using Xunit;
+﻿using Xunit;
 using Xunit.Abstractions;
 
 namespace FormulaBoss.IntegrationTests;
 
 /// <summary>
-/// Integration tests for the object model path (.cells).
-/// These tests compile generated code and run it against real Excel COM objects.
+///     Integration tests for the object model path (.cells).
+///     These tests compile generated code and run it against real Excel COM objects.
 /// </summary>
 public class ObjectModelTests : IClassFixture<ExcelTestFixture>
 {
@@ -17,6 +17,68 @@ public class ObjectModelTests : IClassFixture<ExcelTestFixture>
         _excel = excel;
         _output = output;
     }
+
+    #region Complex Expressions
+
+    [Fact]
+    public void Cells_WhereValueGreaterThan_SelectValue_ToArray()
+    {
+        // Arrange
+        var range = _excel.CreateUniqueRange(new object[,] { { 10 }, { 25 }, { 5 }, { 30 }, { 15 } });
+        var compilation =
+            TestHelpers.CompileExpression("data.cells.where(c => c.value > 20).select(c => c.value).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithRange(compilation.CoreMethod!, range);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0)); // 25 and 30
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static string FormatResult(object? result)
+    {
+        if (result == null)
+        {
+            return "null";
+        }
+
+        if (result is string s)
+        {
+            return $"\"{s}\"";
+        }
+
+        if (result is object[,] arr)
+        {
+            var rows = arr.GetLength(0);
+            var cols = arr.GetLength(1);
+            var items = new List<string>();
+            for (var r = 0; r < rows; r++)
+            {
+                for (var c = 0; c < cols; c++)
+                {
+                    items.Add(arr[r, c].ToString() ?? "null");
+                }
+            }
+
+            return $"[{rows}x{cols}]: [{string.Join(", ", items)}]";
+        }
+
+        return result.ToString() ?? "null";
+    }
+
+    #endregion
 
     #region Basic Cell Access
 
@@ -38,8 +100,7 @@ public class ObjectModelTests : IClassFixture<ExcelTestFixture>
         _output.WriteLine($"Result: {FormatResult(result)}");
 
         Assert.NotNull(result);
-        Assert.IsType<object[,]>(result);
-        var arr = (object[,])result;
+        var arr = Assert.IsType<object[,]>(result);
         Assert.Equal(3, arr.GetLength(0));
         Assert.Equal(1, arr.GetLength(1));
         Assert.Equal(1.0, arr[0, 0]);
@@ -77,7 +138,8 @@ public class ObjectModelTests : IClassFixture<ExcelTestFixture>
         _excel.SetCellColor(range, 2, 1, 6); // Row 2 = Yellow (index 6)
         _excel.SetCellColor(range, 4, 1, 6); // Row 4 = Yellow
 
-        var compilation = TestHelpers.CompileExpression("data.cells.where(c => c.color == 6).select(c => c.value).toArray()");
+        var compilation =
+            TestHelpers.CompileExpression("data.cells.where(c => c.color == 6).select(c => c.value).toArray()");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
@@ -103,7 +165,8 @@ public class ObjectModelTests : IClassFixture<ExcelTestFixture>
         var range = _excel.CreateUniqueRange(new object[,] { { 1 }, { 2 }, { 3 } });
         _excel.SetCellColor(range, 2, 1, 6); // Row 2 = Yellow
 
-        var compilation = TestHelpers.CompileExpression("data.cells.where(c => c.color != 6).select(c => c.value).toArray()");
+        var compilation =
+            TestHelpers.CompileExpression("data.cells.where(c => c.color != 6).select(c => c.value).toArray()");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
@@ -156,67 +219,6 @@ public class ObjectModelTests : IClassFixture<ExcelTestFixture>
         // Assert
         _output.WriteLine($"Result: {FormatResult(result)}");
         Assert.NotNull(result);
-    }
-
-    #endregion
-
-    #region Complex Expressions
-
-    [Fact]
-    public void Cells_WhereValueGreaterThan_SelectValue_ToArray()
-    {
-        // Arrange
-        var range = _excel.CreateUniqueRange(new object[,] { { 10 }, { 25 }, { 5 }, { 30 }, { 15 } });
-        var compilation = TestHelpers.CompileExpression("data.cells.where(c => c.value > 20).select(c => c.value).toArray()");
-
-        _output.WriteLine(compilation.GetDiagnostics());
-        Assert.True(compilation.Success, compilation.ErrorMessage);
-
-        // Act
-        var result = TestHelpers.ExecuteWithRange(compilation.CoreMethod!, range);
-
-        // Assert
-        _output.WriteLine($"Result: {FormatResult(result)}");
-
-        Assert.NotNull(result);
-        Assert.IsType<object[,]>(result);
-        var arr = (object[,])result;
-        Assert.Equal(2, arr.GetLength(0)); // 25 and 30
-    }
-
-    #endregion
-
-    #region Helpers
-
-    private static string FormatResult(object? result)
-    {
-        if (result == null)
-        {
-            return "null";
-        }
-
-        if (result is string s)
-        {
-            return $"\"{s}\"";
-        }
-
-        if (result is object[,] arr)
-        {
-            var rows = arr.GetLength(0);
-            var cols = arr.GetLength(1);
-            var items = new List<string>();
-            for (var r = 0; r < rows; r++)
-            {
-                for (var c = 0; c < cols; c++)
-                {
-                    items.Add(arr[r, c]?.ToString() ?? "null");
-                }
-            }
-
-            return $"[{rows}x{cols}]: [{string.Join(", ", items)}]";
-        }
-
-        return result.ToString() ?? "null";
     }
 
     #endregion

@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace FormulaBoss.Compilation;
 
 /// <summary>
-/// Compiles C# source code at runtime using Roslyn and registers the resulting UDFs with ExcelDNA.
+///     Compiles C# source code at runtime using Roslyn and registers the resulting UDFs with ExcelDNA.
 /// </summary>
 public class DynamicCompiler
 {
@@ -25,8 +25,8 @@ public class DynamicCompiler
     private readonly HashSet<string> _registeredUdfs = [];
 
     /// <summary>
-    /// Compiles C# source code and registers all UDFs in it.
-    /// Returns a list of compilation errors, or empty list on success.
+    ///     Compiles C# source code and registers all UDFs in it.
+    ///     Returns a list of compilation errors, or empty list on success.
     /// </summary>
     public virtual List<string> CompileAndRegister(string source)
     {
@@ -42,7 +42,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Compiles and registers a test function to validate the Roslyn + ExcelDNA pipeline.
+    ///     Compiles and registers a test function to validate the Roslyn + ExcelDNA pipeline.
     /// </summary>
     public static void CompileAndRegisterTestFunction()
     {
@@ -76,7 +76,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Compiles C# source code to an in-memory assembly.
+    ///     Compiles C# source code to an in-memory assembly.
     /// </summary>
     public static Assembly? CompileSource(string source)
     {
@@ -85,7 +85,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Compiles C# source code to an in-memory assembly, returning errors if compilation fails.
+    ///     Compiles C# source code to an in-memory assembly, returning errors if compilation fails.
     /// </summary>
     private static (Assembly? Assembly, List<string> Errors) CompileSourceWithErrors(string source)
     {
@@ -120,7 +120,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Gets metadata references for common assemblies needed for compilation.
+    ///     Gets metadata references for common assemblies needed for compilation.
     /// </summary>
     private static List<MetadataReference> GetMetadataReferences()
     {
@@ -151,7 +151,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Adds a reference to the formula-boss assembly containing RuntimeHelpers.
+    ///     Adds a reference to the formula-boss assembly containing RuntimeHelpers.
     /// </summary>
     private static void AddFormulaBossReference(List<MetadataReference> references)
     {
@@ -185,7 +185,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Adds ExcelDNA assembly reference, handling the case where it's loaded from embedded resources.
+    ///     Adds ExcelDNA assembly reference, handling the case where it's loaded from embedded resources.
     /// </summary>
     private static void AddExcelDnaReference(List<MetadataReference> references)
     {
@@ -261,7 +261,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Attempts to read assembly bytes from a loaded assembly using reflection.
+    ///     Attempts to read assembly bytes from a loaded assembly using reflection.
     /// </summary>
     private static byte[]? GetAssemblyBytesFromMemory(Assembly assembly)
     {
@@ -283,7 +283,7 @@ public class DynamicCompiler
             // Check if the assembly was loaded from a byte array (has no file backing)
             // In this case, we need to use Marshal to copy from the loaded image
             var peImageField = typeof(Assembly).GetField("_peImage",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                BindingFlags.NonPublic | BindingFlags.Instance);
 
             if (peImageField != null && peImageField.GetValue(assembly) is byte[] peImage)
             {
@@ -299,7 +299,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Registers all public static methods from the compiled assembly as Excel UDFs.
+    ///     Registers all public static methods from the compiled assembly as Excel UDFs.
     /// </summary>
     private void RegisterFunctionsFromAssembly(Assembly assembly)
     {
@@ -331,7 +331,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Static version for test functions (doesn't track UDFs).
+    ///     Static version for test functions (doesn't track UDFs).
     /// </summary>
     private static void RegisterFunctionsFromAssemblyStatic(Assembly assembly)
     {
@@ -355,16 +355,12 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Registers a single method as an Excel UDF.
+    ///     Registers a single method as an Excel UDF.
     /// </summary>
     private static void RegisterMethod(MethodInfo method)
     {
         // Create function attribute - all dynamically compiled UDFs use the method name
-        var funcAttr = new ExcelFunctionAttribute
-        {
-            Name = method.Name,
-            Description = $"Dynamic UDF: {method.Name}"
-        };
+        var funcAttr = new ExcelFunctionAttribute { Name = method.Name, Description = $"Dynamic UDF: {method.Name}" };
 
         var parameters = method.GetParameters();
         var argAttrs = new List<object>();
@@ -372,11 +368,7 @@ public class DynamicCompiler
         foreach (var param in parameters)
         {
             // All transpiled UDFs expect range references, so set AllowReference = true
-            argAttrs.Add(new ExcelArgumentAttribute
-            {
-                Name = param.Name,
-                AllowReference = true
-            });
+            argAttrs.Add(new ExcelArgumentAttribute { Name = param.Name, AllowReference = true });
         }
 
         var delegateType = CreateDelegateType(method);
@@ -389,7 +381,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    /// Creates a Func delegate type matching the method signature.
+    ///     Creates a Func delegate type matching the method signature.
     /// </summary>
     private static Type CreateDelegateType(MethodInfo method)
     {

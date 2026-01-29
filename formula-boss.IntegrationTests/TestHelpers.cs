@@ -1,20 +1,22 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
+
 using FormulaBoss.Parsing;
 using FormulaBoss.Transpilation;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace FormulaBoss.IntegrationTests;
 
 /// <summary>
-/// Helpers for compiling and executing generated UDF code in integration tests.
+///     Helpers for compiling and executing generated UDF code in integration tests.
 /// </summary>
 public static class TestHelpers
 {
     /// <summary>
-    /// Transpiles a DSL expression and compiles it to an assembly.
-    /// Returns the compiled _Core method that can be invoked directly with test data.
+    ///     Transpiles a DSL expression and compiles it to an assembly.
+    ///     Returns the compiled _Core method that can be invoked directly with test data.
     /// </summary>
     /// <param name="dslExpression">The DSL expression (e.g., "data.cells.select(c => c.value).toArray()")</param>
     /// <returns>A TestCompilationResult containing the compiled method and metadata</returns>
@@ -88,7 +90,7 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Compiles C# source code to an in-memory assembly.
+    ///     Compiles C# source code to an in-memory assembly.
     /// </summary>
     private static (Assembly? Assembly, List<string> Errors) CompileSource(string sourceCode)
     {
@@ -104,7 +106,7 @@ public static class TestHelpers
             MetadataReference.CreateFromFile(Assembly.Load("System.Linq.Expressions").Location),
             MetadataReference.CreateFromFile(Assembly.Load("Microsoft.CSharp").Location),
             // Add reference to FormulaBoss for RuntimeHelpers
-            MetadataReference.CreateFromFile(typeof(FormulaBoss.RuntimeHelpers).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(RuntimeHelpers).Assembly.Location)
         };
 
         // Add netstandard reference if available
@@ -147,24 +149,19 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Executes a compiled _Core method with the given range (for object model path).
+    ///     Executes a compiled _Core method with the given range (for object model path).
     /// </summary>
-    public static object? ExecuteWithRange(MethodInfo coreMethod, dynamic range)
-    {
-        return coreMethod.Invoke(null, [range]);
-    }
+    public static object? ExecuteWithRange(MethodInfo coreMethod, dynamic range) => coreMethod.Invoke(null, [range]);
 
     /// <summary>
-    /// Executes a compiled _Core method with the given values array (for value-only path).
+    ///     Executes a compiled _Core method with the given values array (for value-only path).
     /// </summary>
-    public static object? ExecuteWithValues(MethodInfo coreMethod, object[,] values)
-    {
-        return coreMethod.Invoke(null, [values]);
-    }
+    public static object? ExecuteWithValues(MethodInfo coreMethod, object[,] values) =>
+        coreMethod.Invoke(null, [values]);
 }
 
 /// <summary>
-/// Result of compiling a DSL expression for testing.
+///     Result of compiling a DSL expression for testing.
 /// </summary>
 public class TestCompilationResult
 {
@@ -176,7 +173,7 @@ public class TestCompilationResult
     public string? SourceCode { get; init; }
 
     /// <summary>
-    /// Helper to print diagnostic information when a test fails.
+    ///     Helper to print diagnostic information when a test fails.
     /// </summary>
     public string GetDiagnostics()
     {
