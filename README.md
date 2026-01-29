@@ -33,7 +33,7 @@ dotnet test formula-boss/formula-boss.slnx
 2. Type a formula with backtick expressions. The formula must start with `'=` (quote prefix):
 
 ```
-'=SUM(`data.values.where(v => v > 0)`)
+'=SUM(`data.where(v => v > 0)`)
 ```
 
 When you press Enter, Formula Boss:
@@ -49,8 +49,10 @@ When you press Enter, Formula Boss:
 
 | Syntax | Description |
 |--------|-------------|
-| `range.values` | Iterate over cell values only (fast path) |
+| `range.values` | Iterate over cell values only (fast path) — **implicit if omitted** |
 | `range.cells` | Iterate over cells with object model access (slower, but gives access to formatting) |
+
+**Note:** `.values` is implicit. `data.where(...)` is equivalent to `data.values.where(...)`. Use `.cells` only when you need access to cell formatting properties like `color`, `bold`, etc.
 
 ### Methods
 
@@ -58,7 +60,7 @@ When you press Enter, Formula Boss:
 |--------|-------------|
 | `.where(predicate)` | Filter items matching predicate |
 | `.select(transform)` | Transform each item |
-| `.toArray()` | Materialize results as array |
+| `.toArray()` | Materialize results as array — **implicit for collection results** |
 | `.sum()` | Sum numeric values |
 | `.avg()` / `.average()` | Average of numeric values |
 | `.min()` / `.max()` | Minimum/maximum value |
@@ -96,20 +98,23 @@ When you press Enter, Formula Boss:
 First, create a named range called `data` pointing to your data range (e.g., `A1:A100`).
 
 ```
-# Sum positive values
-'=SUM(`data.values.where(v => v > 0)`)
+# Sum positive values (implicit .values)
+'=SUM(`data.where(v => v > 0)`)
 
 # Filter by cell color (yellow = index 6)
-'=`data.cells.where(c => c.color == 6).select(c => c.value).toArray()`
+'=`data.cells.where(c => c.color == 6).select(c => c.value)`
 
 # Get values from bold cells
-'=`data.cells.where(c => c.bold).select(c => c.value).toArray()`
+'=`data.cells.where(c => c.bold).select(c => c.value)`
 
 # Top 5 values
-'=`data.values.orderByDesc(v => v).take(5).toArray()`
+'=`data.orderByDesc(v => v).take(5)`
 
 # Count cells matching condition
-'=`data.values.where(v => v > 50 && v < 100).count()`
+'=`data.where(v => v > 50 && v < 100).count()`
+
+# Explicit syntax still works
+'=`data.values.where(v => v > 0).toArray()`
 ```
 
 ## Architecture

@@ -129,13 +129,17 @@ An Excel add-in that allows power users to write inline expressions using a conc
 
 **Supported DSL for MVP:**
 
-- `range.cells` — iterate with object model access
-- `range.values` — iterate values only
+- `range.cells` — iterate with object model access (required for color, formatting, etc.)
+- `range.values` — iterate values only (fast path) — **implicit if omitted**
 - `.where(c => condition)` — filter
 - `.select(c => expression)` — map
-- `.toArray()` — materialise to 2D output
+- `.toArray()` — materialise to 2D output — **implicit for collection results**
 - Cell properties: `.value`, `.color`, `.row`, `.col`
 - Basic operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `&&`, `||`, `+`, `-`, `*`, `/`
+
+**Simplified syntax examples:**
+- `data.where(v => v > 0)` — same as `data.values.where(v => v > 0).toArray()`
+- `data.cells.where(c => c.color == 6).select(c => c.value)` — cell filtering with implicit `.toArray()`
 
 **Not in MVP:**
 
@@ -208,6 +212,13 @@ An Excel add-in that allows power users to write inline expressions using a conc
 | `.aggregate(seed, func)` | Reduce/fold |
 | `.toArray()` | Output as 2D array |
 | `.sum()`, `.avg()`, `.min()`, `.max()`, `.count()` | Aggregations |
+
+**Implicit Syntax (convenience features):**
+
+| Feature | Meaning | Example |
+|---------|---------|---------|
+| Implicit `.values` | Methods called directly on range default to values path | `data.where(v => v > 0)` equals `data.values.where(v => v > 0)` |
+| Implicit `.toArray()` | Collection results auto-convert to 2D arrays for Excel | `data.where(v => v > 0)` returns array without explicit `.toArray()` |
 
 **Built-in Algorithms (post-MVP):**
 
@@ -395,3 +406,77 @@ Programmatic VBA injection requires:
 - **Performance profiler:** Show timing breakdown for complex expressions
 - **Test mode:** Validate expression against expected output before committing
 - **Export to VBA:** Generate standalone VBA for environments where add-in isn't available
+
+---
+
+## Future Feature: LET Integration and Inline Editing
+
+### Overview
+
+In competitive Excel, most solutions use `LET` functions to structure calculations into named steps. Formula Boss should integrate seamlessly with this pattern, allowing users to add DSL expressions as individual LET steps.
+
+### User Journey: LET Step Integration
+
+1. User writes a LET formula with backtick expressions for specific steps:
+   ```
+   '=LET(data, A1:F20,
+        coloredCells, `data.cells.where(c => c.color != -4142)`,
+        result, `coloredCells.select(c => c.value * 2).toArray()`,
+        result)
+   ```
+
+2. Formula Boss processes each backtick expression:
+   - Names the UDF based on the LET variable name (e.g., `COLOREDCELLS`, `RESULT`)
+   - Preserves the original DSL as a documentation step
+
+3. Final formula becomes:
+   ```
+   =LET(data, A1:F20,
+        _src_coloredCells, "data.cells.where(c => c.color != -4142)",
+        coloredCells, COLOREDCELLS(data),
+        _src_result, "coloredCells.select(c => c.value * 2).toArray()",
+        result, RESULT(coloredCells),
+        result)
+   ```
+
+### Self-Documenting Pattern
+
+Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containing the original DSL expression. This provides:
+
+- **Visibility:** Original expression visible in formula bar
+- **Persistence:** Saved with the formula
+- **No external dependencies:** No comments or side panels required
+
+### Editing Workflow
+
+1. User wants to edit an existing Formula Boss LET formula
+2. User presses editing shortcut (e.g., `Ctrl+Shift+E`)
+3. Formula Boss:
+   - Reads the `_src_*` variables
+   - Reconstructs the original formula with backtick expressions
+   - Adds quote prefix to enter edit mode
+4. Cell shows:
+   ```
+   '=LET(data, A1:F20,
+        coloredCells, `data.cells.where(c => c.color != -4142)`,
+        result, `coloredCells.select(c => c.value * 2).toArray()`,
+        result)
+   ```
+5. User edits the backtick expressions
+6. User presses Enter
+7. Formula Boss regenerates UDFs (overwriting existing UDFs with same names)
+
+### Technical Considerations
+
+**UDF Naming:**
+- LET variable name → UDF name (uppercase)
+- Collision handling: append hash suffix if name already exists with different expression
+
+**Chained UDFs:**
+- UDFs return values, not cell references
+- Second UDF in chain receives array, cannot access cell properties (e.g., `.color`)
+- If cell properties needed across multiple logical steps, combine into single expression
+
+**Source Preservation:**
+- `_src_` prefix convention for documentation variables
+- Variables are evaluated but unused, minimal performance impact

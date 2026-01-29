@@ -86,6 +86,20 @@ ExcelAsyncUtil.QueueAsMacro(() =>
 });
 ```
 
+## Formula2 for Dynamic Array Spilling
+
+When programmatically setting cell formulas that return arrays, use `Formula2` instead of `Formula`:
+
+```csharp
+// BAD - adds implicit intersection @ operator, prevents spilling
+cell.Formula = "=MyUDF(A1:A5)";
+
+// GOOD - enables dynamic array spilling
+cell.Formula2 = "=MyUDF(A1:A5)";
+```
+
+The `Formula` property is legacy and Excel will add an `@` prefix to prevent spilling. `Formula2` is the dynamic array-aware property introduced in Excel 365.
+
 ## LINQ on object Collections
 
 When working with Excel range values (which are `object[,]`), LINQ aggregations like `.Sum()` don't work directly. Cast values explicitly:
