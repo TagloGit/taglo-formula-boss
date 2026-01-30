@@ -31,10 +31,12 @@ public static class LetFormulaRewriter
     /// </summary>
     /// <param name="original">The parsed LET structure.</param>
     /// <param name="processedBindings">Dictionary of variable name to processed binding info.</param>
+    /// <param name="processedResult">Optional processed binding for the result expression if it contained a backtick.</param>
     /// <returns>The rewritten formula.</returns>
     public static string Rewrite(
         LetStructure original,
-        IReadOnlyDictionary<string, ProcessedBinding> processedBindings)
+        IReadOnlyDictionary<string, ProcessedBinding> processedBindings,
+        ProcessedBinding? processedResult = null)
     {
         var sb = new StringBuilder();
         sb.Append("=LET(").Append(NewLine);
@@ -60,8 +62,24 @@ public static class LetFormulaRewriter
             }
         }
 
-        // Add the result expression (no trailing comma)
-        sb.Append(Indent).Append(original.ResultExpression.Trim()).Append(')');
+        // Handle the result expression
+        if (processedResult != null)
+        {
+            // Result expression had a backtick - add _src_ doc and binding, then reference it
+            sb.Append(Indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
+            sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",").Append(NewLine);
+
+            sb.Append(Indent).Append(processedResult.VariableName).Append(", ");
+            sb.Append(processedResult.UdfName).Append('(').Append(processedResult.InputParameter).Append("),").Append(NewLine);
+
+            // Final expression references the new binding
+            sb.Append(Indent).Append(processedResult.VariableName).Append(')');
+        }
+        else
+        {
+            // Result expression is plain - keep as-is (no trailing comma)
+            sb.Append(Indent).Append(original.ResultExpression.Trim()).Append(')');
+        }
 
         return sb.ToString();
     }

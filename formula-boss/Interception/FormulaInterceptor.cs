@@ -211,6 +211,37 @@ public class FormulaInterceptor : IDisposable
             }
         }
 
+        // Check if the result expression also contains a backtick
+        ProcessedBinding? processedResult = null;
+        if (letStructure.ResultExpression.Contains('`'))
+        {
+            var dslExpression = LetFormulaParser.ExtractBacktickExpression(letStructure.ResultExpression);
+            if (dslExpression != null)
+            {
+                Debug.WriteLine($"Processing LET result expression: `{dslExpression}`");
+
+                // Use "_result" as the variable name for the final expression
+                var context = new ExpressionContext("_result");
+                var result = _pipeline.Process(dslExpression, context);
+
+                if (result.Success && result.UdfName != null)
+                {
+                    processedResult = new ProcessedBinding(
+                        "_result",
+                        dslExpression,
+                        result.UdfName,
+                        result.InputParameter ?? "_result");
+
+                    Debug.WriteLine($"LET result UDF generated: {result.UdfName}({result.InputParameter})");
+                }
+                else
+                {
+                    errors.Add($"Result expression: {result.ErrorMessage ?? "Unknown error"}");
+                    Debug.WriteLine($"Pipeline error for result expression: {result.ErrorMessage}");
+                }
+            }
+        }
+
         // If there were errors, add a comment and leave the cell as-is
         if (errors.Count > 0)
         {
@@ -219,7 +250,7 @@ public class FormulaInterceptor : IDisposable
         }
 
         // Rewrite the LET formula with _src_ documentation variables
-        var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings);
+        var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResult);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
         // Set the cell formula using Formula2 to enable dynamic array spilling
