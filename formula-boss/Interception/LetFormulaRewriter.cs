@@ -21,9 +21,13 @@ public record ProcessedBinding(
 /// </summary>
 public static class LetFormulaRewriter
 {
+    private const string Indent = "    ";
+    private const char NewLine = '\n'; // Use LF only - Excel COM doesn't like \r\n
+
     /// <summary>
     /// Rewrites a LET formula, inserting _src_ documentation variables
     /// and replacing backtick expressions with UDF calls.
+    /// Formats output with one binding per line for readability.
     /// </summary>
     /// <param name="original">The parsed LET structure.</param>
     /// <param name="processedBindings">Dictionary of variable name to processed binding info.</param>
@@ -33,35 +37,31 @@ public static class LetFormulaRewriter
         IReadOnlyDictionary<string, ProcessedBinding> processedBindings)
     {
         var sb = new StringBuilder();
-        sb.Append("=LET(");
-
-        var isFirst = true;
+        sb.Append("=LET(").Append(NewLine);
 
         foreach (var binding in original.Bindings)
         {
-            if (!isFirst)
-            {
-                sb.Append(',');
-            }
+            var variableName = binding.VariableName.Trim();
 
-            isFirst = false;
-
-            if (processedBindings.TryGetValue(binding.VariableName.Trim(), out var processed))
+            if (processedBindings.TryGetValue(variableName, out var processed))
             {
                 // This binding had a backtick expression - insert _src_ and UDF call
-                // Format: _src_varName, "expression", varName, UDFNAME(input)
-                sb.Append($" _src_{binding.VariableName.Trim()}, \"{EscapeForExcelString(processed.OriginalExpression)}\"");
-                sb.Append($", {binding.VariableName.Trim()}, {processed.UdfName}({processed.InputParameter})");
+                sb.Append(Indent).Append("_src_").Append(variableName).Append(", ");
+                sb.Append('"').Append(EscapeForExcelString(processed.OriginalExpression)).Append("\",").Append(NewLine);
+
+                sb.Append(Indent).Append(variableName).Append(", ");
+                sb.Append(processed.UdfName).Append('(').Append(processed.InputParameter).Append("),").Append(NewLine);
             }
             else
             {
                 // Normal binding - keep as-is
-                sb.Append($" {binding.VariableName}, {binding.Value}");
+                sb.Append(Indent).Append(binding.VariableName).Append(", ");
+                sb.Append(binding.Value).Append(',').Append(NewLine);
             }
         }
 
-        // Add the result expression
-        sb.Append($", {original.ResultExpression})");
+        // Add the result expression (no trailing comma)
+        sb.Append(Indent).Append(original.ResultExpression.Trim()).Append(')');
 
         return sb.ToString();
     }

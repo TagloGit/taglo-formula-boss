@@ -16,7 +16,10 @@ public class LetFormulaRewriterTests
 
         var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>());
 
-        Assert.Equal("=LET( x, 1, y, 2, x + y)", result);
+        // Verify bindings are preserved (now formatted with line breaks)
+        Assert.Contains("x, 1,", result);
+        Assert.Contains("y, 2,", result);
+        Assert.Contains("x + y)", result);
     }
 
     [Fact]
@@ -70,7 +73,8 @@ public class LetFormulaRewriterTests
 
         var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
 
-        Assert.EndsWith("SUM(filtered))", result);
+        // Result expression should be the last line
+        Assert.EndsWith("SUM(filtered))", result.TrimEnd());
     }
 
     #endregion
@@ -118,6 +122,36 @@ public class LetFormulaRewriterTests
 
         // Quotes should be doubled for Excel string escaping
         Assert.Contains("\"\"test\"\"", result);
+    }
+
+    #endregion
+
+    #region Formatting
+
+    [Fact]
+    public void Rewrite_FormatsWithLineBreaks()
+    {
+        var formula = "=LET(x, 1, y, 2, x + y)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>());
+
+        // Should have line breaks between bindings
+        var lines = result.Split('\n');
+        Assert.True(lines.Length >= 3, "Expected at least 3 lines (header, bindings, result)");
+    }
+
+    [Fact]
+    public void Rewrite_IndentsBindings()
+    {
+        var formula = "=LET(x, 1, y, 2, x + y)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>());
+
+        // Bindings should be indented
+        Assert.Contains("    x, 1,", result);
+        Assert.Contains("    y, 2,", result);
     }
 
     #endregion
