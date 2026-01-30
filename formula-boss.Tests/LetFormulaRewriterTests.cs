@@ -164,6 +164,32 @@ public class LetFormulaRewriterTests
         Assert.EndsWith("SUM(filtered))", result.TrimEnd());
     }
 
+    [Fact]
+    public void Rewrite_HandlesBacktickResultExpression()
+    {
+        var formula = "=LET(data, A1:A10, filtered, `data.where(v => v > 0)`, `filtered.max()`)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["filtered"] = new("filtered", "data.where(v => v > 0)", "FILTERED", "data")
+        };
+
+        var processedResult = new ProcessedBinding("_result", "filtered.max()", "_RESULT", "filtered");
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings, processedResult);
+
+        // Should have _src__result documentation
+        Assert.Contains("_src__result", result);
+        Assert.Contains("\"filtered.max()\"", result);
+
+        // Should have _result binding with UDF call
+        Assert.Contains("_result, _RESULT(filtered)", result);
+
+        // Final expression should reference _result
+        Assert.EndsWith("_result)", result.TrimEnd());
+    }
+
     #endregion
 
     #region Formatting
