@@ -16,6 +16,12 @@ namespace FormulaBoss.Interception;
 public record PipelineResult(bool Success, string? UdfName, string? ErrorMessage, string? InputParameter);
 
 /// <summary>
+/// Context for processing a DSL expression, used for LET integration.
+/// </summary>
+/// <param name="PreferredUdfName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
+public record ExpressionContext(string? PreferredUdfName);
+
+/// <summary>
 /// Orchestrates the complete pipeline: parse → transpile → compile → register.
 /// </summary>
 public class FormulaPipeline
@@ -33,10 +39,23 @@ public class FormulaPipeline
     /// </summary>
     /// <param name="expression">The DSL expression (without backticks).</param>
     /// <returns>The pipeline result.</returns>
-    public PipelineResult Process(string expression)
+    public PipelineResult Process(string expression) => Process(expression, null);
+
+    /// <summary>
+    /// Processes a DSL expression with optional context for LET integration.
+    /// </summary>
+    /// <param name="expression">The DSL expression (without backticks).</param>
+    /// <param name="context">Optional context containing preferred UDF name and known variables.</param>
+    /// <returns>The pipeline result.</returns>
+    public PipelineResult Process(string expression, ExpressionContext? context)
     {
+        // For cache key, include preferred name if provided (same expression with different names = different UDFs)
+        var cacheKey = context?.PreferredUdfName != null
+            ? $"{expression}|{context.PreferredUdfName}"
+            : expression;
+
         // Check cache first
-        if (_udfCache.TryGetValue(expression, out var cachedUdfName))
+        if (_udfCache.TryGetValue(cacheKey, out var cachedUdfName))
         {
             // Extract input parameter from expression for cache hit
             var inputParam = ExtractInputParameter(expression);
@@ -66,12 +85,12 @@ public class FormulaPipeline
             return new PipelineResult(false, null, $"Parse error: {errorMsg}", null);
         }
 
-        // Step 3: Transpile
+        // Step 3: Transpile (pass preferred name if provided)
         var transpiler = new CSharpTranspiler();
         TranspileResult transpileResult;
         try
         {
-            transpileResult = transpiler.Transpile(ast, expression);
+            transpileResult = transpiler.Transpile(ast, expression, context?.PreferredUdfName);
         }
         catch (Exception ex)
         {
@@ -93,7 +112,7 @@ public class FormulaPipeline
         }
 
         // Cache the result
-        _udfCache[expression] = transpileResult.MethodName;
+        _udfCache[cacheKey] = transpileResult.MethodName;
 
         // Extract input parameter from the expression
         var inputParameter = ExtractInputParameter(expression);
@@ -102,20 +121,17 @@ public class FormulaPipeline
     }
 
     /// <summary>
-    /// Extracts the input parameter (range reference) from a DSL expression.
+    /// Extracts the input parameter (range reference or LET variable) from a DSL expression.
     /// </summary>
+    /// <param name="expression">The DSL expression.</param>
     private static string ExtractInputParameter(string expression)
     {
         // The input parameter is the first identifier before .cells or .values
         // e.g., "A1:J10.cells.where(...)" → "A1:J10"
         // e.g., "data.values.where(...)" → "data"
+        // e.g., "coloredCells.select(...)" → "coloredCells"
 
         var dotIndex = expression.IndexOf('.');
-        if (dotIndex > 0)
-        {
-            return expression[..dotIndex];
-        }
-
-        return expression;
+        return dotIndex > 0 ? expression[..dotIndex] : expression;
     }
 }

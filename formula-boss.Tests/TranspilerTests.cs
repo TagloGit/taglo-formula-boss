@@ -79,6 +79,54 @@ public class TranspilerTests
         Assert.StartsWith("__udf_", result.MethodName);
     }
 
+    [Fact]
+    public void Transpiler_UsesPreferredName_WhenProvided()
+    {
+        var result = TranspileWithName("data.values.toArray()", "myCustomUdf");
+
+        Assert.Equal("MYCUSTOMUDF", result.MethodName);
+    }
+
+    [Fact]
+    public void Transpiler_SanitizesPreferredName_ToUppercase()
+    {
+        var result = TranspileWithName("data.values.toArray()", "coloredCells");
+
+        Assert.Equal("COLOREDCELLS", result.MethodName);
+    }
+
+    [Fact]
+    public void Transpiler_SanitizesPreferredName_RemovesInvalidChars()
+    {
+        var result = TranspileWithName("data.values.toArray()", "my-udf!@#name");
+
+        Assert.Equal("MYUDFNAME", result.MethodName);
+    }
+
+    [Fact]
+    public void Transpiler_SanitizesPreferredName_AddsUnderscoreIfStartsWithDigit()
+    {
+        var result = TranspileWithName("data.values.toArray()", "123abc");
+
+        Assert.Equal("_123ABC", result.MethodName);
+    }
+
+    [Fact]
+    public void Transpiler_FallsBackToHash_WhenPreferredNameIsEmpty()
+    {
+        var result = TranspileWithName("data.values.toArray()", "");
+
+        Assert.StartsWith("__udf_", result.MethodName);
+    }
+
+    [Fact]
+    public void Transpiler_FallsBackToHash_WhenPreferredNameIsWhitespace()
+    {
+        var result = TranspileWithName("data.values.toArray()", "   ");
+
+        Assert.StartsWith("__udf_", result.MethodName);
+    }
+
     #endregion
 
     #region Code Generation - Literals
@@ -289,6 +337,11 @@ public class TranspilerTests
 
     private static TranspileResult Transpile(string source)
     {
+        return TranspileWithName(source, null);
+    }
+
+    private static TranspileResult TranspileWithName(string source, string? preferredName)
+    {
         var lexer = new Lexer(source);
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
@@ -298,6 +351,6 @@ public class TranspilerTests
         Assert.Empty(parser.Errors);
 
         var transpiler = new CSharpTranspiler();
-        return transpiler.Transpile(expression, source);
+        return transpiler.Transpile(expression, source, preferredName);
     }
 }

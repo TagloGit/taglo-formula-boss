@@ -182,6 +182,36 @@ public class InterceptionTests
     }
 
     [Fact]
+    public void Pipeline_UsesPreferredName_FromContext()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+        var context = new ExpressionContext("filteredData");
+
+        var result = pipeline.Process("data.values.where(v => v > 0)", context);
+
+        Assert.True(result.Success);
+        Assert.Equal("FILTEREDDATA", result.UdfName);
+    }
+
+    [Fact]
+    public void Pipeline_CachesWithContext_Separately()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        // Same expression with different preferred names should create different UDFs
+        var result1 = pipeline.Process("data.values.toArray()", new ExpressionContext("firstUdf"));
+        var result2 = pipeline.Process("data.values.toArray()", new ExpressionContext("secondUdf"));
+
+        Assert.True(result1.Success);
+        Assert.True(result2.Success);
+        Assert.Equal("FIRSTUDF", result1.UdfName);
+        Assert.Equal("SECONDUDF", result2.UdfName);
+        Assert.Equal(2, compiler.CompileCount); // Should compile twice
+    }
+
+    [Fact]
     public void Pipeline_ReturnsError_ForInvalidSyntax()
     {
         var compiler = new MockDynamicCompiler();
