@@ -223,6 +223,9 @@ public class FormulaInterceptor : IDisposable
         // Set the cell formula using Formula2 to enable dynamic array spilling
         cell.Formula2 = newFormula;
 
+        // Unwrap cell to reset row height (user's multiline input caused wrap)
+        cell.WrapText = false;
+
         // Clear any previous error comment
         ClearCellComment(cell);
     }
@@ -273,6 +276,9 @@ public class FormulaInterceptor : IDisposable
         // Set the cell formula using Formula2 to enable dynamic array spilling
         // (Formula would add implicit intersection @ operator, preventing spill)
         cell.Formula2 = newFormula;
+
+        // Unwrap cell to reset row height (user's multiline input caused wrap)
+        cell.WrapText = false;
 
         // Clear any previous error comment
         ClearCellComment(cell);
