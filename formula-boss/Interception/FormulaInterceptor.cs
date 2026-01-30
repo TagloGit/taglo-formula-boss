@@ -79,13 +79,15 @@ public class FormulaInterceptor : IDisposable
         {
             _isProcessing = true;
 
-            // Collect cells that need processing
+            // Collect cells that need processing and unwrap them immediately
             var cellsToProcess = new List<string>();
             foreach (var cell in target.Cells)
             {
                 var cellText = cell.Formula as string;
                 if (BacktickExtractor.IsBacktickFormula(cellText) && cell.Address is string address)
                 {
+                    // Unwrap immediately so cell doesn't stay tall while waiting for processing
+                    cell.WrapText = false;
                     cellsToProcess.Add(address);
                 }
             }
@@ -223,9 +225,6 @@ public class FormulaInterceptor : IDisposable
         // Set the cell formula using Formula2 to enable dynamic array spilling
         cell.Formula2 = newFormula;
 
-        // Unwrap cell to reset row height (user's multiline input caused wrap)
-        cell.WrapText = false;
-
         // Clear any previous error comment
         ClearCellComment(cell);
     }
@@ -276,9 +275,6 @@ public class FormulaInterceptor : IDisposable
         // Set the cell formula using Formula2 to enable dynamic array spilling
         // (Formula would add implicit intersection @ operator, preventing spill)
         cell.Formula2 = newFormula;
-
-        // Unwrap cell to reset row height (user's multiline input caused wrap)
-        cell.WrapText = false;
 
         // Clear any previous error comment
         ClearCellComment(cell);
