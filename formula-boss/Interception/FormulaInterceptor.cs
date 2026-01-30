@@ -146,59 +146,136 @@ public class FormulaInterceptor : IDisposable
                 return;
             }
 
-            // Extract backtick expressions
-            var expressions = BacktickExtractor.Extract(originalFormula);
-            if (expressions.Count == 0)
+            // Check if this is a LET formula - handle specially for named UDFs
+            if (LetFormulaParser.TryParse(originalFormula, out var letStructure) &&
+                letStructure!.Bindings.Any(b => b.HasBacktick))
             {
+                ProcessLetFormula(cell, letStructure);
                 return;
             }
 
-            // Process each expression and build replacements
-            var replacements = new Dictionary<string, string>();
-            var errors = new List<string>();
-
-            foreach (var expr in expressions)
-            {
-                Debug.WriteLine($"Processing expression: {expr.Expression}");
-                var result = _pipeline.Process(expr.Expression);
-
-                if (result.Success && result.UdfName != null)
-                {
-                    // Build the UDF call with the input parameter
-                    var udfCall = $"{result.UdfName}({result.InputParameter})";
-                    replacements[expr.Expression] = udfCall;
-                    Debug.WriteLine($"UDF generated: {udfCall}");
-                }
-                else
-                {
-                    errors.Add(result.ErrorMessage ?? "Unknown error");
-                    Debug.WriteLine($"Pipeline error: {result.ErrorMessage}");
-                }
-            }
-
-            // If there were errors, add a comment and leave the cell as-is
-            if (errors.Count > 0)
-            {
-                SetCellError(cell, string.Join("\n", errors));
-                return;
-            }
-
-            // Rewrite the formula
-            var newFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
-            Debug.WriteLine($"Rewriting formula to: {newFormula}");
-
-            // Set the cell formula using Formula2 to enable dynamic array spilling
-            // (Formula would add implicit intersection @ operator, preventing spill)
-            cell.Formula2 = newFormula;
-
-            // Clear any previous error comment
-            ClearCellComment(cell);
+            // Non-LET formula - use existing backtick processing
+            ProcessBacktickFormula(cell, originalFormula);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"ProcessCell error: {ex.Message}");
             SetCellError(cell, $"Internal error: {ex.Message}");
         }
+    }
+
+    private void ProcessLetFormula(dynamic cell, LetStructure letStructure)
+    {
+        Debug.WriteLine("Processing LET formula with backtick expressions");
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>();
+        var errors = new List<string>();
+
+        foreach (var binding in letStructure.Bindings)
+        {
+            var variableName = binding.VariableName.Trim();
+
+            if (binding.HasBacktick)
+            {
+                // Extract the DSL expression from the backtick value
+                var dslExpression = LetFormulaParser.ExtractBacktickExpression(binding.Value);
+                if (dslExpression == null)
+                {
+                    errors.Add($"Could not extract backtick expression from {variableName}");
+                    continue;
+                }
+
+                Debug.WriteLine($"Processing LET binding: {variableName} = `{dslExpression}`");
+
+                // Create context with the LET variable name as preferred UDF name
+                var context = new ExpressionContext(variableName);
+                var result = _pipeline.Process(dslExpression, context);
+
+                if (result.Success && result.UdfName != null)
+                {
+                    processedBindings[variableName] = new ProcessedBinding(
+                        variableName,
+                        dslExpression,
+                        result.UdfName,
+                        result.InputParameter ?? variableName);
+
+                    Debug.WriteLine($"LET UDF generated: {result.UdfName}({result.InputParameter})");
+                }
+                else
+                {
+                    errors.Add($"{variableName}: {result.ErrorMessage ?? "Unknown error"}");
+                    Debug.WriteLine($"Pipeline error for {variableName}: {result.ErrorMessage}");
+                }
+            }
+        }
+
+        // If there were errors, add a comment and leave the cell as-is
+        if (errors.Count > 0)
+        {
+            SetCellError(cell, string.Join("\n", errors));
+            return;
+        }
+
+        // Rewrite the LET formula with _src_ documentation variables
+        var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings);
+        Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
+
+        // Set the cell formula using Formula2 to enable dynamic array spilling
+        cell.Formula2 = newFormula;
+
+        // Clear any previous error comment
+        ClearCellComment(cell);
+    }
+
+    private void ProcessBacktickFormula(dynamic cell, string originalFormula)
+    {
+        // Extract backtick expressions
+        var expressions = BacktickExtractor.Extract(originalFormula);
+        if (expressions.Count == 0)
+        {
+            return;
+        }
+
+        // Process each expression and build replacements
+        var replacements = new Dictionary<string, string>();
+        var errors = new List<string>();
+
+        foreach (var expr in expressions)
+        {
+            Debug.WriteLine($"Processing expression: {expr.Expression}");
+            var result = _pipeline.Process(expr.Expression);
+
+            if (result.Success && result.UdfName != null)
+            {
+                // Build the UDF call with the input parameter
+                var udfCall = $"{result.UdfName}({result.InputParameter})";
+                replacements[expr.Expression] = udfCall;
+                Debug.WriteLine($"UDF generated: {udfCall}");
+            }
+            else
+            {
+                errors.Add(result.ErrorMessage ?? "Unknown error");
+                Debug.WriteLine($"Pipeline error: {result.ErrorMessage}");
+            }
+        }
+
+        // If there were errors, add a comment and leave the cell as-is
+        if (errors.Count > 0)
+        {
+            SetCellError(cell, string.Join("\n", errors));
+            return;
+        }
+
+        // Rewrite the formula
+        var newFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
+        Debug.WriteLine($"Rewriting formula to: {newFormula}");
+
+        // Set the cell formula using Formula2 to enable dynamic array spilling
+        // (Formula would add implicit intersection @ operator, preventing spill)
+        cell.Formula2 = newFormula;
+
+        // Clear any previous error comment
+        ClearCellComment(cell);
     }
 
     private static void SetCellError(dynamic cell, string errorMessage)

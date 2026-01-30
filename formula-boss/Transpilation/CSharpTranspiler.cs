@@ -19,8 +19,9 @@ public class CSharpTranspiler
     /// </summary>
     /// <param name="expression">The parsed AST expression.</param>
     /// <param name="originalSource">The original DSL source text.</param>
+    /// <param name="preferredName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
     /// <returns>The transpilation result with generated code and metadata.</returns>
-    public TranspileResult Transpile(Expression expression, string originalSource)
+    public TranspileResult Transpile(Expression expression, string originalSource, string? preferredName = null)
     {
         _requiresObjectModel = false;
         _lambdaParameters.Clear();
@@ -28,8 +29,8 @@ public class CSharpTranspiler
         // First pass: detect if object model is needed
         DetectObjectModelUsage(expression);
 
-        // Generate the method name from a hash of the source
-        var methodName = GenerateMethodName(originalSource);
+        // Generate the method name - use preferred name if provided, otherwise hash
+        var methodName = GenerateMethodName(originalSource, preferredName);
 
         // Generate the expression body
         var expressionCode = TranspileExpression(expression);
@@ -454,10 +455,48 @@ public class CSharpTranspiler
         sb.AppendLine("    }");
     }
 
-    private static string GenerateMethodName(string source)
+    private static string GenerateMethodName(string source, string? preferredName)
     {
+        if (!string.IsNullOrWhiteSpace(preferredName))
+        {
+            return SanitizeUdfName(preferredName);
+        }
+
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(source));
         var hashString = Convert.ToHexString(hash)[..8].ToLowerInvariant();
         return $"__udf_{hashString}";
+    }
+
+    /// <summary>
+    ///     Sanitizes a name to be a valid Excel UDF name.
+    ///     Converts to uppercase, removes invalid characters, ensures it starts with a letter or underscore.
+    /// </summary>
+    private static string SanitizeUdfName(string name)
+    {
+        var upper = name.ToUpperInvariant();
+        var sb = new StringBuilder();
+
+        foreach (var c in upper)
+        {
+            if (char.IsLetterOrDigit(c) || c == '_')
+            {
+                sb.Append(c);
+            }
+        }
+
+        var result = sb.ToString();
+
+        // Must start with letter or underscore
+        if (result.Length == 0)
+        {
+            return "_UDF";
+        }
+
+        if (char.IsDigit(result[0]))
+        {
+            result = "_" + result;
+        }
+
+        return result;
     }
 }
