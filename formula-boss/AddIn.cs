@@ -45,6 +45,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Start listening for worksheet changes
             _interceptor.Start();
 
+            // Register keyboard shortcut: Ctrl+Shift+` to edit Formula Boss formulas
+            // ^+` = Ctrl+Shift+` (^ = Ctrl, + = Shift)
+            XlCall.Excel(XlCall.xlcOnKey, "^+`", "EditFormulaBossFormula");
+
             Debug.WriteLine("Formula Boss interception initialized");
         }
         catch (Exception ex)
@@ -63,6 +67,16 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         if (_disposed)
         {
             return;
+        }
+
+        // Unregister keyboard shortcut
+        try
+        {
+            XlCall.Excel(XlCall.xlcOnKey, "^+`");
+        }
+        catch
+        {
+            // Ignore errors during cleanup
         }
 
         _interceptor?.Dispose();

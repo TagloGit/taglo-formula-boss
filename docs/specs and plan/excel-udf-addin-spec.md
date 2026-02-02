@@ -409,11 +409,11 @@ Programmatic VBA injection requires:
 
 ---
 
-## Future Feature: LET Integration and Inline Editing
+## LET Integration and Inline Editing
 
 ### Overview
 
-In competitive Excel, most solutions use `LET` functions to structure calculations into named steps. Formula Boss should integrate seamlessly with this pattern, allowing users to add DSL expressions as individual LET steps.
+In competitive Excel, most solutions use `LET` functions to structure calculations into named steps. Formula Boss integrates seamlessly with this pattern, allowing users to add DSL expressions as individual LET steps.
 
 ### User Journey: LET Step Integration
 
@@ -450,27 +450,31 @@ Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containin
 ### Editing Workflow
 
 1. User wants to edit an existing Formula Boss LET formula
-2. User presses editing shortcut (e.g., `Ctrl+Shift+E`)
+2. User presses `Ctrl+Shift+`` (backtick)
 3. Formula Boss:
-   - Reads the `_src_*` variables
+   - Detects `_src_*` variables indicating a processed Formula Boss formula
    - Reconstructs the original formula with backtick expressions
-   - Adds quote prefix to enter edit mode
+   - Temporarily disables Excel events to prevent immediate reprocessing
+   - Sets cell value with quote prefix to enter text/edit mode
+   - Disables text wrapping for readability
+   - Enters cell edit mode (F2)
 4. Cell shows:
    ```
-   '=LET(data, A1:F20,
-        coloredCells, `data.cells.where(c => c.color != -4142)`,
-        result, `coloredCells.select(c => c.value * 2).toArray()`,
-        result)
+   '=LET(
+       data, A1:F20,
+       coloredCells, `data.cells.where(c => c.color != -4142)`,
+       result, `coloredCells.select(c => c.value * 2).toArray()`,
+       result)
    ```
 5. User edits the backtick expressions
 6. User presses Enter
-7. Formula Boss regenerates UDFs (overwriting existing UDFs with same names)
+7. Formula Boss regenerates UDFs (reusing existing UDF names where expressions match)
 
 ### Technical Considerations
 
 **UDF Naming:**
 - LET variable name → UDF name (uppercase)
-- Collision handling: append hash suffix if name already exists with different expression
+- Collision handling: append numeric suffix if name already exists with different expression
 
 **Chained UDFs:**
 - UDFs return values, not cell references
@@ -480,3 +484,8 @@ Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containin
 **Source Preservation:**
 - `_src_` prefix convention for documentation variables
 - Variables are evaluated but unused, minimal performance impact
+
+**Edit Mode Implementation:**
+- `Application.EnableEvents = false` prevents SheetChange from firing during reconstruction
+- `WrapText = false` keeps the multi-line formula readable
+- `SendKeys("{F2}")` enters edit mode automatically
