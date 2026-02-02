@@ -132,18 +132,38 @@ public class CSharpTranspiler
         var left = TranspileExpression(binary.Left);
         var right = TranspileExpression(binary.Right);
 
-        // For comparison operators in value-only path, lambda parameters are objects
-        // and need to be cast to double for numeric comparisons
+        // For comparison and arithmetic operators in value-only path, lambda parameters are objects
+        // and need to be cast to double for numeric operations
         var isComparison = binary.Operator is ">" or "<" or ">=" or "<=" or "==" or "!=";
-        if (isComparison && !_requiresObjectModel)
+        var isArithmetic = binary.Operator is "+" or "-" or "*" or "/";
+
+        if ((isComparison || isArithmetic) && !_requiresObjectModel)
         {
-            // Cast lambda parameters to double for numeric comparisons
+            // Cast lambda parameters to double for numeric operations
             if (IsLambdaParameter(binary.Left) && IsNumericLiteral(binary.Right))
             {
                 left = $"Convert.ToDouble({left})";
             }
 
             if (IsLambdaParameter(binary.Right) && IsNumericLiteral(binary.Left))
+            {
+                right = $"Convert.ToDouble({right})";
+            }
+
+            // Also handle when both sides involve lambda parameters (e.g., v * v)
+            if (isArithmetic && IsLambdaParameter(binary.Left) && IsLambdaParameter(binary.Right))
+            {
+                left = $"Convert.ToDouble({left})";
+                right = $"Convert.ToDouble({right})";
+            }
+
+            // Handle lambda parameter with another arithmetic expression (e.g., v * (v + 1))
+            if (isArithmetic && IsLambdaParameter(binary.Left) && !IsNumericLiteral(binary.Right))
+            {
+                left = $"Convert.ToDouble({left})";
+            }
+
+            if (isArithmetic && IsLambdaParameter(binary.Right) && !IsNumericLiteral(binary.Left))
             {
                 right = $"Convert.ToDouble({right})";
             }
@@ -218,8 +238,9 @@ public class CSharpTranspiler
             "toarray" => $"{target}.ToArray()",
             "orderby" => $"{target}.OrderBy({string.Join(", ", args)})",
             "orderbydesc" => $"{target}.OrderByDescending({string.Join(", ", args)})",
-            "take" => $"{target}.Take({string.Join(", ", args)})",
-            "skip" => $"{target}.Skip({string.Join(", ", args)})",
+            // take/skip with negative support: take(-2) gets last 2, skip(-2) skips last 2
+            "take" => GenerateTakeSkip(target, args, isTake: true),
+            "skip" => GenerateTakeSkip(target, args, isTake: false),
             "distinct" => $"{target}.Distinct()",
             // For numeric aggregations, cast objects to double
             // On object model path, items might be COM cells - extract .Value if so
@@ -251,6 +272,41 @@ public class CSharpTranspiler
             "lastordefault" => $"{target}.LastOrDefault()",
             _ => $"{target}.{call.Method}({string.Join(", ", args)})"
         };
+    }
+
+    /// <summary>
+    ///     Generates take/skip with negative argument support.
+    ///     Positive n: Take(n)/Skip(n) - take/skip first n elements
+    ///     Negative n: TakeLast(-n)/SkipLast(-n) - take/skip last n elements
+    /// </summary>
+    private static string GenerateTakeSkip(string target, List<string> args, bool isTake)
+    {
+        if (args.Count == 0)
+        {
+            return isTake ? $"{target}.Take(0)" : $"{target}.Skip(0)";
+        }
+
+        var arg = args[0];
+
+        // Check if it's a literal negative number (compile-time optimization)
+        if (arg.StartsWith('-') && int.TryParse(arg, out var literalValue) && literalValue < 0)
+        {
+            var positiveValue = -literalValue;
+            return isTake
+                ? $"{target}.TakeLast({positiveValue})"
+                : $"{target}.SkipLast({positiveValue})";
+        }
+
+        // Check if it's a literal positive number
+        if (int.TryParse(arg, out _))
+        {
+            return isTake ? $"{target}.Take({arg})" : $"{target}.Skip({arg})";
+        }
+
+        // Runtime check for variable arguments
+        var takeMethod = isTake ? "Take" : "Skip";
+        var takeLastMethod = isTake ? "TakeLast" : "SkipLast";
+        return $"(({arg}) >= 0 ? {target}.{takeMethod}({arg}) : {target}.{takeLastMethod}(-({arg})))";
     }
 
     private string TranspileLambda(LambdaExpr lambda)

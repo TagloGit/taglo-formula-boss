@@ -205,8 +205,8 @@ An Excel add-in that allows power users to write inline expressions using a conc
 | `.select(transform)` | Map/transform elements |
 | `.orderBy(keySelector)` | Sort ascending |
 | `.orderByDesc(keySelector)` | Sort descending |
-| `.take(n)` | First n elements |
-| `.skip(n)` | Skip first n elements |
+| `.take(n)` | First n elements (negative n takes last n) |
+| `.skip(n)` | Skip first n elements (negative n skips last n) |
 | `.distinct()` | Remove duplicates |
 | `.groupBy(keySelector)` | Group elements |
 | `.aggregate(seed, func)` | Reduce/fold |
