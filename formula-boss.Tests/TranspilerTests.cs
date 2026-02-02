@@ -176,6 +176,24 @@ public class TranspilerTests
         Assert.Contains("+", result.SourceCode);
     }
 
+    [Fact]
+    public void Transpiler_GeneratesCode_ForArithmeticWithCast()
+    {
+        var result = Transpile("data.values.select(v => v * 2).toArray()");
+
+        // Lambda parameter should be cast to double for arithmetic
+        Assert.Contains("Convert.ToDouble(v) * 2", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForArithmeticWithBothSidesCast()
+    {
+        var result = Transpile("data.values.select(v => v * v).toArray()");
+
+        // Both sides should be cast when both are lambda params
+        Assert.Contains("Convert.ToDouble(v) * Convert.ToDouble(v)", result.SourceCode);
+    }
+
     #endregion
 
     #region Code Generation - LINQ Methods
@@ -202,6 +220,40 @@ public class TranspilerTests
         var result = Transpile("data.values.toArray()");
 
         Assert.Contains(".ToArray()", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForTakePositive()
+    {
+        var result = Transpile("data.values.take(5).toArray()");
+
+        Assert.Contains(".Take(5)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForTakeNegative()
+    {
+        var result = Transpile("data.values.take(-2).toArray()");
+
+        // Negative take should generate TakeLast
+        Assert.Contains(".TakeLast(2)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForSkipPositive()
+    {
+        var result = Transpile("data.values.skip(3).toArray()");
+
+        Assert.Contains(".Skip(3)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForSkipNegative()
+    {
+        var result = Transpile("data.values.skip(-2).toArray()");
+
+        // Negative skip should generate SkipLast
+        Assert.Contains(".SkipLast(2)", result.SourceCode);
     }
 
     [Fact]
