@@ -1,0 +1,256 @@
+using FormulaBoss.Interception;
+
+using Xunit;
+
+namespace FormulaBoss.Tests;
+
+public class LetFormulaReconstructorTests
+{
+    #region IsProcessedFormulaBossLet
+
+    [Fact]
+    public void IsProcessedFormulaBossLet_ReturnsFalse_ForNullOrEmpty()
+    {
+        Assert.False(LetFormulaReconstructor.IsProcessedFormulaBossLet(null));
+        Assert.False(LetFormulaReconstructor.IsProcessedFormulaBossLet(""));
+        Assert.False(LetFormulaReconstructor.IsProcessedFormulaBossLet("   "));
+    }
+
+    [Fact]
+    public void IsProcessedFormulaBossLet_ReturnsFalse_ForNonLetFormula()
+    {
+        Assert.False(LetFormulaReconstructor.IsProcessedFormulaBossLet("=SUM(A1:A10)"));
+        Assert.False(LetFormulaReconstructor.IsProcessedFormulaBossLet("=A1+B1"));
+    }
+
+    [Fact]
+    public void IsProcessedFormulaBossLet_ReturnsFalse_ForNormalLet()
+    {
+        var formula = "=LET(x, 1, y, 2, x + y)";
+        Assert.False(LetFormulaReconstructor.IsProcessedFormulaBossLet(formula));
+    }
+
+    [Fact]
+    public void IsProcessedFormulaBossLet_ReturnsTrue_ForProcessedLet()
+    {
+        var formula = @"=LET(data, A1:F20,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, FILTERED(data),
+            SUM(filtered))";
+        Assert.True(LetFormulaReconstructor.IsProcessedFormulaBossLet(formula));
+    }
+
+    [Fact]
+    public void IsProcessedFormulaBossLet_ReturnsTrue_ForMultipleSrcBindings()
+    {
+        var formula = @"=LET(
+            data, A1:F20,
+            _src_coloredCells, ""data.cells.where(c => c.color != -4142)"",
+            coloredCells, COLOREDCELLS(data),
+            _src_result, ""coloredCells.select(c => c.value * 2).toArray()"",
+            result, RESULT(coloredCells),
+            SUM(result))";
+        Assert.True(LetFormulaReconstructor.IsProcessedFormulaBossLet(formula));
+    }
+
+    #endregion
+
+    #region TryReconstruct Basic
+
+    [Fact]
+    public void TryReconstruct_ReturnsFalse_ForNonFormulaBossFormula()
+    {
+        var formula = "=LET(x, 1, x)";
+        var result = LetFormulaReconstructor.TryReconstruct(formula, out var editable);
+        Assert.False(result);
+        Assert.Null(editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_ReturnsFalse_ForNonLetFormula()
+    {
+        var formula = "=SUM(A1:A10)";
+        var result = LetFormulaReconstructor.TryReconstruct(formula, out var editable);
+        Assert.False(result);
+        Assert.Null(editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_AddsQuotePrefix()
+    {
+        var processed = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, FILTERED(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.StartsWith("'", editable);
+    }
+
+    #endregion
+
+    #region Single Binding Reconstruction
+
+    [Fact]
+    public void TryReconstruct_ReconstructsSingleBacktickBinding()
+    {
+        var processed = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, FILTERED(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.StartsWith("'=LET(", editable);
+        Assert.Contains("`data.where(v => v > 0)`", editable);
+        Assert.DoesNotContain("_src_", editable);
+        Assert.DoesNotContain("FILTERED(data)", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_PreservesNormalBindings()
+    {
+        var processed = @"=LET(raw, A1:A100, threshold, 50,
+            _src_filtered, ""raw.where(v => v > threshold)"",
+            filtered, FILTERED(raw),
+            COUNT(filtered))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains("raw, A1:A100", editable);
+        Assert.Contains("threshold, 50", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_PreservesResultExpression()
+    {
+        var processed = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, FILTERED(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.EndsWith("SUM(filtered))", editable);
+    }
+
+    #endregion
+
+    #region Multiple Bindings Reconstruction
+
+    [Fact]
+    public void TryReconstruct_ReconstructsMultipleBacktickBindings()
+    {
+        var processed = @"=LET(data, A1:F20,
+            _src_coloredCells, ""data.cells.where(c => c.color != -4142)"",
+            coloredCells, COLOREDCELLS(data),
+            _src_result, ""coloredCells.select(c => c.value * 2).toArray()"",
+            result, RESULT(coloredCells),
+            SUM(result))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains("`data.cells.where(c => c.color != -4142)`", editable);
+        Assert.Contains("`coloredCells.select(c => c.value * 2).toArray()`", editable);
+        Assert.DoesNotContain("COLOREDCELLS(data)", editable);
+        Assert.DoesNotContain("RESULT(coloredCells)", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_HandlesMixedBacktickAndNormalBindings()
+    {
+        var processed = @"=LET(raw, A1:A100, threshold, 50,
+            _src_filtered, ""raw.where(v => v > threshold)"",
+            filtered, FILTERED(raw),
+            multiplier, 2,
+            COUNT(filtered))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains("raw, A1:A100", editable);
+        Assert.Contains("threshold, 50", editable);
+        Assert.Contains("`raw.where(v => v > threshold)`", editable);
+        Assert.Contains("multiplier, 2", editable);
+    }
+
+    #endregion
+
+    #region String Unescaping
+
+    [Fact]
+    public void TryReconstruct_UnescapesQuotesInDslExpression()
+    {
+        var processed = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v == """"test"""")"",
+            filtered, FILTERED(data),
+            filtered)";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        // Should have single quotes after unescaping
+        Assert.Contains(@"v == ""test""", editable);
+    }
+
+    #endregion
+
+    #region Result Expression Handling
+
+    [Fact]
+    public void TryReconstruct_PreservesVariableReferenceAsResultExpression()
+    {
+        // Result expression is just "maxYellow" (a variable reference), NOT a backtick expression
+        // This should NOT be replaced with a backtick, even though maxYellow has a _src_ entry
+        var processed = @"=LET(
+            data, B3:F11,
+            _src_yellowCells, ""data.cells.where(c => c.color == 6)"",
+            yellowCells, YELLOWCELLS(data),
+            _src_maxYellow, ""yellowCells.max()"",
+            maxYellow, MAXYELLOW(yellowCells),
+            maxYellow)";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        // Result should be the variable name, not a backtick expression
+        Assert.EndsWith("maxYellow)", editable);
+        // Should NOT contain _result
+        Assert.DoesNotContain("_result", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_HandlesBacktickResultExpression()
+    {
+        var processed = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, FILTERED(data),
+            _src__result, ""filtered.max()"",
+            _result, _RESULT(filtered),
+            _result)";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains("`data.where(v => v > 0)`", editable);
+        // The result expression should be reconstructed with backticks
+        Assert.Contains("`filtered.max()`", editable);
+    }
+
+    #endregion
+}
