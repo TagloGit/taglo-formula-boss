@@ -157,16 +157,18 @@ public class CSharpTranspiler
                 left = $"Convert.ToDouble({left})";
                 right = $"Convert.ToDouble({right})";
             }
-
-            // Handle lambda parameter with another arithmetic expression (e.g., v * (v + 1))
-            if (isArithmetic && IsLambdaParameter(binary.Left) && !IsNumericLiteral(binary.Right))
+            else if (isArithmetic)
             {
-                left = $"Convert.ToDouble({left})";
-            }
+                // Handle lambda parameter with another arithmetic expression (e.g., v * (v + 1))
+                if (IsLambdaParameter(binary.Left) && !IsNumericLiteral(binary.Right))
+                {
+                    left = $"Convert.ToDouble({left})";
+                }
 
-            if (isArithmetic && IsLambdaParameter(binary.Right) && !IsNumericLiteral(binary.Left))
-            {
-                right = $"Convert.ToDouble({right})";
+                if (IsLambdaParameter(binary.Right) && !IsNumericLiteral(binary.Left))
+                {
+                    right = $"Convert.ToDouble({right})";
+                }
             }
         }
 
@@ -289,8 +291,15 @@ public class CSharpTranspiler
 
         var arg = args[0];
 
+        // Strip parentheses from unary expressions like "(-2)" to get "-2"
+        var trimmedArg = arg;
+        while (trimmedArg.StartsWith('(') && trimmedArg.EndsWith(')'))
+        {
+            trimmedArg = trimmedArg[1..^1];
+        }
+
         // Check if it's a literal negative number (compile-time optimization)
-        if (arg.StartsWith('-') && int.TryParse(arg, out var literalValue) && literalValue < 0)
+        if (trimmedArg.StartsWith('-') && int.TryParse(trimmedArg, out var literalValue) && literalValue < 0)
         {
             var positiveValue = -literalValue;
             return isTake
@@ -299,9 +308,9 @@ public class CSharpTranspiler
         }
 
         // Check if it's a literal positive number
-        if (int.TryParse(arg, out _))
+        if (int.TryParse(trimmedArg, out _))
         {
-            return isTake ? $"{target}.Take({arg})" : $"{target}.Skip({arg})";
+            return isTake ? $"{target}.Take({trimmedArg})" : $"{target}.Skip({trimmedArg})";
         }
 
         // Runtime check for variable arguments
