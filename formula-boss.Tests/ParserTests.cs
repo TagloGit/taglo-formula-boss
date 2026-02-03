@@ -91,6 +91,65 @@ public class ParserTests
         }
     }
 
+    [Fact]
+    public void Lexer_RangeReference()
+    {
+        var lexer = new Lexer("A1:B10");
+        var tokens = lexer.ScanTokens();
+
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal("A1", tokens[0].Lexeme);
+        Assert.Equal(TokenType.Colon, tokens[1].Type);
+        Assert.Equal(TokenType.Identifier, tokens[2].Type);
+        Assert.Equal("B10", tokens[2].Lexeme);
+        Assert.Equal(TokenType.Eof, tokens[3].Type);
+    }
+
+    [Fact]
+    public void Lexer_AbsoluteRangeReference()
+    {
+        var lexer = new Lexer("$A$1:$B$10");
+        var tokens = lexer.ScanTokens();
+
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal("$A$1", tokens[0].Lexeme);
+        Assert.Equal(TokenType.Colon, tokens[1].Type);
+        Assert.Equal(TokenType.Identifier, tokens[2].Type);
+        Assert.Equal("$B$10", tokens[2].Lexeme);
+    }
+
+    [Fact]
+    public void Lexer_RangeWithMethodChain()
+    {
+        var lexer = new Lexer("A1:B10.where(v => v > 0)");
+        var tokens = lexer.ScanTokens();
+
+        var expectedTypes = new[]
+        {
+            TokenType.Identifier, // A1
+            TokenType.Colon,
+            TokenType.Identifier, // B10
+            TokenType.Dot,
+            TokenType.Identifier, // where
+            TokenType.LeftParen,
+            TokenType.Identifier, // v
+            TokenType.Arrow,
+            TokenType.Identifier, // v
+            TokenType.Greater,
+            TokenType.Number, // 0
+            TokenType.RightParen,
+            TokenType.Eof
+        };
+
+        Assert.Equal(expectedTypes.Length, tokens.Count);
+        for (var i = 0; i < expectedTypes.Length; i++)
+        {
+            Assert.Equal(expectedTypes[i], tokens[i].Type);
+        }
+    }
+
     #endregion
 
     #region Parser Tests - Literals and Identifiers
@@ -120,6 +179,72 @@ public class ParserTests
 
         var str = Assert.IsType<StringLiteral>(expr);
         Assert.Equal("hello", str.Value);
+    }
+
+    #endregion
+
+    #region Parser Tests - Range References
+
+    [Fact]
+    public void Parser_RangeReference()
+    {
+        var expr = Parse("A1:B10");
+
+        var range = Assert.IsType<RangeRefExpr>(expr);
+        Assert.Equal("A1", range.Start);
+        Assert.Equal("B10", range.End);
+    }
+
+    [Fact]
+    public void Parser_AbsoluteRangeReference()
+    {
+        var expr = Parse("$A$1:$B$10");
+
+        var range = Assert.IsType<RangeRefExpr>(expr);
+        Assert.Equal("$A$1", range.Start);
+        Assert.Equal("$B$10", range.End);
+    }
+
+    [Fact]
+    public void Parser_MixedRangeReference()
+    {
+        var expr = Parse("A$1:$B10");
+
+        var range = Assert.IsType<RangeRefExpr>(expr);
+        Assert.Equal("A$1", range.Start);
+        Assert.Equal("$B10", range.End);
+    }
+
+    [Fact]
+    public void Parser_RangeWithMethodChain()
+    {
+        var expr = Parse("A1:B10.where(v => v > 0)");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        Assert.Equal("where", call.Method);
+
+        var range = Assert.IsType<RangeRefExpr>(call.Target);
+        Assert.Equal("A1", range.Start);
+        Assert.Equal("B10", range.End);
+    }
+
+    [Fact]
+    public void Parser_RangeWithFullDslChain()
+    {
+        var expr = Parse("A1:J10.cells.where(c => c.color == 6).values");
+
+        var values = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("values", values.Member);
+
+        var where = Assert.IsType<MethodCall>(values.Target);
+        Assert.Equal("where", where.Method);
+
+        var cells = Assert.IsType<MemberAccess>(where.Target);
+        Assert.Equal("cells", cells.Member);
+
+        var range = Assert.IsType<RangeRefExpr>(cells.Target);
+        Assert.Equal("A1", range.Start);
+        Assert.Equal("J10", range.End);
     }
 
     #endregion

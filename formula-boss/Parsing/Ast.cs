@@ -12,6 +12,13 @@ public abstract record Expression;
 public record IdentifierExpr(string Name) : Expression;
 
 /// <summary>
+/// An Excel range reference (e.g., A1:B10, $A$1:$B$10).
+/// </summary>
+/// <param name="Start">The start cell reference (e.g., "A1", "$A$1").</param>
+/// <param name="End">The end cell reference (e.g., "B10", "$B$10").</param>
+public record RangeRefExpr(string Start, string End) : Expression;
+
+/// <summary>
 /// A numeric literal.
 /// </summary>
 /// <param name="Value">The numeric value.</param>

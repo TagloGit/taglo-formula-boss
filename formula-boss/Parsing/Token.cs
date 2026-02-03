@@ -27,6 +27,7 @@ public enum TokenType
     And,          // &&
     Or,           // ||
     Not,          // !
+    Colon,        // : (for range references like A1:B10)
 
     // Delimiters
     LeftParen,

@@ -51,6 +51,38 @@ public class TranspilerTests
 
     #endregion
 
+    #region Range Reference Support
+
+    [Fact]
+    public void Transpiler_HandlesRangeReference_ValueOnly()
+    {
+        var result = Transpile("A1:B10.values.where(v => v > 0).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Range reference should become __source__ which becomes values in value-only path
+        Assert.Contains("__values__.Where", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_HandlesRangeReference_WithObjectModel()
+    {
+        var result = Transpile("A1:J10.cells.where(c => c.color == 6).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("__cells__.Where", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_HandlesAbsoluteRangeReference()
+    {
+        var result = Transpile("$A$1:$B$10.values.sum()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__values__", result.SourceCode);
+    }
+
+    #endregion
+
     #region Method Name Generation
 
     [Fact]
