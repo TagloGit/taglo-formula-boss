@@ -174,12 +174,19 @@ An Excel add-in that allows power users to write inline expressions using a conc
 
 **Cell/Range Access:**
 
-| Syntax | Meaning |
-|--------|---------|
-| `range.cells` | Iterate cells with object model access |
-| `range.values` | Iterate values only (fast path) |
-| `range.rows` | Iterate rows as arrays |
-| `range.cols` | Iterate columns as arrays |
+| Syntax | Meaning | Output Shape |
+|--------|---------|--------------|
+| `range.cells` | Iterate cells with object model access | 1D (flattened) |
+| `range.values` | Iterate values only (fast path) | 1D (flattened) |
+| `range.rows` | Iterate rows as arrays | 2D (row count changes, columns preserved) |
+| `range.cols` | Iterate columns as arrays | 2D (column count changes, rows preserved) |
+
+**Row-wise operations** enable filtering/sorting entire rows:
+```
+data.rows.where(r => r[0] > 10)      // filter rows where first column > 10
+data.rows.orderBy(r => r[2])          // sort rows by third column
+data.rows.take(-3)                    // last 3 rows
+```
 
 **Cell Properties (object model required):**
 
@@ -202,7 +209,8 @@ An Excel add-in that allows power users to write inline expressions using a conc
 | Method | Description |
 |--------|-------------|
 | `.where(predicate)` | Filter elements |
-| `.select(transform)` | Map/transform elements |
+| `.select(transform)` | Map/transform elements (flattens to 1D) |
+| `.map(transform)` | Transform elements preserving 2D shape |
 | `.orderBy(keySelector)` | Sort ascending |
 | `.orderByDesc(keySelector)` | Sort descending |
 | `.take(n)` | First n elements (negative n takes last n) |
@@ -213,12 +221,110 @@ An Excel add-in that allows power users to write inline expressions using a conc
 | `.toArray()` | Output as 2D array |
 | `.sum()`, `.avg()`, `.min()`, `.max()`, `.count()` | Aggregations |
 
+**`.map` vs `.select`:** Use `.map` when you want to transform each cell while keeping the original 2D shape:
+```
+data.select(v => v * 2)                           // returns 1D array of doubled values
+data.map(v => v * 2)                              // returns 2D array same shape as input
+data.map(c => c.color == 6 ? c.value * 2 : c.value)  // double yellow cells, preserve shape
+```
+
 **Implicit Syntax (convenience features):**
 
 | Feature | Meaning | Example |
 |---------|---------|---------|
 | Implicit `.values` | Methods called directly on range default to values path | `data.where(v => v > 0)` equals `data.values.where(v => v > 0)` |
 | Implicit `.toArray()` | Collection results auto-convert to 2D arrays for Excel | `data.where(v => v > 0)` returns array without explicit `.toArray()` |
+
+---
+
+### Deep Property Access
+
+Beyond the shorthand cell properties (`.color`, `.bold`, etc.), users can access the full Excel object model via chained property access.
+
+**Type System:**
+
+The transpiler maintains a type system for Excel COM objects to provide parse-time validation:
+
+| Type | Properties |
+|------|------------|
+| `Cell` | `Interior`, `Font`, `Value`, `Formula`, `Row`, `Column`, `Address`, etc. |
+| `Interior` | `ColorIndex`, `Color`, `Pattern`, `PatternColor`, `PatternColorIndex`, etc. |
+| `Font` | `Bold`, `Italic`, `Size`, `Color`, `Name`, `Underline`, etc. |
+
+**Examples:**
+```
+c.Interior.ColorIndex        // validated: Cell → Interior → ColorIndex
+c.Interior.Pattern           // validated: Cell → Interior → Pattern
+c.Font.Color                 // validated: Cell → Font → Color
+```
+
+**Escape Hatch:**
+
+For properties not in the type system, prefix with `@` to bypass validation:
+```
+c.@SomeObscureProperty       // passes through verbatim, validated at runtime
+c.Interior.@NewExcelProperty // partial validation, then pass-through
+```
+
+**Error Messages:**
+
+Invalid properties produce helpful parse-time errors:
+```
+c.Interior.Patern
+// Error: Unknown property 'Patern' on Interior. Did you mean 'Pattern'?
+```
+
+---
+
+### Statement Lambdas
+
+For complex logic that can't be expressed as a single expression, statement lambdas allow full C# code blocks.
+
+**Syntax:**
+```
+data.cells.where(c => {
+    var color = (int)(c.Interior.ColorIndex ?? 0);
+    var isYellow = color == 6;
+    var isOrange = color == 44;
+    return isYellow || isOrange;
+})
+```
+
+**Behaviour:**
+
+- Lexer detects `{` after `=>` and captures the entire block (brace-balanced)
+- Block content is emitted as literal C# code
+- Lambda parameter (`c`) references work normally
+- Type system validation does **not** apply inside statement blocks — Roslyn validates at compile time, COM validates at runtime
+
+**Available Namespaces:**
+
+Statement lambdas have access to these namespaces by default:
+```csharp
+using System;
+using System.Linq;
+using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
+```
+
+**Use Cases:**
+
+- Multi-step calculations with intermediate variables
+- Complex conditional logic
+- Loops and iteration within a cell's evaluation
+- Try/catch for error handling
+
+**Trade-offs:**
+
+| Aspect | Expression Lambda | Statement Lambda |
+|--------|-------------------|------------------|
+| Validation | Parse-time (type system) | Compile/runtime |
+| Error messages | DSL-specific, helpful | Roslyn errors, may be cryptic |
+| Complexity | Single expression | Full C# |
+| Recommended for | Simple transforms, filters | Complex algorithms |
+
+---
 
 **Built-in Algorithms (post-MVP):**
 
