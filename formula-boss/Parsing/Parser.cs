@@ -168,6 +168,13 @@ public class Parser
                     expr = new MemberAccess(expr, name.Lexeme);
                 }
             }
+            else if (Match(TokenType.LeftBracket))
+            {
+                // Index access (e.g., r[0], array[i])
+                var index = ParseExpression();
+                Consume(TokenType.RightBracket, "Expected ']' after index");
+                expr = new IndexAccess(expr, index);
+            }
             else
             {
                 break;

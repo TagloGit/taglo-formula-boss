@@ -72,3 +72,10 @@ public record LambdaExpr(string Parameter, Expression Body) : Expression;
 /// </summary>
 /// <param name="Inner">The inner expression.</param>
 public record GroupingExpr(Expression Inner) : Expression;
+
+/// <summary>
+/// An index access expression (e.g., row[0], array[i]).
+/// </summary>
+/// <param name="Target">The expression being indexed.</param>
+/// <param name="Index">The index expression.</param>
+public record IndexAccess(Expression Target, Expression Index) : Expression;

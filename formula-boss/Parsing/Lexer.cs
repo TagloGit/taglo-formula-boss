@@ -68,6 +68,12 @@ public class Lexer
             case ')':
                 AddToken(TokenType.RightParen, start);
                 break;
+            case '[':
+                AddToken(TokenType.LeftBracket, start);
+                break;
+            case ']':
+                AddToken(TokenType.RightBracket, start);
+                break;
             case ':':
                 AddToken(TokenType.Colon, start);
                 break;
