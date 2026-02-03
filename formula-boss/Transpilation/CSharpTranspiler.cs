@@ -13,6 +13,9 @@ public class CSharpTranspiler
 {
     private readonly HashSet<string> _lambdaParameters = [];
     private bool _requiresObjectModel;
+    private bool _usesRows;
+    private bool _usesCols;
+    private bool _usesMap;
 
     /// <summary>
     ///     Transpiles a DSL expression to a complete C# UDF class.
@@ -24,9 +27,12 @@ public class CSharpTranspiler
     public TranspileResult Transpile(Expression expression, string originalSource, string? preferredName = null)
     {
         _requiresObjectModel = false;
+        _usesRows = false;
+        _usesCols = false;
+        _usesMap = false;
         _lambdaParameters.Clear();
 
-        // First pass: detect if object model is needed
+        // First pass: detect if object model is needed and track rows/cols/map usage
         DetectObjectModelUsage(expression);
 
         // Generate the method name - use preferred name if provided, otherwise hash
@@ -53,10 +59,26 @@ public class CSharpTranspiler
                     _requiresObjectModel = true;
                 }
 
+                // Track rows/cols usage separately
+                if (member.Member == "rows")
+                {
+                    _usesRows = true;
+                }
+                else if (member.Member == "cols")
+                {
+                    _usesCols = true;
+                }
+
                 DetectObjectModelUsage(member.Target);
                 break;
 
             case MethodCall call:
+                // Track .map() usage
+                if (call.Method.Equals("map", StringComparison.OrdinalIgnoreCase))
+                {
+                    _usesMap = true;
+                }
+
                 DetectObjectModelUsage(call.Target);
                 foreach (var arg in call.Arguments)
                 {
@@ -81,6 +103,11 @@ public class CSharpTranspiler
             case GroupingExpr grouping:
                 DetectObjectModelUsage(grouping.Inner);
                 break;
+
+            case IndexAccess indexAccess:
+                DetectObjectModelUsage(indexAccess.Target);
+                DetectObjectModelUsage(indexAccess.Index);
+                break;
         }
     }
 
@@ -98,6 +125,7 @@ public class CSharpTranspiler
             MethodCall call => TranspileMethodCall(call),
             LambdaExpr lambda => TranspileLambda(lambda),
             GroupingExpr grouping => $"({TranspileExpression(grouping.Inner)})",
+            IndexAccess indexAccess => TranspileIndexAccess(indexAccess),
             _ => throw new InvalidOperationException($"Unknown expression type: {expression.GetType().Name}")
         };
     }
@@ -133,39 +161,39 @@ public class CSharpTranspiler
         var left = TranspileExpression(binary.Left);
         var right = TranspileExpression(binary.Right);
 
-        // For comparison and arithmetic operators in value-only path, lambda parameters are objects
-        // and need to be cast to double for numeric operations
+        // For comparison and arithmetic operators in value-only path, lambda parameters and
+        // index access on them (e.g., r[0]) are objects and need to be cast to double
         var isComparison = binary.Operator is ">" or "<" or ">=" or "<=" or "==" or "!=";
         var isArithmetic = binary.Operator is "+" or "-" or "*" or "/";
 
         if ((isComparison || isArithmetic) && !_requiresObjectModel)
         {
-            // Cast lambda parameters to double for numeric operations
-            if (IsLambdaParameter(binary.Left) && IsNumericLiteral(binary.Right))
+            // Cast expressions that return objects to double for numeric operations
+            if (NeedsNumericCast(binary.Left) && IsNumericLiteral(binary.Right))
             {
                 left = $"Convert.ToDouble({left})";
             }
 
-            if (IsLambdaParameter(binary.Right) && IsNumericLiteral(binary.Left))
+            if (NeedsNumericCast(binary.Right) && IsNumericLiteral(binary.Left))
             {
                 right = $"Convert.ToDouble({right})";
             }
 
-            // Also handle when both sides involve lambda parameters (e.g., v * v)
-            if (isArithmetic && IsLambdaParameter(binary.Left) && IsLambdaParameter(binary.Right))
+            // Also handle when both sides need casting (e.g., v * v, r[0] * r[1])
+            if (isArithmetic && NeedsNumericCast(binary.Left) && NeedsNumericCast(binary.Right))
             {
                 left = $"Convert.ToDouble({left})";
                 right = $"Convert.ToDouble({right})";
             }
             else if (isArithmetic)
             {
-                // Handle lambda parameter with another arithmetic expression (e.g., v * (v + 1))
-                if (IsLambdaParameter(binary.Left) && !IsNumericLiteral(binary.Right))
+                // Handle cases with another arithmetic expression (e.g., v * (v + 1), r[0] + r[1])
+                if (NeedsNumericCast(binary.Left) && !IsNumericLiteral(binary.Right))
                 {
                     left = $"Convert.ToDouble({left})";
                 }
 
-                if (IsLambdaParameter(binary.Right) && !IsNumericLiteral(binary.Left))
+                if (NeedsNumericCast(binary.Right) && !IsNumericLiteral(binary.Left))
                 {
                     right = $"Convert.ToDouble({right})";
                 }
@@ -207,13 +235,15 @@ public class CSharpTranspiler
             };
         }
 
-        // Special handling for .cells and .values on the source
+        // Special handling for .cells, .values, .rows, .cols on the source
         if (target == "__source__")
         {
             return member.Member switch
             {
                 "cells" => "__cells__",
                 "values" => "__values__",
+                "rows" => "__rows__",
+                "cols" => "__cols__",
                 _ => $"__source__.{member.Member}"
             };
         }
@@ -238,6 +268,7 @@ public class CSharpTranspiler
         {
             "where" => $"{target}.Where({string.Join(", ", args)})",
             "select" => $"{target}.Select({string.Join(", ", args)})",
+            "map" => $"__MapPreserveShape__({string.Join(", ", args)})",
             "toarray" => $"{target}.ToArray()",
             "orderby" => $"{target}.OrderBy({string.Join(", ", args)})",
             "orderbydesc" => $"{target}.OrderByDescending({string.Join(", ", args)})",
@@ -330,6 +361,27 @@ public class CSharpTranspiler
     private bool IsLambdaParameter(Expression expression) =>
         expression is IdentifierExpr ident && _lambdaParameters.Contains(ident.Name);
 
+    /// <summary>
+    /// Checks if an expression needs numeric casting for comparisons/arithmetic.
+    /// This includes lambda parameters (v, r, c) and index access on lambda parameters (r[0], r[1]).
+    /// </summary>
+    private bool NeedsNumericCast(Expression expression)
+    {
+        return expression switch
+        {
+            IdentifierExpr ident => _lambdaParameters.Contains(ident.Name),
+            IndexAccess indexAccess => NeedsNumericCast(indexAccess.Target), // r[0] needs cast if r is lambda param
+            _ => false
+        };
+    }
+
+    private string TranspileIndexAccess(IndexAccess indexAccess)
+    {
+        var target = TranspileExpression(indexAccess.Target);
+        var index = TranspileExpression(indexAccess.Index);
+        return $"{target}[{index}]";
+    }
+
     private string GenerateUdfClass(string methodName, string expressionCode)
     {
         var sb = new StringBuilder();
@@ -344,11 +396,11 @@ public class CSharpTranspiler
 
         if (_requiresObjectModel)
         {
-            GenerateObjectModelMethod(sb, methodName, expressionCode);
+            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols);
         }
         else
         {
-            GenerateValueOnlyMethod(sb, methodName, expressionCode);
+            GenerateValueOnlyMethod(sb, methodName, expressionCode, _usesCols);
         }
 
         sb.AppendLine("}");
@@ -356,7 +408,7 @@ public class CSharpTranspiler
         return sb.ToString();
     }
 
-    private static void GenerateObjectModelMethod(StringBuilder sb, string methodName, string expressionCode)
+    private static void GenerateObjectModelMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols)
     {
         // Generate the ExcelDNA entry point - uses reflection to avoid assembly identity issues
         sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
@@ -422,6 +474,27 @@ public class CSharpTranspiler
         sb.AppendLine("            var __cells__ = new System.Collections.Generic.List<dynamic>();");
         sb.AppendLine("            foreach (dynamic cell in range.Cells) __cells__.Add(cell);");
         sb.AppendLine();
+        sb.AppendLine("            // Get range dimensions");
+        sb.AppendLine("            int rowCount = range.Rows.Count;");
+        sb.AppendLine("            int colCount = range.Columns.Count;");
+        sb.AppendLine();
+        sb.AppendLine("            // Build row arrays for .rows operations (each row is an object[] of values)");
+        sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount).Select(r =>");
+        sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+        sb.AppendLine();
+        sb.AppendLine("            // Build column arrays for .cols operations");
+        sb.AppendLine("            var __cols__ = Enumerable.Range(1, colCount).Select(c =>");
+        sb.AppendLine("                Enumerable.Range(1, rowCount).Select(r => (object)range.Cells[r, c].Value).ToArray());");
+        sb.AppendLine();
+        sb.AppendLine("            // Helper for .map() - preserves 2D shape");
+        sb.AppendLine("            Func<Func<dynamic, object>, object[,]> __MapPreserveShape__ = (transform) => {");
+        sb.AppendLine("                var result = new object[rowCount, colCount];");
+        sb.AppendLine("                for (int r = 0; r < rowCount; r++)");
+        sb.AppendLine("                    for (int c = 0; c < colCount; c++)");
+        sb.AppendLine("                        result[r, c] = transform(range.Cells[r + 1, c + 1]);");
+        sb.AppendLine("                return result;");
+        sb.AppendLine("            };");
+        sb.AppendLine();
 
         // Replace placeholders and generate the result
         var code = expressionCode
@@ -435,21 +508,62 @@ public class CSharpTranspiler
         sb.AppendLine("            if (result == null) return string.Empty;");
         sb.AppendLine("            if (result is string || result is double || result is int || result is bool) return result;");
         sb.AppendLine("            if (result is object[,]) return result;");
+        sb.AppendLine();
+        sb.AppendLine("            // Handle IEnumerable<object[]> from .rows or .cols operations");
         sb.AppendLine("            if (result is System.Collections.IEnumerable enumerable && !(result is string))");
         sb.AppendLine("            {");
         sb.AppendLine("                var list = enumerable.Cast<object>().ToList();");
         sb.AppendLine("                if (list.Count == 0) return string.Empty;");
-        sb.AppendLine("                var output = new object[list.Count, 1];");
+        sb.AppendLine();
+        sb.AppendLine("                // Check if items are arrays (from .rows or .cols)");
+        sb.AppendLine("                if (list[0] is object[] firstArray)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var arrayList = list.Cast<object[]>().ToList();");
+        if (usesCols)
+        {
+            // For .cols: each array is a column, output as columns (transposed)
+            sb.AppendLine("                    // .cols output: each array becomes a column");
+            sb.AppendLine("                    var resultRowCount = arrayList.Max(arr => arr.Length);");
+            sb.AppendLine("                    var output = new object[resultRowCount, arrayList.Count];");
+            sb.AppendLine("                    for (int col = 0; col < arrayList.Count; col++)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        for (int row = 0; row < arrayList[col].Length; row++)");
+            sb.AppendLine("                            output[row, col] = arrayList[col][row] ?? string.Empty;");
+            sb.AppendLine("                        // Pad with empty if ragged");
+            sb.AppendLine("                        for (int row = arrayList[col].Length; row < resultRowCount; row++)");
+            sb.AppendLine("                            output[row, col] = string.Empty;");
+            sb.AppendLine("                    }");
+        }
+        else
+        {
+            // For .rows: each array is a row, output as rows (default)
+            sb.AppendLine("                    // .rows output: each array becomes a row");
+            sb.AppendLine("                    var resultColCount = arrayList.Max(arr => arr.Length);");
+            sb.AppendLine("                    var output = new object[arrayList.Count, resultColCount];");
+            sb.AppendLine("                    for (int i = 0; i < arrayList.Count; i++)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        for (int j = 0; j < arrayList[i].Length; j++)");
+            sb.AppendLine("                            output[i, j] = arrayList[i][j] ?? string.Empty;");
+            sb.AppendLine("                        // Pad with empty if ragged");
+            sb.AppendLine("                        for (int j = arrayList[i].Length; j < resultColCount; j++)");
+            sb.AppendLine("                            output[i, j] = string.Empty;");
+            sb.AppendLine("                    }");
+        }
+        sb.AppendLine("                    return output;");
+        sb.AppendLine("                }");
+        sb.AppendLine();
+        sb.AppendLine("                // Single-column output");
+        sb.AppendLine("                var singleColOutput = new object[list.Count, 1];");
         sb.AppendLine("                for (var i = 0; i < list.Count; i++)");
         sb.AppendLine("                {");
         sb.AppendLine("                    var item = list[i];");
         sb.AppendLine("                    // If item is a COM cell object, extract its Value");
         sb.AppendLine("                    if (item != null && item.GetType().IsCOMObject)");
-        sb.AppendLine("                        output[i, 0] = ((dynamic)item).Value ?? string.Empty;");
+        sb.AppendLine("                        singleColOutput[i, 0] = ((dynamic)item).Value ?? string.Empty;");
         sb.AppendLine("                    else");
-        sb.AppendLine("                        output[i, 0] = item ?? string.Empty;");
+        sb.AppendLine("                        singleColOutput[i, 0] = item ?? string.Empty;");
         sb.AppendLine("                }");
-        sb.AppendLine("                return output;");
+        sb.AppendLine("                return singleColOutput;");
         sb.AppendLine("            }");
         sb.AppendLine("            return result;");
         sb.AppendLine("        }");
@@ -460,7 +574,7 @@ public class CSharpTranspiler
         sb.AppendLine("    }");
     }
 
-    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode)
+    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols)
     {
         // Generate the ExcelDNA entry point (uses RuntimeHelpers for ExcelReference → values conversion)
         sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
@@ -508,7 +622,26 @@ public class CSharpTranspiler
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
+        sb.AppendLine("            var rowCount = values.GetLength(0);");
+        sb.AppendLine("            var colCount = values.GetLength(1);");
         sb.AppendLine("            var __values__ = values.Cast<object>();");
+        sb.AppendLine();
+        sb.AppendLine("            // Build row arrays for .rows operations");
+        sb.AppendLine("            var __rows__ = Enumerable.Range(0, rowCount)");
+        sb.AppendLine("                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
+        sb.AppendLine();
+        sb.AppendLine("            // Build column arrays for .cols operations");
+        sb.AppendLine("            var __cols__ = Enumerable.Range(0, colCount)");
+        sb.AppendLine("                .Select(c => Enumerable.Range(0, rowCount).Select(r => values[r, c]).ToArray());");
+        sb.AppendLine();
+        sb.AppendLine("            // Helper for .map() - preserves 2D shape");
+        sb.AppendLine("            Func<Func<object, object>, object[,]> __MapPreserveShape__ = (transform) => {");
+        sb.AppendLine("                var result = new object[rowCount, colCount];");
+        sb.AppendLine("                for (int r = 0; r < rowCount; r++)");
+        sb.AppendLine("                    for (int c = 0; c < colCount; c++)");
+        sb.AppendLine("                        result[r, c] = transform(values[r, c]);");
+        sb.AppendLine("                return result;");
+        sb.AppendLine("            };");
         sb.AppendLine();
 
         // Replace placeholders
@@ -522,14 +655,54 @@ public class CSharpTranspiler
         sb.AppendLine("            if (result == null) return string.Empty;");
         sb.AppendLine("            if (result is string || result is double || result is int || result is bool) return result;");
         sb.AppendLine("            if (result is object[,]) return result;");
+        sb.AppendLine();
+        sb.AppendLine("            // Handle IEnumerable<object[]> from .rows or .cols operations");
         sb.AppendLine("            if (result is System.Collections.IEnumerable enumerable && !(result is string))");
         sb.AppendLine("            {");
         sb.AppendLine("                var list = enumerable.Cast<object>().ToList();");
         sb.AppendLine("                if (list.Count == 0) return string.Empty;");
-        sb.AppendLine("                // Always return as 2D array for Excel spill (removed single-item special case)");
-        sb.AppendLine("                var output = new object[list.Count, 1];");
-        sb.AppendLine("                for (var i = 0; i < list.Count; i++) output[i, 0] = list[i] ?? string.Empty;");
-        sb.AppendLine("                return output;");
+        sb.AppendLine();
+        sb.AppendLine("                // Check if items are arrays (from .rows or .cols)");
+        sb.AppendLine("                if (list[0] is object[] firstArray)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var arrayList = list.Cast<object[]>().ToList();");
+        if (usesCols)
+        {
+            // For .cols: each array is a column, output as columns (transposed)
+            sb.AppendLine("                    // .cols output: each array becomes a column");
+            sb.AppendLine("                    var resultRowCount = arrayList.Max(arr => arr.Length);");
+            sb.AppendLine("                    var output = new object[resultRowCount, arrayList.Count];");
+            sb.AppendLine("                    for (int col = 0; col < arrayList.Count; col++)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        for (int row = 0; row < arrayList[col].Length; row++)");
+            sb.AppendLine("                            output[row, col] = arrayList[col][row] ?? string.Empty;");
+            sb.AppendLine("                        // Pad with empty if ragged");
+            sb.AppendLine("                        for (int row = arrayList[col].Length; row < resultRowCount; row++)");
+            sb.AppendLine("                            output[row, col] = string.Empty;");
+            sb.AppendLine("                    }");
+        }
+        else
+        {
+            // For .rows: each array is a row, output as rows (default)
+            sb.AppendLine("                    // .rows output: each array becomes a row");
+            sb.AppendLine("                    var resultColCount = arrayList.Max(arr => arr.Length);");
+            sb.AppendLine("                    var output = new object[arrayList.Count, resultColCount];");
+            sb.AppendLine("                    for (int i = 0; i < arrayList.Count; i++)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        for (int j = 0; j < arrayList[i].Length; j++)");
+            sb.AppendLine("                            output[i, j] = arrayList[i][j] ?? string.Empty;");
+            sb.AppendLine("                        // Pad with empty if ragged");
+            sb.AppendLine("                        for (int j = arrayList[i].Length; j < resultColCount; j++)");
+            sb.AppendLine("                            output[i, j] = string.Empty;");
+            sb.AppendLine("                    }");
+        }
+        sb.AppendLine("                    return output;");
+        sb.AppendLine("                }");
+        sb.AppendLine();
+        sb.AppendLine("                // Single-column output");
+        sb.AppendLine("                var singleColOutput = new object[list.Count, 1];");
+        sb.AppendLine("                for (var i = 0; i < list.Count; i++) singleColOutput[i, 0] = list[i] ?? string.Empty;");
+        sb.AppendLine("                return singleColOutput;");
         sb.AppendLine("            }");
         sb.AppendLine("            return result;");
         sb.AppendLine("        }");

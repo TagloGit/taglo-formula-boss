@@ -32,6 +32,8 @@ public enum TokenType
     // Delimiters
     LeftParen,
     RightParen,
+    LeftBracket,
+    RightBracket,
 
     // Special
     Eof,

@@ -419,6 +419,148 @@ public class TranspilerTests
 
     #endregion
 
+    #region Rows and Cols Support
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForRows()
+    {
+        var result = Transpile("data.rows.toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__rows__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCols()
+    {
+        var result = Transpile("data.cols.toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__cols__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForRowsWhere_ValueOnly()
+    {
+        var result = Transpile("data.rows.where(r => r[0] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__rows__.Where(", result.SourceCode);
+        Assert.Contains("r[0]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForColsOrderBy()
+    {
+        var result = Transpile("data.cols.orderBy(c => c[0]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__cols__.OrderBy(", result.SourceCode);
+        Assert.Contains("c[0]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForRowsTake()
+    {
+        var result = Transpile("data.rows.take(3).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__rows__.Take(3)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForRowsTakeLast()
+    {
+        var result = Transpile("data.rows.take(-2).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__rows__.TakeLast(2)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_RowsDoesNotRequireObjectModel()
+    {
+        var result = Transpile("data.rows.where(r => r[0] > 0).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+    }
+
+    #endregion
+
+    #region Map Support
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForMap()
+    {
+        var result = Transpile("data.map(v => v * 2)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__MapPreserveShape__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForMap_WithObjectModel()
+    {
+        var result = Transpile("data.cells.map(c => c.value * 2)");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("__MapPreserveShape__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_MapPreservesShapeHelper_IsGenerated()
+    {
+        var result = Transpile("data.map(v => v * 2)");
+
+        // Verify the helper function is generated
+        Assert.Contains("Func<Func<object, object>, object[,]> __MapPreserveShape__", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Index Access
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForIndexAccess()
+    {
+        var result = Transpile("data.rows.select(r => r[0]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("r[0]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForMultipleIndexAccess()
+    {
+        var result = Transpile("data.rows.where(r => r[0] > r[1]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("r[0]", result.SourceCode);
+        Assert.Contains("r[1]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_IndexAccess_CastsToDoubleForComparison()
+    {
+        var result = Transpile("data.rows.where(r => r[0] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // r[0] should be cast to double for comparison with numeric literal
+        Assert.Contains("Convert.ToDouble(r[0])", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_IndexAccess_CastsToDoubleForArithmetic()
+    {
+        var result = Transpile("data.rows.select(r => r[0] * 2).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // r[0] should be cast to double for arithmetic
+        Assert.Contains("Convert.ToDouble(r[0])", result.SourceCode);
+    }
+
+    #endregion
+
     private static TranspileResult Transpile(string source)
     {
         return TranspileWithName(source, null);
