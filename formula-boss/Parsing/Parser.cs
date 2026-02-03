@@ -221,7 +221,16 @@ public class Parser
 
         if (Match(TokenType.Identifier))
         {
-            return new IdentifierExpr(Previous().Lexeme);
+            var name = Previous().Lexeme;
+
+            // Check for range reference (e.g., A1:B10)
+            if (Match(TokenType.Colon))
+            {
+                Consume(TokenType.Identifier, "Expected cell reference after ':'");
+                return new RangeRefExpr(name, Previous().Lexeme);
+            }
+
+            return new IdentifierExpr(name);
         }
 
         if (Match(TokenType.LeftParen))

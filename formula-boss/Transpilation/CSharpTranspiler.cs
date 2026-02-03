@@ -89,6 +89,7 @@ public class CSharpTranspiler
         return expression switch
         {
             IdentifierExpr ident => TranspileIdentifier(ident),
+            RangeRefExpr => "__source__", // Range references become the input source
             NumberLiteral num => TranspileNumber(num),
             StringLiteral str => TranspileString(str),
             BinaryExpr binary => TranspileBinary(binary),

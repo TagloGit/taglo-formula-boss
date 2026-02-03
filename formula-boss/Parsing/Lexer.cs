@@ -68,6 +68,9 @@ public class Lexer
             case ')':
                 AddToken(TokenType.RightParen, start);
                 break;
+            case ':':
+                AddToken(TokenType.Colon, start);
+                break;
             case '=':
                 if (Match('='))
                 {
@@ -253,9 +256,9 @@ public class Lexer
         return true;
     }
 
-    private static bool IsIdentifierStart(char c) => char.IsLetter(c) || c == '_';
+    private static bool IsIdentifierStart(char c) => char.IsLetter(c) || c == '_' || c == '$';
 
-    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '$';
 
     private void AddToken(TokenType type, int start, string? lexeme = null)
     {
