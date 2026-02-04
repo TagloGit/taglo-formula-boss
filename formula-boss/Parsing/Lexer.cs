@@ -77,6 +77,9 @@ public class Lexer
             case ':':
                 AddToken(TokenType.Colon, start);
                 break;
+            case '@':
+                AddToken(TokenType.At, start);
+                break;
             case '=':
                 if (Match('='))
                 {

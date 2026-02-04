@@ -154,18 +154,20 @@ public class Parser
         {
             if (Match(TokenType.Dot))
             {
-                var name = Consume(TokenType.Identifier, "Expected identifier after '.'");
+                // Check for escape hatch: .@property bypasses type validation
+                var isEscaped = Match(TokenType.At);
+                var name = Consume(TokenType.Identifier, isEscaped ? "Expected identifier after '@'" : "Expected identifier after '.'");
                 if (Match(TokenType.LeftParen))
                 {
-                    // Method call
+                    // Method call (escape hatch doesn't apply to methods)
                     var args = ParseArguments();
                     Consume(TokenType.RightParen, "Expected ')' after arguments");
                     expr = new MethodCall(expr, name.Lexeme, args);
                 }
                 else
                 {
-                    // Member access
-                    expr = new MemberAccess(expr, name.Lexeme);
+                    // Member access (with optional escape hatch)
+                    expr = new MemberAccess(expr, name.Lexeme, isEscaped);
                 }
             }
             else if (Match(TokenType.LeftBracket))

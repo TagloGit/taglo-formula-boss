@@ -12,6 +12,7 @@ namespace FormulaBoss.Transpilation;
 public class CSharpTranspiler
 {
     private readonly HashSet<string> _lambdaParameters = [];
+    private readonly Dictionary<string, string> _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
     private bool _requiresObjectModel;
     private bool _usesRows;
     private bool _usesCols;
@@ -31,6 +32,7 @@ public class CSharpTranspiler
         _usesCols = false;
         _usesMap = false;
         _lambdaParameters.Clear();
+        _parameterTypes.Clear();
 
         // First pass: detect if object model is needed and track rows/cols/map usage
         DetectObjectModelUsage(expression);
@@ -53,8 +55,20 @@ public class CSharpTranspiler
         {
             case MemberAccess member:
                 // .cells triggers object model, .values does not
-                if (member.Member is "cells" or "color" or "row" or "col" or "rgb" or "bold" or "italic" or "fontSize"
-                    or "format" or "formula" or "address")
+                // Deep property access (Interior, Font) also requires object model
+                if (member.Member.Equals("cells", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("color", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("row", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("col", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("rgb", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("bold", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("italic", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("fontSize", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("format", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("formula", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("address", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("Interior", StringComparison.OrdinalIgnoreCase)
+                    || member.Member.Equals("Font", StringComparison.OrdinalIgnoreCase))
                 {
                     _requiresObjectModel = true;
                 }
@@ -214,11 +228,19 @@ public class CSharpTranspiler
     private string TranspileMemberAccess(MemberAccess member)
     {
         var target = TranspileExpression(member.Target);
+        var memberName = member.Member;
 
-        // Special handling for cell properties on lambda parameters
+        // If escaped with @, bypass all validation and pass through verbatim
+        if (member.IsEscaped)
+        {
+            return $"{target}.{memberName}";
+        }
+
+        // Special handling for cell properties on lambda parameters (shorthand syntax)
         if (IsLambdaParameter(member.Target))
         {
-            return member.Member switch
+            // Handle shorthand properties (color, bold, etc.) - these stay as-is
+            var shorthandResult = memberName.ToLowerInvariant() switch
             {
                 "value" => _requiresObjectModel ? $"{target}.Value" : target,
                 "color" => $"(int)({target}.Interior.ColorIndex ?? 0)",
@@ -227,28 +249,106 @@ public class CSharpTranspiler
                 "col" => $"{target}.Column",
                 "bold" => $"(bool)({target}.Font.Bold ?? false)",
                 "italic" => $"(bool)({target}.Font.Italic ?? false)",
-                "fontSize" => $"(double)({target}.Font.Size ?? 11)",
+                "fontsize" => $"(double)({target}.Font.Size ?? 11)",
                 "format" => $"(string)({target}.NumberFormat ?? \"General\")",
                 "formula" => $"(string)({target}.Formula ?? \"\")",
                 "address" => $"{target}.Address",
-                _ => $"{target}.{member.Member}"
+                _ => (string?)null
             };
+
+            if (shorthandResult != null)
+            {
+                return shorthandResult;
+            }
+
+            // Not a shorthand - check type system for Cell properties
+            var paramType = GetExpressionType(member.Target);
+            if (paramType != null)
+            {
+                return TranspileTypedMemberAccess(target, memberName, paramType);
+            }
         }
 
         // Special handling for .cells, .values, .rows, .cols on the source
         if (target == "__source__")
         {
-            return member.Member switch
+            return memberName.ToLowerInvariant() switch
             {
                 "cells" => "__cells__",
                 "values" => "__values__",
                 "rows" => "__rows__",
                 "cols" => "__cols__",
-                _ => $"__source__.{member.Member}"
+                _ => $"__source__.{memberName}"
             };
         }
 
-        return $"{target}.{member.Member}";
+        // Check if target has a known type (for deep property access like c.Interior.ColorIndex)
+        var targetType = GetExpressionType(member.Target);
+        if (targetType != null)
+        {
+            return TranspileTypedMemberAccess(target, memberName, targetType);
+        }
+
+        // Default: pass through
+        return $"{target}.{memberName}";
+    }
+
+    /// <summary>
+    /// Transpiles a member access when we know the type of the target.
+    /// Uses the type system to validate properties and apply proper casting.
+    /// </summary>
+    private string TranspileTypedMemberAccess(string target, string memberName, string targetType)
+    {
+        if (ExcelTypeSystem.Types.TryGetValue(targetType, out var props))
+        {
+            if (props.TryGetValue(memberName, out var prop))
+            {
+                // Apply the template with proper casting
+                return string.Format(prop.Template, target);
+            }
+
+            // Unknown property - throw with suggestion if available
+            var similar = ExcelTypeSystem.FindSimilar(targetType, memberName);
+            if (similar != null)
+            {
+                throw new TranspileException($"Unknown property '{memberName}' on {targetType}. Did you mean '{similar}'?");
+            }
+
+            throw new TranspileException($"Unknown property '{memberName}' on {targetType}.");
+        }
+
+        // Type not in system - pass through
+        return $"{target}.{memberName}";
+    }
+
+    /// <summary>
+    /// Gets the type of an expression based on type tracking context.
+    /// </summary>
+    private string? GetExpressionType(Expression expr)
+    {
+        return expr switch
+        {
+            IdentifierExpr id when _parameterTypes.TryGetValue(id.Name, out var t) => t,
+            MemberAccess ma => GetMemberAccessResultType(ma),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Gets the result type of a member access expression by looking up in the type system.
+    /// </summary>
+    private string? GetMemberAccessResultType(MemberAccess ma)
+    {
+        var targetType = GetExpressionType(ma.Target);
+        if (targetType != null && ExcelTypeSystem.Types.TryGetValue(targetType, out var props))
+        {
+            if (props.TryGetValue(ma.Member, out var prop))
+            {
+                return prop.ResultType;
+            }
+        }
+
+        return null;
     }
 
     private string TranspileMethodCall(MethodCall call)
@@ -445,6 +545,12 @@ public class CSharpTranspiler
         foreach (var param in lambda.Parameters)
         {
             _lambdaParameters.Add(param);
+
+            // In object model mode, single-parameter lambdas on .cells iterate over Cell objects
+            if (_requiresObjectModel && lambda.Parameters.Count == 1)
+            {
+                _parameterTypes[param] = "Cell";
+            }
         }
 
         var body = TranspileExpression(lambda.Body);
@@ -453,6 +559,7 @@ public class CSharpTranspiler
         foreach (var param in lambda.Parameters)
         {
             _lambdaParameters.Remove(param);
+            _parameterTypes.Remove(param);
         }
 
         // Generate the lambda syntax

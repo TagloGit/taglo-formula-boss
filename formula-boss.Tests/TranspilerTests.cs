@@ -639,6 +639,147 @@ public class TranspilerTests
 
     #endregion
 
+    #region Deep Property Access
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_InteriorColorIndex()
+    {
+        var result = Transpile("data.cells.where(c => c.Interior.ColorIndex == 6).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("(int)(c.Interior.ColorIndex ?? 0)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_InteriorPattern()
+    {
+        var result = Transpile("data.cells.where(c => c.Interior.Pattern == 1).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("(int)(c.Interior.Pattern ?? 0)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_FontBold()
+    {
+        var result = Transpile("data.cells.where(c => c.Font.Bold == true).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("(bool)(c.Font.Bold ?? false)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_FontSize()
+    {
+        var result = Transpile("data.cells.where(c => c.Font.Size > 12).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("(double)(c.Font.Size ?? 11)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_FontName()
+    {
+        var result = Transpile("data.cells.select(c => c.Font.Name).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("(string)(c.Font.Name ?? \"\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_CaseInsensitive()
+    {
+        // interior.colorindex should work same as Interior.ColorIndex
+        var result = Transpile("data.cells.where(c => c.interior.colorindex == 6).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("ColorIndex", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DeepPropertyAccess_TriggersObjectModel()
+    {
+        // Accessing Interior or Font should trigger object model
+        var result = Transpile("data.cells.where(c => c.Interior.Color > 0).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+    }
+
+    #endregion
+
+    #region Escape Hatch
+
+    [Fact]
+    public void Transpiler_EscapeHatch_BypassesValidation()
+    {
+        // @SomeCustomProperty should pass through without validation
+        var result = Transpile("data.cells.where(c => c.@SomeCustomProperty != null).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("c.SomeCustomProperty", result.SourceCode);
+        // Should NOT have null coalescing since we bypassed validation
+        Assert.DoesNotContain("(int)(c.SomeCustomProperty", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_EscapeHatch_MixedWithValidated()
+    {
+        // Can mix escaped and validated properties
+        var result = Transpile("data.cells.where(c => c.Interior.ColorIndex == 6 && c.@Custom == 1).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        // Interior.ColorIndex should be properly cast
+        Assert.Contains("(int)(c.Interior.ColorIndex ?? 0)", result.SourceCode);
+        // Custom should be passed through verbatim
+        Assert.Contains("c.Custom", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_EscapeHatch_DeepPath()
+    {
+        // Escape hatch on a deep property
+        var result = Transpile("data.cells.where(c => c.@SomeObject.@SomeProperty == 1).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("c.SomeObject.SomeProperty", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Invalid Property Suggestions
+
+    [Fact]
+    public void Transpiler_InvalidProperty_ThrowsWithSuggestion_InteriorTypo()
+    {
+        var ex = Assert.Throws<TranspileException>(() =>
+            Transpile("data.cells.where(c => c.Interior.Patern == 1).toArray()"));
+
+        Assert.Contains("Patern", ex.Message);
+        Assert.Contains("Pattern", ex.Message);
+        Assert.Contains("Did you mean", ex.Message);
+    }
+
+    [Fact]
+    public void Transpiler_InvalidProperty_ThrowsWithSuggestion_FontTypo()
+    {
+        var ex = Assert.Throws<TranspileException>(() =>
+            Transpile("data.cells.where(c => c.Font.Bald == true).toArray()"));
+
+        Assert.Contains("Bald", ex.Message);
+        Assert.Contains("Bold", ex.Message);
+    }
+
+    [Fact]
+    public void Transpiler_InvalidProperty_ThrowsForUnknown()
+    {
+        var ex = Assert.Throws<TranspileException>(() =>
+            Transpile("data.cells.where(c => c.Interior.XYZ == 1).toArray()"));
+
+        Assert.Contains("Unknown property 'XYZ' on Interior", ex.Message);
+    }
+
+    #endregion
+
     private static TranspileResult Transpile(string source)
     {
         return TranspileWithName(source, null);

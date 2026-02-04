@@ -150,6 +150,35 @@ public class ParserTests
         }
     }
 
+    [Fact]
+    public void Lexer_AtSymbol()
+    {
+        var lexer = new Lexer("c.@prop");
+        var tokens = lexer.ScanTokens();
+
+        // Should be: Identifier(c), Dot, At, Identifier(prop), Eof
+        Assert.Equal(5, tokens.Count);
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal("c", tokens[0].Lexeme);
+        Assert.Equal(TokenType.Dot, tokens[1].Type);
+        Assert.Equal(TokenType.At, tokens[2].Type);
+        Assert.Equal(TokenType.Identifier, tokens[3].Type);
+        Assert.Equal("prop", tokens[3].Lexeme);
+        Assert.Equal(TokenType.Eof, tokens[4].Type);
+    }
+
+    [Fact]
+    public void Lexer_AtSymbol_DeepPath()
+    {
+        var lexer = new Lexer("c.@SomeObject.@SomeProperty");
+        var tokens = lexer.ScanTokens();
+
+        // Should be: Identifier, Dot, At, Identifier, Dot, At, Identifier, Eof
+        Assert.Equal(8, tokens.Count);
+        Assert.Equal(TokenType.At, tokens[2].Type);
+        Assert.Equal(TokenType.At, tokens[5].Type);
+    }
+
     #endregion
 
     #region Parser Tests - Literals and Identifiers
@@ -276,6 +305,57 @@ public class ParserTests
 
         var a = Assert.IsType<IdentifierExpr>(b.Target);
         Assert.Equal("a", a.Name);
+    }
+
+    [Fact]
+    public void Parser_EscapedMemberAccess()
+    {
+        var expr = Parse("c.@CustomProp");
+
+        var member = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("CustomProp", member.Member);
+        Assert.True(member.IsEscaped);
+
+        var target = Assert.IsType<IdentifierExpr>(member.Target);
+        Assert.Equal("c", target.Name);
+    }
+
+    [Fact]
+    public void Parser_EscapedMemberAccess_Deep()
+    {
+        var expr = Parse("c.@SomeObject.@SomeProperty");
+
+        var outer = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("SomeProperty", outer.Member);
+        Assert.True(outer.IsEscaped);
+
+        var inner = Assert.IsType<MemberAccess>(outer.Target);
+        Assert.Equal("SomeObject", inner.Member);
+        Assert.True(inner.IsEscaped);
+    }
+
+    [Fact]
+    public void Parser_MixedEscapedAndNormalMemberAccess()
+    {
+        var expr = Parse("c.Interior.@Custom");
+
+        var outer = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("Custom", outer.Member);
+        Assert.True(outer.IsEscaped);
+
+        var inner = Assert.IsType<MemberAccess>(outer.Target);
+        Assert.Equal("Interior", inner.Member);
+        Assert.False(inner.IsEscaped);
+    }
+
+    [Fact]
+    public void Parser_NonEscapedMemberAccess_HasIsEscapedFalse()
+    {
+        var expr = Parse("c.Interior");
+
+        var member = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("Interior", member.Member);
+        Assert.False(member.IsEscaped);
     }
 
     #endregion
