@@ -179,6 +179,47 @@ public class ParserTests
         Assert.Equal(TokenType.At, tokens[5].Type);
     }
 
+    [Fact]
+    public void Lexer_QuestionToken()
+    {
+        var lexer = new Lexer("c.prop?");
+        var tokens = lexer.ScanTokens();
+
+        // Should be: Identifier, Dot, Identifier, Question, Eof
+        Assert.Equal(5, tokens.Count);
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal(TokenType.Dot, tokens[1].Type);
+        Assert.Equal(TokenType.Identifier, tokens[2].Type);
+        Assert.Equal(TokenType.Question, tokens[3].Type);
+        Assert.Equal(TokenType.Eof, tokens[4].Type);
+    }
+
+    [Fact]
+    public void Lexer_QuestionQuestionToken()
+    {
+        var lexer = new Lexer("a ?? b");
+        var tokens = lexer.ScanTokens();
+
+        // Should be: Identifier, QuestionQuestion, Identifier, Eof
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal(TokenType.QuestionQuestion, tokens[1].Type);
+        Assert.Equal("??", tokens[1].Lexeme);
+        Assert.Equal(TokenType.Identifier, tokens[2].Type);
+        Assert.Equal(TokenType.Eof, tokens[3].Type);
+    }
+
+    [Fact]
+    public void Lexer_QuestionThenQuestion_AreDistinct()
+    {
+        var lexer = new Lexer("? ??");
+        var tokens = lexer.ScanTokens();
+
+        Assert.Equal(3, tokens.Count);
+        Assert.Equal(TokenType.Question, tokens[0].Type);
+        Assert.Equal(TokenType.QuestionQuestion, tokens[1].Type);
+    }
+
     #endregion
 
     #region Parser Tests - Literals and Identifiers
@@ -356,6 +397,111 @@ public class ParserTests
         var member = Assert.IsType<MemberAccess>(expr);
         Assert.Equal("Interior", member.Member);
         Assert.False(member.IsEscaped);
+    }
+
+    [Fact]
+    public void Parser_SafeAccess_WithQuestion()
+    {
+        var expr = Parse("c.@Comment?");
+
+        var member = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("Comment", member.Member);
+        Assert.True(member.IsEscaped);
+        Assert.True(member.IsSafeAccess);
+    }
+
+    [Fact]
+    public void Parser_SafeAccess_NonEscaped()
+    {
+        var expr = Parse("c.prop?");
+
+        var member = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("prop", member.Member);
+        Assert.False(member.IsEscaped);
+        Assert.True(member.IsSafeAccess);
+    }
+
+    [Fact]
+    public void Parser_SafeAccess_DefaultFalse()
+    {
+        var expr = Parse("c.prop");
+
+        var member = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("prop", member.Member);
+        Assert.False(member.IsSafeAccess);
+    }
+
+    [Fact]
+    public void Parser_SafeAccess_ChainedWithRegular()
+    {
+        var expr = Parse("c.@Comment?.Text");
+
+        // Outer: Text (not safe)
+        var text = Assert.IsType<MemberAccess>(expr);
+        Assert.Equal("Text", text.Member);
+        Assert.False(text.IsSafeAccess);
+
+        // Inner: Comment? (safe)
+        var comment = Assert.IsType<MemberAccess>(text.Target);
+        Assert.Equal("Comment", comment.Member);
+        Assert.True(comment.IsSafeAccess);
+    }
+
+    #endregion
+
+    #region Parser Tests - Null Coalescing
+
+    [Fact]
+    public void Parser_NullCoalescing_Basic()
+    {
+        var expr = Parse("a ?? b");
+
+        var binary = Assert.IsType<BinaryExpr>(expr);
+        Assert.Equal("??", binary.Operator);
+
+        Assert.IsType<IdentifierExpr>(binary.Left);
+        Assert.IsType<IdentifierExpr>(binary.Right);
+    }
+
+    [Fact]
+    public void Parser_NullCoalescing_WithSafeAccess()
+    {
+        var expr = Parse("c.@Comment? ?? \"default\"");
+
+        var binary = Assert.IsType<BinaryExpr>(expr);
+        Assert.Equal("??", binary.Operator);
+
+        var left = Assert.IsType<MemberAccess>(binary.Left);
+        Assert.True(left.IsSafeAccess);
+
+        var right = Assert.IsType<StringLiteral>(binary.Right);
+        Assert.Equal("default", right.Value);
+    }
+
+    [Fact]
+    public void Parser_NullCoalescing_LowerPrecedenceThanOr()
+    {
+        // a || b ?? c should parse as (a || b) ?? c
+        var expr = Parse("a || b ?? c");
+
+        var coalesce = Assert.IsType<BinaryExpr>(expr);
+        Assert.Equal("??", coalesce.Operator);
+
+        var or = Assert.IsType<BinaryExpr>(coalesce.Left);
+        Assert.Equal("||", or.Operator);
+    }
+
+    [Fact]
+    public void Parser_NullCoalescing_Chained()
+    {
+        // a ?? b ?? c should be left-associative: (a ?? b) ?? c
+        var expr = Parse("a ?? b ?? c");
+
+        var outer = Assert.IsType<BinaryExpr>(expr);
+        Assert.Equal("??", outer.Operator);
+
+        var inner = Assert.IsType<BinaryExpr>(outer.Left);
+        Assert.Equal("??", inner.Operator);
     }
 
     #endregion

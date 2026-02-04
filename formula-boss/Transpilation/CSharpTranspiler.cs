@@ -146,6 +146,12 @@ public class CSharpTranspiler
 
     private string TranspileIdentifier(IdentifierExpr ident)
     {
+        // Handle null keyword
+        if (ident.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
+        {
+            return "null";
+        }
+
         // If it's a lambda parameter, return it directly
         if (_lambdaParameters.Contains(ident.Name))
         {
@@ -174,6 +180,28 @@ public class CSharpTranspiler
     {
         var left = TranspileExpression(binary.Left);
         var right = TranspileExpression(binary.Right);
+
+        // Handle null-coalescing operator - pass through to C#
+        if (binary.Operator == "??")
+        {
+            return $"({left} ?? {right})";
+        }
+
+        // Handle null comparisons on member access - wrap in try-catch for COM safety
+        if (binary.Operator is "==" or "!=" && _requiresObjectModel)
+        {
+            var isNullCheck = IsNullLiteral(binary.Right) || IsNullLiteral(binary.Left);
+            var isMemberAccessCheck = binary.Left is MemberAccess || binary.Right is MemberAccess;
+
+            if (isNullCheck && isMemberAccessCheck)
+            {
+                // Wrap null comparisons in try-catch for COM interop safety
+                // c.@Comment != null returns false on exception (treating as null)
+                // c.@Comment == null returns true on exception (treating as null)
+                var defaultValue = binary.Operator == "==" ? "true" : "false";
+                return $"((Func<bool>)(() => {{ try {{ return {left} {binary.Operator} {right}; }} catch {{ return {defaultValue}; }} }}))()";
+            }
+        }
 
         // For comparison and arithmetic operators in value-only path, lambda parameters and
         // index access on them (e.g., r[0]) are objects and need to be cast to double
@@ -219,6 +247,9 @@ public class CSharpTranspiler
 
     private static bool IsNumericLiteral(Expression expr) => expr is NumberLiteral;
 
+    private static bool IsNullLiteral(Expression expr) =>
+        expr is IdentifierExpr { Name: "null" };
+
     private string TranspileUnary(UnaryExpr unary)
     {
         var operand = TranspileExpression(unary.Operand);
@@ -233,7 +264,13 @@ public class CSharpTranspiler
         // If escaped with @, bypass all validation and pass through verbatim
         if (member.IsEscaped)
         {
-            return $"{target}.{memberName}";
+            var escapedAccess = $"{target}.{memberName}";
+            // If safe access is requested, wrap in try-catch that returns null on exception
+            if (member.IsSafeAccess)
+            {
+                return $"((Func<dynamic>)(() => {{ try {{ return {escapedAccess}; }} catch {{ return null; }} }}))()";
+            }
+            return escapedAccess;
         }
 
         // Special handling for cell properties on lambda parameters (shorthand syntax)
@@ -258,6 +295,11 @@ public class CSharpTranspiler
 
             if (shorthandResult != null)
             {
+                // Apply safe access wrapper if requested
+                if (member.IsSafeAccess)
+                {
+                    return $"((Func<dynamic>)(() => {{ try {{ return {shorthandResult}; }} catch {{ return null; }} }}))()";
+                }
                 return shorthandResult;
             }
 
@@ -265,7 +307,7 @@ public class CSharpTranspiler
             var paramType = GetExpressionType(member.Target);
             if (paramType != null)
             {
-                return TranspileTypedMemberAccess(target, memberName, paramType);
+                return TranspileTypedMemberAccess(target, memberName, paramType, member.IsSafeAccess);
             }
         }
 
@@ -286,25 +328,35 @@ public class CSharpTranspiler
         var targetType = GetExpressionType(member.Target);
         if (targetType != null)
         {
-            return TranspileTypedMemberAccess(target, memberName, targetType);
+            return TranspileTypedMemberAccess(target, memberName, targetType, member.IsSafeAccess);
         }
 
         // Default: pass through
-        return $"{target}.{memberName}";
+        var defaultAccess = $"{target}.{memberName}";
+        if (member.IsSafeAccess)
+        {
+            return $"((Func<dynamic>)(() => {{ try {{ return {defaultAccess}; }} catch {{ return null; }} }}))()";
+        }
+        return defaultAccess;
     }
 
     /// <summary>
     /// Transpiles a member access when we know the type of the target.
     /// Uses the type system to validate properties and apply proper casting.
     /// </summary>
-    private string TranspileTypedMemberAccess(string target, string memberName, string targetType)
+    private string TranspileTypedMemberAccess(string target, string memberName, string targetType, bool isSafeAccess = false)
     {
         if (ExcelTypeSystem.Types.TryGetValue(targetType, out var props))
         {
             if (props.TryGetValue(memberName, out var prop))
             {
                 // Apply the template with proper casting
-                return string.Format(prop.Template, target);
+                var result = string.Format(prop.Template, target);
+                if (isSafeAccess)
+                {
+                    return $"((Func<dynamic>)(() => {{ try {{ return {result}; }} catch {{ return null; }} }}))()";
+                }
+                return result;
             }
 
             // Unknown property - throw with suggestion if available
@@ -318,7 +370,12 @@ public class CSharpTranspiler
         }
 
         // Type not in system - pass through
-        return $"{target}.{memberName}";
+        var passThrough = $"{target}.{memberName}";
+        if (isSafeAccess)
+        {
+            return $"((Func<dynamic>)(() => {{ try {{ return {passThrough}; }} catch {{ return null; }} }}))()";
+        }
+        return passThrough;
     }
 
     /// <summary>
@@ -353,6 +410,16 @@ public class CSharpTranspiler
 
     private string TranspileMethodCall(MethodCall call)
     {
+        // Check if target is a safe-access member - if so, wrap entire chain in try-catch
+        if (call.Target is MemberAccess ma && ma.IsSafeAccess)
+        {
+            // Transpile target WITHOUT safe-access (we'll wrap the whole chain)
+            var unsafeTarget = TranspileMemberAccessUnsafe(ma);
+            var safeArgs = call.Arguments.Select(TranspileExpression).ToList();
+            var methodCall = $"{unsafeTarget}.{call.Method}({string.Join(", ", safeArgs)})";
+            return $"((Func<dynamic>)(() => {{ try {{ return {methodCall}; }} catch {{ return null; }} }}))()";
+        }
+
         var target = TranspileExpression(call.Target);
         var args = call.Arguments.Select(TranspileExpression).ToList();
 
@@ -594,6 +661,26 @@ public class CSharpTranspiler
         var target = TranspileExpression(indexAccess.Target);
         var index = TranspileExpression(indexAccess.Index);
         return $"{target}[{index}]";
+    }
+
+    /// <summary>
+    /// Transpiles a MemberAccess without the safe-access wrapper.
+    /// Used when the safe-access needs to wrap a larger expression (e.g., method call chain).
+    /// </summary>
+    private string TranspileMemberAccessUnsafe(MemberAccess member)
+    {
+        var target = TranspileExpression(member.Target);
+        var memberName = member.Member;
+
+        // If escaped with @, bypass validation and pass through verbatim (no safe wrapper)
+        if (member.IsEscaped)
+        {
+            return $"{target}.{memberName}";
+        }
+
+        // For non-escaped, use same logic as TranspileMemberAccess but without safe wrappers
+        // (This is a simplified version - full type system lookup could be added if needed)
+        return $"{target}.{memberName}";
     }
 
     private string GenerateUdfClass(string methodName, string expressionCode)

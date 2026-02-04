@@ -43,7 +43,20 @@ public class Parser
 
     // Expression parsing with operator precedence (lowest to highest)
 
-    private Expression ParseExpression() => ParseOr();
+    private Expression ParseExpression() => ParseNullCoalesce();
+
+    private Expression ParseNullCoalesce()
+    {
+        var expr = ParseOr();
+
+        while (Match(TokenType.QuestionQuestion))
+        {
+            var right = ParseOr();
+            expr = new BinaryExpr(expr, "??", right);
+        }
+
+        return expr;
+    }
 
     private Expression ParseOr()
     {
@@ -166,8 +179,9 @@ public class Parser
                 }
                 else
                 {
-                    // Member access (with optional escape hatch)
-                    expr = new MemberAccess(expr, name.Lexeme, isEscaped);
+                    // Member access (with optional escape hatch and safe access)
+                    var isSafeAccess = Match(TokenType.Question);
+                    expr = new MemberAccess(expr, name.Lexeme, isEscaped, isSafeAccess);
                 }
             }
             else if (Match(TokenType.LeftBracket))
