@@ -51,7 +51,8 @@ public record UnaryExpr(string Operator, Expression Operand) : Expression;
 /// <param name="Target">The expression being accessed.</param>
 /// <param name="Member">The member name.</param>
 /// <param name="IsEscaped">If true, the property was prefixed with @ to bypass type validation.</param>
-public record MemberAccess(Expression Target, string Member, bool IsEscaped = false) : Expression;
+/// <param name="IsSafeAccess">If true, the property was suffixed with ? for null-safe access.</param>
+public record MemberAccess(Expression Target, string Member, bool IsEscaped = false, bool IsSafeAccess = false) : Expression;
 
 /// <summary>
 /// A method call expression (e.g., obj.method(arg1, arg2)).

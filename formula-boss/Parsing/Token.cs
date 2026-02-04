@@ -29,6 +29,8 @@ public enum TokenType
     Not,          // !
     Colon,        // : (for range references like A1:B10)
     At,           // @ (for escape hatch in property access)
+    Question,     // ? (for safe property access)
+    QuestionQuestion, // ?? (null coalescing operator)
 
     // Delimiters
     LeftParen,

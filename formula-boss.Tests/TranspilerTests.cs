@@ -780,6 +780,79 @@ public class TranspilerTests
 
     #endregion
 
+    #region Null-Safe Access
+
+    [Fact]
+    public void Transpiler_SafeAccess_GeneratesTryCatch()
+    {
+        var result = Transpile("data.cells.select(c => c.@Comment?).toArray()");
+
+        // Should generate try-catch wrapper that returns null on exception
+        Assert.Contains("try { return c.Comment; }", result.SourceCode);
+        Assert.Contains("catch { return null; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_SafeAccess_WithTypedProperty()
+    {
+        var result = Transpile("data.cells.select(c => c.Interior?).toArray()");
+
+        // Should generate try-catch for typed property access
+        Assert.Contains("try { return c.Interior; }", result.SourceCode);
+        Assert.Contains("catch { return null; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NullCoalescing_PassesThrough()
+    {
+        var result = Transpile("data.cells.select(c => c.@Comment? ?? \"none\").toArray()");
+
+        // Should pass through ?? operator to C#
+        Assert.Contains("?? \"none\"", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_SafeAccess_MethodChain_WrapsEntireChain()
+    {
+        var result = Transpile("data.cells.select(c => c.@Comment?.Text() ?? \"none\").toArray()");
+
+        // Should wrap the entire chain (c.Comment.Text()) in try-catch, not just c.Comment
+        Assert.Contains("try { return c.Comment.Text(); }", result.SourceCode);
+        Assert.Contains("catch { return null; }", result.SourceCode);
+        Assert.Contains("?? \"none\"", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NullComparison_AutoWrapped()
+    {
+        var result = Transpile("data.cells.where(c => c.@Comment != null).toArray()");
+
+        // Should wrap null comparison in try-catch for COM safety
+        Assert.Contains("try { return c.Comment != null; }", result.SourceCode);
+        Assert.Contains("catch { return false; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NullComparison_EqualNull_ReturnsTrue()
+    {
+        var result = Transpile("data.cells.where(c => c.@Comment == null).toArray()");
+
+        // When checking == null, exception should return true (treating as null)
+        Assert.Contains("try { return c.Comment == null; }", result.SourceCode);
+        Assert.Contains("catch { return true; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NullKeyword_TranspiledCorrectly()
+    {
+        var result = Transpile("data.cells.where(c => c.@Comment != null).toArray()");
+
+        // "null" should be transpiled as the C# null keyword
+        Assert.Contains("!= null", result.SourceCode);
+    }
+
+    #endregion
+
     private static TranspileResult Transpile(string source)
     {
         return TranspileWithName(source, null);

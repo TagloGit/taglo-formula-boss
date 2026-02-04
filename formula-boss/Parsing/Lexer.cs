@@ -80,6 +80,17 @@ public class Lexer
             case '@':
                 AddToken(TokenType.At, start);
                 break;
+            case '?':
+                if (Match('?'))
+                {
+                    AddToken(TokenType.QuestionQuestion, start, "??");
+                }
+                else
+                {
+                    AddToken(TokenType.Question, start);
+                }
+
+                break;
             case '=':
                 if (Match('='))
                 {
