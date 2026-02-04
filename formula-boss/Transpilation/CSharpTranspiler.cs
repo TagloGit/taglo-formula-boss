@@ -171,31 +171,31 @@ public class CSharpTranspiler
             // Cast expressions that return objects to double for numeric operations
             if (NeedsNumericCast(binary.Left) && IsNumericLiteral(binary.Right))
             {
-                left = $"Convert.ToDouble({left})";
+                left = WrapInConvertToDouble(left);
             }
 
             if (NeedsNumericCast(binary.Right) && IsNumericLiteral(binary.Left))
             {
-                right = $"Convert.ToDouble({right})";
+                right = WrapInConvertToDouble(right);
             }
 
             // Also handle when both sides need casting (e.g., v * v, r[0] * r[1])
             if (isArithmetic && NeedsNumericCast(binary.Left) && NeedsNumericCast(binary.Right))
             {
-                left = $"Convert.ToDouble({left})";
-                right = $"Convert.ToDouble({right})";
+                left = WrapInConvertToDouble(left);
+                right = WrapInConvertToDouble(right);
             }
             else if (isArithmetic)
             {
                 // Handle cases with another arithmetic expression (e.g., v * (v + 1), r[0] + r[1])
                 if (NeedsNumericCast(binary.Left) && !IsNumericLiteral(binary.Right))
                 {
-                    left = $"Convert.ToDouble({left})";
+                    left = WrapInConvertToDouble(left);
                 }
 
                 if (NeedsNumericCast(binary.Right) && !IsNumericLiteral(binary.Left))
                 {
-                    right = $"Convert.ToDouble({right})";
+                    right = WrapInConvertToDouble(right);
                 }
             }
         }
@@ -279,23 +279,24 @@ public class CSharpTranspiler
             // For numeric aggregations, cast objects to double
             // On object model path, items might be COM cells - extract .Value if so
             // Use Aggregate() with explicit types to avoid dynamic type inference issues
+            // When selector is provided, wrap selector body in Convert.ToDouble()
             "sum" => args.Count > 0
-                ? $"{target}.Sum({string.Join(", ", args)})"
+                ? $"{target}.Sum({WrapSelectorInConvertToDouble(args[0])})"
                 : _requiresObjectModel
                     ? $"{target}.Aggregate(0.0, (acc, x) => acc + Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x))"
                     : $"{target}.Select(x => Convert.ToDouble(x)).Sum()",
             "avg" or "average" => args.Count > 0
-                ? $"{target}.Average({string.Join(", ", args)})"
+                ? $"{target}.Average({WrapSelectorInConvertToDouble(args[0])})"
                 : _requiresObjectModel
                     ? $"((Func<double>)(() => {{ var items = {target}.ToList(); return items.Count == 0 ? 0.0 : items.Aggregate(0.0, (acc, x) => acc + Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x)) / items.Count; }}))()"
                     : $"{target}.Select(x => Convert.ToDouble(x)).Average()",
             "min" => args.Count > 0
-                ? $"{target}.Min({string.Join(", ", args)})"
+                ? $"{target}.Min({WrapSelectorInConvertToDouble(args[0])})"
                 : _requiresObjectModel
                     ? $"{target}.Aggregate(double.MaxValue, (acc, x) => Math.Min(acc, Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x)))"
                     : $"{target}.Select(x => Convert.ToDouble(x)).Min()",
             "max" => args.Count > 0
-                ? $"{target}.Max({string.Join(", ", args)})"
+                ? $"{target}.Max({WrapSelectorInConvertToDouble(args[0])})"
                 : _requiresObjectModel
                     ? $"{target}.Aggregate(double.MinValue, (acc, x) => Math.Max(acc, Convert.ToDouble(x != null && x.GetType().IsCOMObject ? ((dynamic)x).Value : x)))"
                     : $"{target}.Select(x => Convert.ToDouble(x)).Max()",
@@ -304,6 +305,10 @@ public class CSharpTranspiler
             "firstordefault" => $"{target}.FirstOrDefault()",
             "last" => $"{target}.Last()",
             "lastordefault" => $"{target}.LastOrDefault()",
+            // groupBy: with 1 arg, groups and flattens; with 2 args, aggregates per group
+            "groupby" => GenerateGroupBy(target, args),
+            // aggregate: custom fold/reduce operation
+            "aggregate" => GenerateAggregate(target, args),
             _ => $"{target}.{call.Method}({string.Join(", ", args)})"
         };
     }
@@ -350,12 +355,114 @@ public class CSharpTranspiler
         return $"(({arg}) >= 0 ? {target}.{takeMethod}({arg}) : {target}.{takeLastMethod}(-({arg})))";
     }
 
+    /// <summary>
+    ///     Wraps an expression in Convert.ToDouble() for numeric operations.
+    /// </summary>
+    private static string WrapInConvertToDouble(string expr) => $"Convert.ToDouble({expr})";
+
+    /// <summary>
+    ///     Wraps a lambda selector's body in Convert.ToDouble() for numeric aggregations.
+    ///     e.g., "r => r[1]" becomes "r => Convert.ToDouble(r[1])"
+    /// </summary>
+    private static string WrapSelectorInConvertToDouble(string selector)
+    {
+        var arrowIndex = selector.IndexOf("=>", StringComparison.Ordinal);
+        if (arrowIndex > 0)
+        {
+            var paramPart = selector[..arrowIndex].Trim();
+            var bodyPart = selector[(arrowIndex + 2)..].Trim();
+            return $"{paramPart} => {WrapInConvertToDouble(bodyPart)}";
+        }
+
+        // Not a lambda, just wrap the whole thing
+        return WrapInConvertToDouble(selector);
+    }
+
+    /// <summary>
+    ///     Generates groupBy with optional per-group aggregation.
+    ///     - groupBy(keySelector) - groups and flattens (items stay grouped together)
+    ///     - groupBy(keySelector, aggregator) - aggregates per group, returns [key, value] pairs
+    /// </summary>
+    private static string GenerateGroupBy(string target, List<string> args)
+    {
+        if (args.Count == 0)
+        {
+            return $"{target}"; // no-op fallback
+        }
+
+        if (args.Count == 1)
+        {
+            // Single argument: just group and flatten (items stay grouped together)
+            return $"{target}.GroupBy({args[0]}).SelectMany(g => g)";
+        }
+
+        // Two arguments: keySelector and aggregator
+        // groupBy(r => r[0], g => g.sum(r => r[1]))
+        // Output: [key, aggregatedValue] pairs as object[] for Excel
+        var keySelector = args[0];
+        var aggregator = args[1];
+
+        // Extract lambda body from aggregator (e.g., "g => g.Sum(...)" -> "g.Sum(...)")
+        var arrowIndex = aggregator.IndexOf("=>", StringComparison.Ordinal);
+        if (arrowIndex > 0)
+        {
+            var paramPart = aggregator[..arrowIndex].Trim(); // "g"
+            var bodyPart = aggregator[(arrowIndex + 2)..].Trim(); // "g.Sum(...)"
+            return $"{target}.GroupBy({keySelector}).Select({paramPart} => new object[] {{ {paramPart}.Key, {bodyPart} }})";
+        }
+
+        // Fallback if no arrow found (shouldn't happen for valid lambda)
+        return $"{target}.GroupBy({keySelector}).Select(g => new object[] {{ g.Key, {aggregator} }})";
+    }
+
+    /// <summary>
+    ///     Generates aggregate (fold/reduce) with support for both seeded and unseeded forms.
+    ///     - aggregate(seed, (acc, x) => ...) - explicit seed value
+    ///     - aggregate((acc, x) => ...) - uses first element as seed
+    /// </summary>
+    private string GenerateAggregate(string target, List<string> args)
+    {
+        if (args.Count == 0)
+        {
+            return $"{target}.Aggregate((acc, x) => acc)"; // no-op fallback
+        }
+
+        if (args.Count == 1)
+        {
+            // Single argument: the accumulator function, no seed
+            // aggregate((acc, x) => acc + x) uses first element as seed
+            return $"{target}.Aggregate({args[0]})";
+        }
+
+        // Two arguments: seed and accumulator function
+        // aggregate(0, (acc, x) => acc + x)
+        return $"{target}.Aggregate({args[0]}, {args[1]})";
+    }
+
     private string TranspileLambda(LambdaExpr lambda)
     {
-        _lambdaParameters.Add(lambda.Parameter);
+        // Add all parameters to the tracking set
+        foreach (var param in lambda.Parameters)
+        {
+            _lambdaParameters.Add(param);
+        }
+
         var body = TranspileExpression(lambda.Body);
-        _lambdaParameters.Remove(lambda.Parameter);
-        return $"{lambda.Parameter} => {body}";
+
+        // Remove all parameters from the tracking set
+        foreach (var param in lambda.Parameters)
+        {
+            _lambdaParameters.Remove(param);
+        }
+
+        // Generate the lambda syntax
+        if (lambda.Parameters.Count == 1)
+        {
+            return $"{lambda.Parameters[0]} => {body}";
+        }
+
+        // Multi-parameter: (acc, x) => body
+        return $"({string.Join(", ", lambda.Parameters)}) => {body}";
     }
 
     private bool IsLambdaParameter(Expression expression) =>

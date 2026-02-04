@@ -202,13 +202,51 @@ public class Parser
 
     private Expression ParseArgumentExpression()
     {
-        // Check for lambda: identifier => expression
+        // Check for single-param lambda: identifier => expression
         if (Check(TokenType.Identifier) && CheckNext(TokenType.Arrow))
         {
             var param = Advance();
             Advance(); // consume =>
             var body = ParseExpression();
             return new LambdaExpr(param.Lexeme, body);
+        }
+
+        // Check for multi-param lambda: (param1, param2, ...) => expression
+        if (Check(TokenType.LeftParen))
+        {
+            // Look ahead to see if this is a lambda or just a grouped expression
+            var savedPosition = _current;
+            Advance(); // consume (
+
+            // Try to parse as parameter list
+            var parameters = new List<string>();
+            if (Check(TokenType.Identifier))
+            {
+                parameters.Add(Advance().Lexeme);
+                while (Match(TokenType.Comma))
+                {
+                    if (Check(TokenType.Identifier))
+                    {
+                        parameters.Add(Advance().Lexeme);
+                    }
+                    else
+                    {
+                        // Not a valid parameter list, backtrack
+                        _current = savedPosition;
+                        return ParseExpression();
+                    }
+                }
+
+                if (Match(TokenType.RightParen) && Match(TokenType.Arrow))
+                {
+                    // This is a multi-param lambda
+                    var body = ParseExpression();
+                    return new LambdaExpr(parameters, body);
+                }
+            }
+
+            // Not a lambda, backtrack and parse as expression
+            _current = savedPosition;
         }
 
         return ParseExpression();
