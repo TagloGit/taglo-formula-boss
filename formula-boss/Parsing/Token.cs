@@ -28,6 +28,7 @@ public enum TokenType
     Or,           // ||
     Not,          // !
     Colon,        // : (for range references like A1:B10)
+    At,           // @ (for escape hatch in property access)
 
     // Delimiters
     LeftParen,

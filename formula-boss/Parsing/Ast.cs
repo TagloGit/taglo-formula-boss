@@ -50,7 +50,8 @@ public record UnaryExpr(string Operator, Expression Operand) : Expression;
 /// </summary>
 /// <param name="Target">The expression being accessed.</param>
 /// <param name="Member">The member name.</param>
-public record MemberAccess(Expression Target, string Member) : Expression;
+/// <param name="IsEscaped">If true, the property was prefixed with @ to bypass type validation.</param>
+public record MemberAccess(Expression Target, string Member, bool IsEscaped = false) : Expression;
 
 /// <summary>
 /// A method call expression (e.g., obj.method(arg1, arg2)).
