@@ -561,6 +561,84 @@ public class TranspilerTests
 
     #endregion
 
+    #region GroupBy Support
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForGroupBy()
+    {
+        var result = Transpile("data.rows.groupBy(r => r[0]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".GroupBy(", result.SourceCode);
+        Assert.Contains(".SelectMany(g => g)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GroupBy_FlattensResult()
+    {
+        var result = Transpile("data.values.groupBy(v => v).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // GroupBy should be followed by SelectMany to flatten
+        Assert.Contains("GroupBy(v => v).SelectMany(g => g)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GroupBy_WithAggregator_ReturnsKeyValuePairs()
+    {
+        var result = Transpile("data.rows.groupBy(r => r[0], g => g.count()).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".GroupBy(", result.SourceCode);
+        Assert.Contains("g.Key", result.SourceCode);
+        Assert.Contains("g.Count()", result.SourceCode);
+        Assert.Contains("new object[]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GroupBy_WithSumAggregator()
+    {
+        var result = Transpile("data.rows.groupBy(r => r[0], g => g.sum(r => r[1])).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".GroupBy(", result.SourceCode);
+        Assert.Contains("g.Key", result.SourceCode);
+        Assert.Contains(".Sum(", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Aggregate Support
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForAggregate_WithSeed()
+    {
+        var result = Transpile("data.values.aggregate(0, (acc, x) => acc + x)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Aggregate(0, (acc, x) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForAggregate_NoSeed()
+    {
+        var result = Transpile("data.values.aggregate((acc, x) => acc + x)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Aggregate((acc, x) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Aggregate_HandlesMultiParamLambda()
+    {
+        var result = Transpile("data.rows.aggregate((acc, r) => acc + r[0])");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("(acc, r) =>", result.SourceCode);
+    }
+
+    #endregion
+
     private static TranspileResult Transpile(string source)
     {
         return TranspileWithName(source, null);

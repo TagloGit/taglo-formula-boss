@@ -61,11 +61,22 @@ public record MemberAccess(Expression Target, string Member) : Expression;
 public record MethodCall(Expression Target, string Method, IReadOnlyList<Expression> Arguments) : Expression;
 
 /// <summary>
-/// A lambda expression (e.g., x => x.value > 0).
+/// A lambda expression (e.g., x => x.value > 0, or (acc, x) => acc + x).
 /// </summary>
-/// <param name="Parameter">The parameter name.</param>
+/// <param name="Parameters">The parameter names (one or more).</param>
 /// <param name="Body">The lambda body expression.</param>
-public record LambdaExpr(string Parameter, Expression Body) : Expression;
+public record LambdaExpr(IReadOnlyList<string> Parameters, Expression Body) : Expression
+{
+    /// <summary>
+    /// Convenience constructor for single-parameter lambdas.
+    /// </summary>
+    public LambdaExpr(string parameter, Expression body) : this(new[] { parameter }, body) { }
+
+    /// <summary>
+    /// Gets the first (or only) parameter name for backwards compatibility.
+    /// </summary>
+    public string Parameter => Parameters[0];
+}
 
 /// <summary>
 /// A parenthesized expression (for grouping).
