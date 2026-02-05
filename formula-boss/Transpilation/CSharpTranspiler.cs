@@ -229,6 +229,23 @@ public class CSharpTranspiler
         // index access on them (e.g., r[0]) are objects and need to be cast to double
         var isComparison = binary.Operator is ">" or "<" or ">=" or "<=" or "==" or "!=";
         var isArithmetic = binary.Operator is "+" or "-" or "*" or "/";
+        var isEqualityComparison = binary.Operator is "==" or "!=";
+
+        // Handle string comparisons: when comparing column access to string literal,
+        // convert column value to string for proper comparison (object == string uses reference equality)
+        if (isEqualityComparison && !_requiresObjectModel)
+        {
+            // If right side is string literal and left needs cast (column access), use ToString()
+            if (IsStringLiteral(binary.Right) && NeedsNumericCast(binary.Left))
+            {
+                left = $"{left}?.ToString()";
+            }
+            // If left side is string literal and right needs cast (column access), use ToString()
+            if (IsStringLiteral(binary.Left) && NeedsNumericCast(binary.Right))
+            {
+                right = $"{right}?.ToString()";
+            }
+        }
 
         if ((isComparison || isArithmetic) && !_requiresObjectModel)
         {
@@ -285,6 +302,8 @@ public class CSharpTranspiler
     }
 
     private static bool IsNumericLiteral(Expression expr) => expr is NumberLiteral;
+
+    private static bool IsStringLiteral(Expression expr) => expr is StringLiteral;
 
     private static bool IsNullLiteral(Expression expr) =>
         expr is IdentifierExpr { Name: "null" };

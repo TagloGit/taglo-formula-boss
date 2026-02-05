@@ -805,6 +805,26 @@ public class TranspilerTests
         Assert.Contains("StringComparer.OrdinalIgnoreCase", result.SourceCode);
     }
 
+    [Fact]
+    public void Transpiler_StringComparison_ConvertsColumnToString()
+    {
+        var result = Transpile("data.rows.where(r => r[Category] == \"Fruit\").toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Column access should be converted to string for comparison
+        Assert.Contains("?.ToString()", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StringComparison_WithDotNotation()
+    {
+        var result = Transpile("data.rows.where(r => r.Status == \"Active\").toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Dot notation column access should also be converted to string
+        Assert.Contains("?.ToString()", result.SourceCode);
+    }
+
     #endregion
 
     #region Row Predicate Methods (find, some, every)
