@@ -13,10 +13,13 @@ public class CSharpTranspiler
 {
     private readonly HashSet<string> _lambdaParameters = [];
     private readonly Dictionary<string, string> _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
+    private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
     private bool _requiresObjectModel;
     private bool _usesRows;
     private bool _usesCols;
     private bool _usesMap;
+    private bool _needsHeaderContext; // True if named column access is used (r[Price], r.Price)
+    private bool _hasHeaderContext; // True if .withHeaders() was called or table detected
 
     /// <summary>
     ///     Transpiles a DSL expression to a complete C# UDF class.
@@ -31,8 +34,11 @@ public class CSharpTranspiler
         _usesRows = false;
         _usesCols = false;
         _usesMap = false;
+        _needsHeaderContext = false;
+        _hasHeaderContext = false;
         _lambdaParameters.Clear();
         _parameterTypes.Clear();
+        _rowParameters.Clear();
 
         // First pass: detect if object model is needed and track rows/cols/map usage
         DetectObjectModelUsage(expression);
@@ -93,6 +99,13 @@ public class CSharpTranspiler
                     _usesMap = true;
                 }
 
+                // Track .withHeaders() usage - enables header context
+                if (call.Method.Equals("withHeaders", StringComparison.OrdinalIgnoreCase))
+                {
+                    _hasHeaderContext = true;
+                    _needsHeaderContext = true;
+                }
+
                 DetectObjectModelUsage(call.Target);
                 foreach (var arg in call.Arguments)
                 {
@@ -119,6 +132,15 @@ public class CSharpTranspiler
                 break;
 
             case IndexAccess indexAccess:
+                // Detect named column access: r[Price] where index is an identifier (not a number)
+                // This signals we need header context for column name resolution
+                if (indexAccess.Index is IdentifierExpr indexIdent
+                    && !indexIdent.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
+                {
+                    _needsHeaderContext = true;
+                    _hasHeaderContext = true; // Assume headers are present when named access is used
+                }
+
                 DetectObjectModelUsage(indexAccess.Target);
                 DetectObjectModelUsage(indexAccess.Index);
                 break;
@@ -243,6 +265,19 @@ public class CSharpTranspiler
                     right = WrapInConvertToDouble(right);
                 }
             }
+
+            // For + operator with row column access: if one side is a lambda parameter (accumulator)
+            // and the other needs numeric cast (column access), we should cast the column access.
+            // This handles: acc + r[Price], acc + r.Price in reduce operations
+            if (binary.Operator == "+" && NeedsNumericCast(binary.Right) && IsLambdaParameter(binary.Left))
+            {
+                right = WrapInConvertToDouble(right);
+            }
+
+            if (binary.Operator == "+" && NeedsNumericCast(binary.Left) && IsLambdaParameter(binary.Right))
+            {
+                left = WrapInConvertToDouble(left);
+            }
         }
 
         return $"({left} {binary.Operator} {right})";
@@ -274,6 +309,23 @@ public class CSharpTranspiler
                 return $"((Func<dynamic>)(() => {{ try {{ return {escapedAccess}; }} catch {{ return null; }} }}))()";
             }
             return escapedAccess;
+        }
+
+        // Check for row column access: r.Price where r is a row parameter
+        // This takes precedence over Cell property handling when not in object model mode
+        if (member.Target is IdentifierExpr targetIdent
+            && _rowParameters.Contains(targetIdent.Name)
+            && !_requiresObjectModel)
+        {
+            // Set flag to generate header dictionary in the method
+            _needsHeaderContext = true;
+            // Row column access via dot notation: r.Price -> r[__GetCol__("Price")]
+            var rowColumnAccess = $"{target}[__GetCol__(\"{memberName}\")]";
+            if (member.IsSafeAccess)
+            {
+                return $"((Func<dynamic>)(() => {{ try {{ return {rowColumnAccess}; }} catch {{ return null; }} }}))()";
+            }
+            return rowColumnAccess;
         }
 
         // Special handling for cell properties on lambda parameters (shorthand syntax)
@@ -426,6 +478,13 @@ public class CSharpTranspiler
         var target = TranspileExpression(call.Target);
         var args = call.Arguments.Select(TranspileExpression).ToList();
 
+        // Handle .withHeaders() BEFORE the implicit __values__ conversion
+        // .withHeaders() should preserve __source__ so .rows can become __rows__
+        if (call.Method.Equals("withHeaders", StringComparison.OrdinalIgnoreCase))
+        {
+            return target; // Pass through, flag is already set during detection
+        }
+
         // If calling a LINQ method directly on the source (without .values or .cells),
         // implicitly use .values - e.g., data.where(...) becomes __values__.Where(...)
         if (target == "__source__")
@@ -436,8 +495,8 @@ public class CSharpTranspiler
         // Map DSL methods to C#/LINQ equivalents
         return call.Method.ToLowerInvariant() switch
         {
-            "where" => $"{target}.Where({string.Join(", ", args)})",
-            "select" => $"{target}.Select({string.Join(", ", args)})",
+            "where" => TranspileRowAwareMethod(target, args, call, "Where"),
+            "select" => TranspileRowAwareMethod(target, args, call, "Select"),
             "map" => $"__MapPreserveShape__({string.Join(", ", args)})",
             "toarray" => $"{target}.ToArray()",
             "orderby" => $"{target}.OrderBy({string.Join(", ", args)})",
@@ -477,8 +536,8 @@ public class CSharpTranspiler
             "lastordefault" => $"{target}.LastOrDefault()",
             // groupBy: with 1 arg, groups and flattens; with 2 args, aggregates per group
             "groupby" => GenerateGroupBy(target, args),
-            // aggregate: custom fold/reduce operation
-            "aggregate" => GenerateAggregate(target, args),
+            // aggregate/reduce: custom fold/reduce operation
+            "aggregate" or "reduce" => GenerateRowAwareAggregate(target, args, call),
             _ => $"{target}.{call.Method}({string.Join(", ", args)})"
         };
     }
@@ -612,6 +671,102 @@ public class CSharpTranspiler
     }
 
     /// <summary>
+    ///     Transpiles a method call that may operate on rows, setting row context for lambda parameters.
+    ///     This enables named column access like r[Price] and r.Price.
+    /// </summary>
+    private string TranspileRowAwareMethod(string target, List<string> args, MethodCall call, string csharpMethod)
+    {
+        // Check if operating on __rows__ - if so, set row context for lambda parameter
+        var isRowContext = target == "__rows__" || target.Contains("__rows__");
+
+        if (isRowContext && call.Arguments.Count > 0 && call.Arguments[0] is LambdaExpr lambda)
+        {
+            // Add the lambda's first parameter to row parameters set
+            var rowParam = lambda.Parameters.FirstOrDefault();
+            if (rowParam != null)
+            {
+                _rowParameters.Add(rowParam);
+            }
+
+            // Transpile the lambda with row context
+            var transpiledLambda = TranspileExpression(lambda);
+
+            // Remove from row parameters
+            if (rowParam != null)
+            {
+                _rowParameters.Remove(rowParam);
+            }
+
+            return $"{target}.{csharpMethod}({transpiledLambda})";
+        }
+
+        // Not in row context, use normal args
+        return $"{target}.{csharpMethod}({string.Join(", ", args)})";
+    }
+
+    /// <summary>
+    ///     Generates row-aware aggregate (fold/reduce) that sets row context for the accumulator lambda.
+    /// </summary>
+    private string GenerateRowAwareAggregate(string target, List<string> preTranspiledArgs, MethodCall call)
+    {
+        // Check if operating on __rows__
+        var isRowContext = target == "__rows__" || target.Contains("__rows__");
+
+        if (preTranspiledArgs.Count == 0)
+        {
+            return $"{target}.Aggregate((acc, x) => acc)"; // no-op fallback
+        }
+
+        // For row-aware aggregate, we need to re-transpile the lambda with row context
+        if (isRowContext)
+        {
+            if (call.Arguments.Count == 1 && call.Arguments[0] is LambdaExpr lambda1)
+            {
+                // Single argument: unseeded aggregate
+                // aggregate((acc, r) => acc + r[Price])
+                var rowParam = lambda1.Parameters.Count > 1 ? lambda1.Parameters[1] : null;
+                if (rowParam != null)
+                {
+                    _rowParameters.Add(rowParam);
+                }
+
+                var transpiledLambda = TranspileExpression(lambda1);
+
+                if (rowParam != null)
+                {
+                    _rowParameters.Remove(rowParam);
+                }
+
+                return $"{target}.Aggregate({transpiledLambda})";
+            }
+
+            if (call.Arguments.Count >= 2 && call.Arguments[1] is LambdaExpr lambda2)
+            {
+                // Two arguments: seed and accumulator
+                // aggregate(0, (acc, r) => acc + r[Price])
+                var seed = ConvertSeedToDouble(preTranspiledArgs[0]);
+                var rowParam = lambda2.Parameters.Count > 1 ? lambda2.Parameters[1] : null;
+                if (rowParam != null)
+                {
+                    _rowParameters.Add(rowParam);
+                }
+
+                var transpiledLambda = TranspileExpression(lambda2);
+
+                if (rowParam != null)
+                {
+                    _rowParameters.Remove(rowParam);
+                }
+
+                return $"{target}.Aggregate({seed}, {transpiledLambda})";
+            }
+        }
+
+        // Fall back to non-row-aware aggregate
+        return GenerateAggregate(target, preTranspiledArgs);
+    }
+
+    /// <summary>
     ///     Converts integer literal seeds to double literals for aggregate operations.
     ///     This prevents type mismatches when the accumulator lambda returns double
     ///     (common with Excel values which are often doubles).
@@ -682,14 +837,18 @@ public class CSharpTranspiler
 
     /// <summary>
     /// Checks if an expression needs numeric casting for comparisons/arithmetic.
-    /// This includes lambda parameters (v, r, c) and index access on lambda parameters (r[0], r[1]).
+    /// This includes lambda parameters (v, r, c), index access on lambda parameters (r[0], r[Price]),
+    /// and member access on row parameters (r.Price).
     /// </summary>
     private bool NeedsNumericCast(Expression expression)
     {
         return expression switch
         {
             IdentifierExpr ident => _lambdaParameters.Contains(ident.Name),
-            IndexAccess indexAccess => NeedsNumericCast(indexAccess.Target), // r[0] needs cast if r is lambda param
+            IndexAccess indexAccess => NeedsNumericCast(indexAccess.Target), // r[0], r[Price] needs cast if r is lambda param
+            // r.Price needs cast if r is a row parameter (not in object model mode)
+            MemberAccess member when !_requiresObjectModel && member.Target is IdentifierExpr target
+                                     && _rowParameters.Contains(target.Name) => true,
             _ => false
         };
     }
@@ -697,6 +856,20 @@ public class CSharpTranspiler
     private string TranspileIndexAccess(IndexAccess indexAccess)
     {
         var target = TranspileExpression(indexAccess.Target);
+
+        // Check if this is named column access on a row parameter: r[Price]
+        // If target is a row parameter and index is an identifier, generate header lookup
+        if (indexAccess.Target is IdentifierExpr targetIdent
+            && _rowParameters.Contains(targetIdent.Name)
+            && indexAccess.Index is IdentifierExpr indexIdent
+            && !indexIdent.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
+        {
+            // Set flag to generate header dictionary in the method
+            _needsHeaderContext = true;
+            // Named column access: r[Price] -> r[__GetCol__("Price")]
+            return $"{target}[__GetCol__(\"{indexIdent.Name}\")]";
+        }
+
         var index = TranspileExpression(indexAccess.Index);
         return $"{target}[{index}]";
     }
@@ -735,11 +908,11 @@ public class CSharpTranspiler
 
         if (_requiresObjectModel)
         {
-            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols);
+            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext);
         }
         else
         {
-            GenerateValueOnlyMethod(sb, methodName, expressionCode, _usesCols);
+            GenerateValueOnlyMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext);
         }
 
         sb.AppendLine("}");
@@ -747,7 +920,7 @@ public class CSharpTranspiler
         return sb.ToString();
     }
 
-    private static void GenerateObjectModelMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols)
+    private static void GenerateObjectModelMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols, bool needsHeaderContext)
     {
         // Generate the ExcelDNA entry point - uses reflection to avoid assembly identity issues
         sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
@@ -817,9 +990,34 @@ public class CSharpTranspiler
         sb.AppendLine("            int rowCount = range.Rows.Count;");
         sb.AppendLine("            int colCount = range.Columns.Count;");
         sb.AppendLine();
-        sb.AppendLine("            // Build row arrays for .rows operations (each row is an object[] of values)");
-        sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount).Select(r =>");
-        sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+        // Generate header dictionary if needed for named column access
+        if (needsHeaderContext)
+        {
+            sb.AppendLine("            // Build header dictionary from first row for named column access");
+            sb.AppendLine("            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
+            sb.AppendLine("            for (int c = 1; c <= colCount; c++)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var headerValue = range.Cells[1, c].Value?.ToString() ?? \"\";");
+            sb.AppendLine("                if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine("                    __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            // Column lookup helper with detailed error message");
+            sb.AppendLine("            Func<string, int> __GetCol__ = (name) => {");
+            sb.AppendLine("                if (__headers__.TryGetValue(name, out var idx)) return idx;");
+            sb.AppendLine("                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
+            sb.AppendLine("            };");
+            sb.AppendLine();
+            sb.AppendLine("            // Build row arrays for .rows operations - skip header row");
+            sb.AppendLine("            var __rows__ = Enumerable.Range(2, rowCount - 1).Select(r =>");
+            sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+        }
+        else
+        {
+            sb.AppendLine("            // Build row arrays for .rows operations (each row is an object[] of values)");
+            sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount).Select(r =>");
+            sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+        }
         sb.AppendLine();
         sb.AppendLine("            // Build column arrays for .cols operations");
         sb.AppendLine("            var __cols__ = Enumerable.Range(1, colCount).Select(c =>");
@@ -913,7 +1111,7 @@ public class CSharpTranspiler
         sb.AppendLine("    }");
     }
 
-    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols)
+    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols, bool needsHeaderContext)
     {
         // Generate the ExcelDNA entry point (uses RuntimeHelpers for ExcelReference → values conversion)
         sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
@@ -965,9 +1163,38 @@ public class CSharpTranspiler
         sb.AppendLine("            var colCount = values.GetLength(1);");
         sb.AppendLine("            var __values__ = values.Cast<object>();");
         sb.AppendLine();
-        sb.AppendLine("            // Build row arrays for .rows operations");
-        sb.AppendLine("            var __rows__ = Enumerable.Range(0, rowCount)");
-        sb.AppendLine("                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
+
+        // Generate header dictionary if needed
+        if (needsHeaderContext)
+        {
+            sb.AppendLine("            // Build header dictionary from first row for named column access");
+            sb.AppendLine("            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
+            sb.AppendLine("            if (rowCount > 0)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                for (int c = 0; c < colCount; c++)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    var headerValue = values[0, c]?.ToString() ?? \"\";");
+            sb.AppendLine("                    if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine("                        __headers__[headerValue] = c;");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            // Column lookup helper with detailed error message");
+            sb.AppendLine("            Func<string, int> __GetCol__ = (name) => {");
+            sb.AppendLine("                if (__headers__.TryGetValue(name, out var idx)) return idx;");
+            sb.AppendLine("                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
+            sb.AppendLine("            };");
+            sb.AppendLine();
+            sb.AppendLine("            // Build row arrays for .rows operations - skip header row");
+            sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount - 1)");
+            sb.AppendLine("                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
+        }
+        else
+        {
+            sb.AppendLine("            // Build row arrays for .rows operations");
+            sb.AppendLine("            var __rows__ = Enumerable.Range(0, rowCount)");
+            sb.AppendLine("                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
+        }
         sb.AppendLine();
         sb.AppendLine("            // Build column arrays for .cols operations");
         sb.AppendLine("            var __cols__ = Enumerable.Range(0, colCount)");

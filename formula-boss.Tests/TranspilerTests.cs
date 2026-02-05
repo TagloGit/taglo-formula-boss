@@ -705,6 +705,108 @@ public class TranspilerTests
 
     #endregion
 
+    #region Named Column Access
+
+    [Fact]
+    public void Transpiler_RowIndexAccess_WithColumnName_GeneratesHeaderLookup()
+    {
+        var result = Transpile("data.rows.where(r => r[Price] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        Assert.Contains("__headers__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_RowMemberAccess_GeneratesHeaderLookup()
+    {
+        var result = Transpile("data.rows.where(r => r.Price > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        Assert.Contains("__headers__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_RowReduce_WithNamedColumns_GeneratesHeaderDictionary()
+    {
+        var result = Transpile("data.rows.reduce(0, (acc, r) => acc + r[Price] * r[Qty])");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("Dictionary<string, int>", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Qty\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_WithHeaders_SetsHeaderContext()
+    {
+        var result = Transpile("data.withHeaders().rows.where(r => r[Name] == \"Test\").toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__headers__", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Name\")", result.SourceCode);
+        // Header row should be skipped in __rows__ generation
+        Assert.Contains("Enumerable.Range(1, rowCount - 1)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NumericIndex_StillWorksWithoutHeaders()
+    {
+        var result = Transpile("data.rows.where(r => r[0] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Numeric index should not generate header lookup
+        Assert.DoesNotContain("__GetCol__", result.SourceCode);
+        Assert.Contains("r[0]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_MixedAccess_SupportsNumericAndNamedColumns()
+    {
+        var result = Transpile("data.rows.select(r => r[0] + r[Total]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Should have header lookup for named column
+        Assert.Contains("__GetCol__(\"Total\")", result.SourceCode);
+        // And direct numeric access for index
+        Assert.Contains("r[0]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_ReduceAlias_WorksLikeAggregate()
+    {
+        var result = Transpile("data.rows.reduce(0, (acc, r) => acc + r[Amount])");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Aggregate(", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Amount\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NamedColumnAccess_GeneratesGetColHelper()
+    {
+        var result = Transpile("data.rows.where(r => r[Price] > 0).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Should generate the __GetCol__ helper function
+        Assert.Contains("Func<string, int> __GetCol__", result.SourceCode);
+        // And the detailed error message pattern
+        Assert.Contains("Column '{name}' not found", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_HeaderDictionary_IsCaseInsensitive()
+    {
+        var result = Transpile("data.rows.select(r => r[Price]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        // Should use case-insensitive comparison
+        Assert.Contains("StringComparer.OrdinalIgnoreCase", result.SourceCode);
+    }
+
+    #endregion
+
     #region Deep Property Access
 
     [Fact]

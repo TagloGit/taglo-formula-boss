@@ -316,4 +316,172 @@ public class ValuePathTests
     }
 
     #endregion
+
+    #region Named Column Access
+
+    [Fact]
+    public void Rows_WithHeaders_NamedColumnAccess_Where()
+    {
+        // Arrange: First row is headers
+        var values = new object[,]
+        {
+            { "Name", "Price", "Qty" },
+            { "Apple", 10.0, 5.0 },
+            { "Banana", 20.0, 3.0 },
+            { "Cherry", 15.0, 4.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression("data.withHeaders().rows.where(r => r[Price] > 12).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+        Assert.False(compilation.RequiresObjectModel);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0)); // Banana (20) and Cherry (15)
+    }
+
+    [Fact]
+    public void Rows_WithHeaders_NamedColumnAccess_Reduce()
+    {
+        // Arrange: First row is headers
+        var values = new object[,]
+        {
+            { "Name", "Price", "Qty" },
+            { "Apple", 10.0, 2.0 },
+            { "Banana", 20.0, 3.0 },
+            { "Cherry", 15.0, 4.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r[Price] * r[Qty])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        // 10*2 + 20*3 + 15*4 = 20 + 60 + 60 = 140
+        Assert.Equal(140.0, Convert.ToDouble(result));
+    }
+
+    [Fact]
+    public void Rows_WithHeaders_DotNotation_Works()
+    {
+        // Arrange: First row is headers
+        var values = new object[,]
+        {
+            { "Name", "Price", "Qty" },
+            { "Apple", 10.0, 2.0 },
+            { "Banana", 20.0, 3.0 }
+        };
+
+        // Use dot notation r.Price instead of bracket notation r[Price]
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r.Price)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(30.0, Convert.ToDouble(result)); // 10 + 20
+    }
+
+    [Fact]
+    public void Rows_WithHeaders_CaseInsensitive()
+    {
+        // Arrange: Headers in different case than access
+        var values = new object[,]
+        {
+            { "NAME", "PRICE", "QTY" },
+            { "Apple", 10.0, 2.0 },
+            { "Banana", 20.0, 3.0 }
+        };
+
+        // Access with lowercase column names
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r[price])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(30.0, Convert.ToDouble(result)); // 10 + 20
+    }
+
+    [Fact]
+    public void Rows_WithHeaders_MissingColumn_ThrowsDetailedError()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price", "Qty" },
+            { "Apple", 10.0, 2.0 }
+        };
+
+        // Access non-existent column
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r[Cost])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert - should return error message with available columns
+        _output.WriteLine($"Result: {result}");
+        Assert.IsType<string>(result);
+        var errorMsg = (string)result;
+        Assert.Contains("Column 'Cost' not found", errorMsg);
+        Assert.Contains("Name", errorMsg);
+        Assert.Contains("Price", errorMsg);
+        Assert.Contains("Qty", errorMsg);
+    }
+
+    [Fact]
+    public void Rows_NumericIndex_StillWorks()
+    {
+        // Arrange: Use numeric index without headers
+        var values = new object[,]
+        {
+            { 10.0, 2.0 },
+            { 20.0, 3.0 },
+            { 30.0, 4.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.rows.reduce(0, (acc, r) => acc + r[0] * r[1])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        // 10*2 + 20*3 + 30*4 = 20 + 60 + 120 = 200
+        Assert.Equal(200.0, Convert.ToDouble(result));
+    }
+
+    #endregion
 }
