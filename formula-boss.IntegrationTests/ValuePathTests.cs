@@ -483,6 +483,65 @@ public class ValuePathTests
         Assert.Equal(200.0, Convert.ToDouble(result));
     }
 
+    [Fact]
+    public void Rows_WithHeaders_StringComparison()
+    {
+        // Arrange: Filter by string column
+        var values = new object[,]
+        {
+            { "Name", "Category", "Price" },
+            { "Apple", "Fruit", 10.0 },
+            { "Carrot", "Vegetable", 8.0 },
+            { "Banana", "Fruit", 25.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.where(r => r[Category] == \"Fruit\").toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0)); // Apple and Banana (Fruit rows)
+        Assert.Equal("Apple", arr[0, 0]);
+        Assert.Equal("Banana", arr[1, 0]);
+    }
+
+    [Fact]
+    public void Rows_WithHeaders_StringComparison_ChainedWithReduce()
+    {
+        // Arrange: Filter by category, then sum prices
+        var values = new object[,]
+        {
+            { "Name", "Category", "Price" },
+            { "Apple", "Fruit", 10.0 },
+            { "Carrot", "Vegetable", 8.0 },
+            { "Banana", "Fruit", 25.0 },
+            { "Date", "Fruit", 30.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.where(r => r[Category] == \"Fruit\").reduce(0, (acc, r) => acc + r[Price])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        // 10 + 25 + 30 = 65 (only Fruit prices)
+        Assert.Equal(65.0, Convert.ToDouble(result));
+    }
+
     #endregion
 
     #region Row Predicate Methods (find, some, every)
