@@ -173,6 +173,14 @@ public class FormulaInterceptor : IDisposable
         var processedBindings = new Dictionary<string, ProcessedBinding>();
         var errors = new List<string>();
 
+        // Extract column bindings from LET structure (e.g., price, tblSales[Price])
+        // This enables r.price and r[price] to resolve to the actual column name
+        var columnBindings = LetFormulaParser.ExtractColumnBindings(letStructure);
+        if (columnBindings.Count > 0)
+        {
+            Debug.WriteLine($"Found {columnBindings.Count} column bindings: {string.Join(", ", columnBindings.Select(kv => $"{kv.Key}={kv.Value}"))}");
+        }
+
         foreach (var binding in letStructure.Bindings)
         {
             var variableName = binding.VariableName.Trim();
@@ -189,8 +197,8 @@ public class FormulaInterceptor : IDisposable
 
                 Debug.WriteLine($"Processing LET binding: {variableName} = `{dslExpression}`");
 
-                // Create context with the LET variable name as preferred UDF name
-                var context = new ExpressionContext(variableName);
+                // Create context with the LET variable name and column bindings
+                var context = new ExpressionContext(variableName, columnBindings);
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
@@ -220,8 +228,8 @@ public class FormulaInterceptor : IDisposable
             {
                 Debug.WriteLine($"Processing LET result expression: `{dslExpression}`");
 
-                // Use "_result" as the variable name for the final expression
-                var context = new ExpressionContext("_result");
+                // Use "_result" as the variable name for the final expression, with column bindings
+                var context = new ExpressionContext("_result", columnBindings);
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
