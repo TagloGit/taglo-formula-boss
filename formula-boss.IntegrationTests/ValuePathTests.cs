@@ -484,4 +484,205 @@ public class ValuePathTests
     }
 
     #endregion
+
+    #region Row Predicate Methods (find, some, every)
+
+    [Fact]
+    public void Rows_Find_ReturnsFirstMatchingRow()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "Apple", 10.0 },
+            { "Banana", 25.0 },
+            { "Cherry", 15.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.find(r => r[Price] > 20)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        // Should return the Banana row - displayed as vertical column (N rows, 1 col)
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0)); // 2 values (Name, Price values)
+        Assert.Equal(1, arr.GetLength(1)); // Single column
+        Assert.Equal("Banana", arr[0, 0]); // Name
+        Assert.Equal(25.0, Convert.ToDouble(arr[1, 0])); // Price
+    }
+
+    [Fact]
+    public void Rows_Find_ReturnsNullWhenNoMatch()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "Apple", 10.0 },
+            { "Banana", 20.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.find(r => r[Price] > 100)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        // Should return empty (no match)
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Rows_Some_ReturnsTrueWhenMatchExists()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "Apple", 10.0 },
+            { "Banana", 25.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.some(r => r[Price] > 20)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Rows_Some_ReturnsFalseWhenNoMatch()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "Apple", 10.0 },
+            { "Banana", 20.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.some(r => r[Price] > 100)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Rows_Every_ReturnsTrueWhenAllMatch()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "Apple", 10.0 },
+            { "Banana", 20.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.every(r => r[Price] > 0)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Rows_Every_ReturnsFalseWhenSomeDontMatch()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "Apple", 10.0 },
+            { "Banana", 20.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.every(r => r[Price] > 15)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(false, result);
+    }
+
+    #endregion
+
+    #region Scan Method
+
+    [Fact]
+    public void Rows_Scan_ReturnsRunningTotals()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Name", "Amount" },
+            { "A", 10.0 },
+            { "B", 20.0 },
+            { "C", 30.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.scan(0, (sum, r) => sum + r[Amount]).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        // Running totals: 10, 30, 60 (output as 3 rows, 1 column - vertical)
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(1, arr.GetLength(1));
+        Assert.Equal(10.0, Convert.ToDouble(arr[0, 0]));
+        Assert.Equal(30.0, Convert.ToDouble(arr[1, 0]));
+        Assert.Equal(60.0, Convert.ToDouble(arr[2, 0]));
+    }
+
+    #endregion
 }
