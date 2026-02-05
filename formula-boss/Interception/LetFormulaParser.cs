@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Text.RegularExpressions;
 
 namespace FormulaBoss.Interception;
 
@@ -266,5 +267,51 @@ public static class LetFormulaParser
         }
 
         return value.Substring(start + 1, end - start - 1);
+    }
+
+    /// <summary>
+    ///     Checks if a binding value is a table column reference like tblSales[Price].
+    /// </summary>
+    /// <param name="value">The binding value.</param>
+    /// <param name="tableName">The table name if it's a column reference.</param>
+    /// <param name="columnName">The column name if it's a column reference.</param>
+    /// <returns>True if this is a column reference.</returns>
+    public static bool IsColumnBinding(string value, out string? tableName, out string? columnName)
+    {
+        tableName = null;
+        columnName = null;
+
+        // Match pattern: tableName[ColumnName] (with optional spaces)
+        // e.g., tblSales[Price], data[Total Amount], Sales[Qty]
+        var match = Regex.Match(value.Trim(), @"^(\w+)\s*\[\s*([^\]]+)\s*\]$");
+        if (match.Success)
+        {
+            tableName = match.Groups[1].Value;
+            columnName = match.Groups[2].Value.Trim();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Extracts all column bindings from a LET structure.
+    ///     Returns a dictionary mapping LET variable names to column names.
+    /// </summary>
+    /// <param name="structure">The parsed LET structure.</param>
+    /// <returns>Dictionary of variable name → column name.</returns>
+    public static Dictionary<string, string> ExtractColumnBindings(LetStructure structure)
+    {
+        var columnBindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var binding in structure.Bindings)
+        {
+            if (IsColumnBinding(binding.Value, out _, out var columnName) && columnName != null)
+            {
+                columnBindings[binding.VariableName] = columnName;
+            }
+        }
+
+        return columnBindings;
     }
 }

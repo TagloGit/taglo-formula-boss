@@ -286,4 +286,84 @@ public class LetFormulaParserTests
     }
 
     #endregion
+
+    #region Column Binding Detection
+
+    [Fact]
+    public void IsColumnBinding_ReturnsTrue_ForSimpleTableColumn()
+    {
+        var isColumn = LetFormulaParser.IsColumnBinding("tblSales[Price]", out var tableName, out var columnName);
+
+        Assert.True(isColumn);
+        Assert.Equal("tblSales", tableName);
+        Assert.Equal("Price", columnName);
+    }
+
+    [Fact]
+    public void IsColumnBinding_ReturnsTrue_WithSpaces()
+    {
+        // Column names can have spaces
+        var isColumn = LetFormulaParser.IsColumnBinding("data[Total Amount]", out var tableName, out var columnName);
+
+        Assert.True(isColumn);
+        Assert.Equal("data", tableName);
+        Assert.Equal("Total Amount", columnName);
+    }
+
+    [Fact]
+    public void IsColumnBinding_ReturnsFalse_ForRange()
+    {
+        var isColumn = LetFormulaParser.IsColumnBinding("A1:B10", out _, out _);
+        Assert.False(isColumn);
+    }
+
+    [Fact]
+    public void IsColumnBinding_ReturnsFalse_ForNumber()
+    {
+        var isColumn = LetFormulaParser.IsColumnBinding("50", out _, out _);
+        Assert.False(isColumn);
+    }
+
+    [Fact]
+    public void IsColumnBinding_ReturnsFalse_ForBacktickExpression()
+    {
+        var isColumn = LetFormulaParser.IsColumnBinding("`data.where(v => v > 0)`", out _, out _);
+        Assert.False(isColumn);
+    }
+
+    [Fact]
+    public void ExtractColumnBindings_ReturnsEmptyForNoColumnBindings()
+    {
+        LetFormulaParser.TryParse("=LET(x, 1, y, A1:B10, x + y)", out var structure);
+
+        var bindings = LetFormulaParser.ExtractColumnBindings(structure!);
+
+        Assert.Empty(bindings);
+    }
+
+    [Fact]
+    public void ExtractColumnBindings_ExtractsColumnBindings()
+    {
+        LetFormulaParser.TryParse("=LET(price, tblSales[Price], qty, tblSales[Qty], price * qty)", out var structure);
+
+        var bindings = LetFormulaParser.ExtractColumnBindings(structure!);
+
+        Assert.Equal(2, bindings.Count);
+        Assert.Equal("Price", bindings["price"]);
+        Assert.Equal("Qty", bindings["qty"]);
+    }
+
+    [Fact]
+    public void ExtractColumnBindings_IsCaseInsensitive()
+    {
+        LetFormulaParser.TryParse("=LET(Price, tblSales[Price], Price)", out var structure);
+
+        var bindings = LetFormulaParser.ExtractColumnBindings(structure!);
+
+        // Case-insensitive lookup
+        Assert.True(bindings.ContainsKey("price"));
+        Assert.True(bindings.ContainsKey("PRICE"));
+    }
+
+    #endregion
 }

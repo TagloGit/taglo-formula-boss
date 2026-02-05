@@ -542,6 +542,59 @@ public class ValuePathTests
         Assert.Equal(65.0, Convert.ToDouble(result));
     }
 
+    [Fact]
+    public void Rows_NegativeIndex_AccessesLastColumn()
+    {
+        // Arrange: r[-1] should access the last column
+        var values = new object[,]
+        {
+            { "A", "B", "C", 100.0 },
+            { "D", "E", "F", 200.0 },
+            { "G", "H", "I", 300.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.rows.select(r => r[-1]).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        var array = (object[,])result;
+        _output.WriteLine($"Result dimensions: {array.GetLength(0)}x{array.GetLength(1)}");
+        Assert.Equal(100.0, Convert.ToDouble(array[0, 0]));
+        Assert.Equal(200.0, Convert.ToDouble(array[1, 0]));
+        Assert.Equal(300.0, Convert.ToDouble(array[2, 0]));
+    }
+
+    [Fact]
+    public void Rows_NegativeIndex_SecondFromEnd()
+    {
+        // Arrange: r[-2] should access the second to last column
+        var values = new object[,]
+        {
+            { "A", "B", "C", 100.0 },
+            { "D", "E", "F", 200.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.rows.select(r => r[-2]).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        var array = (object[,])result;
+        Assert.Equal("C", array[0, 0]);
+        Assert.Equal("F", array[1, 0]);
+    }
+
     #endregion
 
     #region Row Predicate Methods (find, some, every)

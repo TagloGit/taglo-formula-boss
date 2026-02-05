@@ -14,6 +14,7 @@ public class CSharpTranspiler
     private readonly HashSet<string> _lambdaParameters = [];
     private readonly Dictionary<string, string> _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
     private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
+    private Dictionary<string, string>? _columnBindings; // LET-bound variable name -> column name (e.g., "price" -> "Price")
     private bool _requiresObjectModel;
     private bool _usesRows;
     private bool _usesCols;
@@ -27,8 +28,17 @@ public class CSharpTranspiler
     /// <param name="expression">The parsed AST expression.</param>
     /// <param name="originalSource">The original DSL source text.</param>
     /// <param name="preferredName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
+    /// <param name="columnBindings">
+    ///     Optional column bindings from LET variables. Maps LET variable names to column names
+    ///     (e.g., "price" → "Price" from "price, tblSales[Price]"). Used to resolve r.price or r[price]
+    ///     to the actual column name lookup.
+    /// </param>
     /// <returns>The transpilation result with generated code and metadata.</returns>
-    public TranspileResult Transpile(Expression expression, string originalSource, string? preferredName = null)
+    public TranspileResult Transpile(
+        Expression expression,
+        string originalSource,
+        string? preferredName = null,
+        Dictionary<string, string>? columnBindings = null)
     {
         _requiresObjectModel = false;
         _usesRows = false;
@@ -36,6 +46,7 @@ public class CSharpTranspiler
         _usesMap = false;
         _needsHeaderContext = false;
         _hasHeaderContext = false;
+        _columnBindings = columnBindings;
         _lambdaParameters.Clear();
         _parameterTypes.Clear();
         _rowParameters.Clear();
@@ -339,8 +350,13 @@ public class CSharpTranspiler
         {
             // Set flag to generate header dictionary in the method
             _needsHeaderContext = true;
+
+            // Check if memberName is a LET-bound column variable (r.price where price = tblSales[Price])
+            // In that case, resolve to the actual column name
+            var columnName = ResolveColumnBinding(memberName) ?? memberName;
+
             // Row column access via dot notation: r.Price -> r[__GetCol__("Price")]
-            var rowColumnAccess = $"{target}[__GetCol__(\"{memberName}\")]";
+            var rowColumnAccess = $"{target}[__GetCol__(\"{columnName}\")]";
             if (member.IsSafeAccess)
             {
                 return $"((Func<dynamic>)(() => {{ try {{ return {rowColumnAccess}; }} catch {{ return null; }} }}))()";
@@ -971,12 +987,42 @@ public class CSharpTranspiler
         {
             // Set flag to generate header dictionary in the method
             _needsHeaderContext = true;
+
+            // Check if identifier is a LET-bound column variable (r[price] where price = tblSales[Price])
+            // In that case, resolve to the actual column name
+            var columnName = ResolveColumnBinding(indexIdent.Name) ?? indexIdent.Name;
+
             // Named column access: r[Price] -> r[__GetCol__("Price")]
-            return $"{target}[__GetCol__(\"{indexIdent.Name}\")]";
+            return $"{target}[__GetCol__(\"{columnName}\")]";
+        }
+
+        // Handle negative index on row parameter: r[-1] accesses last column
+        if (indexAccess.Target is IdentifierExpr rowIdent
+            && _rowParameters.Contains(rowIdent.Name)
+            && indexAccess.Index is UnaryExpr { Operator: "-", Operand: NumberLiteral negNum })
+        {
+            // r[-1] -> r[r.Length - 1], r[-2] -> r[r.Length - 2]
+            var offset = (int)negNum.Value;
+            return $"{target}[{target}.Length - {offset}]";
         }
 
         var index = TranspileExpression(indexAccess.Index);
         return $"{target}[{index}]";
+    }
+
+    /// <summary>
+    /// Resolves a LET-bound column variable to its column name.
+    /// For example, if LET has "price, tblSales[Price]", then "price" resolves to "Price".
+    /// </summary>
+    /// <param name="variableName">The variable name to resolve.</param>
+    /// <returns>The column name if it's a bound column variable, null otherwise.</returns>
+    private string? ResolveColumnBinding(string variableName)
+    {
+        if (_columnBindings != null && _columnBindings.TryGetValue(variableName, out var columnName))
+        {
+            return columnName;
+        }
+        return null;
     }
 
     /// <summary>
@@ -1098,13 +1144,51 @@ public class CSharpTranspiler
         // Generate header dictionary if needed for named column access
         if (needsHeaderContext)
         {
-            sb.AppendLine("            // Build header dictionary from first row for named column access");
+            sb.AppendLine("            // Build header dictionary for named column access");
+            sb.AppendLine("            // First try to detect if this is an Excel Table (ListObject) and use its headers");
             sb.AppendLine("            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
-            sb.AppendLine("            for (int c = 1; c <= colCount; c++)");
+            sb.AppendLine("            var __skipHeaderRow__ = false;");
+            sb.AppendLine("            try");
             sb.AppendLine("            {");
-            sb.AppendLine("                var headerValue = range.Cells[1, c].Value?.ToString() ?? \"\";");
-            sb.AppendLine("                if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
-            sb.AppendLine("                    __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
+            sb.AppendLine("                dynamic app = range.Application;");
+            sb.AppendLine("                dynamic sheet = range.Worksheet;");
+            sb.AppendLine("                foreach (dynamic lo in sheet.ListObjects)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    // Check if range intersects with this table");
+            sb.AppendLine("                    dynamic intersection = app.Intersect(range, lo.Range);");
+            sb.AppendLine("                    if (intersection != null)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        // Found a table - use its header row for column names");
+            sb.AppendLine("                        dynamic headerRange = lo.HeaderRowRange;");
+            sb.AppendLine("                        if (headerRange != null)");
+            sb.AppendLine("                        {");
+            sb.AppendLine("                            int headerColCount = headerRange.Columns.Count;");
+            sb.AppendLine("                            for (int c = 1; c <= headerColCount; c++)");
+            sb.AppendLine("                            {");
+            sb.AppendLine("                                var headerValue = headerRange.Cells[1, c].Value?.ToString() ?? \"\";");
+            sb.AppendLine("                                if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine("                                    __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
+            sb.AppendLine("                            }");
+            sb.AppendLine("                            // Check if input range includes header row - if so, skip it");
+            sb.AppendLine("                            dynamic headerIntersect = app.Intersect(range, headerRange);");
+            sb.AppendLine("                            __skipHeaderRow__ = headerIntersect != null;");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                        break;");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            catch { /* ListObject detection failed, fall back to first-row headers */ }");
+            sb.AppendLine();
+            sb.AppendLine("            // Fall back to first-row headers if no table detected");
+            sb.AppendLine("            if (__headers__.Count == 0)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                for (int c = 1; c <= colCount; c++)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    var headerValue = range.Cells[1, c].Value?.ToString() ?? \"\";");
+            sb.AppendLine("                    if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine("                        __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
+            sb.AppendLine("                }");
+            sb.AppendLine("                __skipHeaderRow__ = true;  // First row is headers, skip it");
             sb.AppendLine("            }");
             sb.AppendLine();
             sb.AppendLine("            // Column lookup helper with detailed error message");
@@ -1113,8 +1197,10 @@ public class CSharpTranspiler
             sb.AppendLine("                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
             sb.AppendLine("            };");
             sb.AppendLine();
-            sb.AppendLine("            // Build row arrays for .rows operations - skip header row");
-            sb.AppendLine("            var __rows__ = Enumerable.Range(2, rowCount - 1).Select(r =>");
+            sb.AppendLine("            // Build row arrays for .rows operations - skip header row if present in range");
+            sb.AppendLine("            var __dataStartRow__ = __skipHeaderRow__ ? 2 : 1;");
+            sb.AppendLine("            var __dataRowCount__ = __skipHeaderRow__ ? rowCount - 1 : rowCount;");
+            sb.AppendLine("            var __rows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(r =>");
             sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
         }
         else
