@@ -825,6 +825,86 @@ public class TranspilerTests
         Assert.Contains("?.ToString()", result.SourceCode);
     }
 
+    [Fact]
+    public void Transpiler_ValuePath_NamedColumns_GeneratesHeaderFromFirstRow()
+    {
+        // Value-only path uses first row as headers
+        var result = Transpile("data.rows.where(r => r[Price] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__headers__", result.SourceCode);
+        // Value path builds headers from values[0, c]
+        Assert.Contains("values[0, c]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NegativeIndex_AccessesFromEnd()
+    {
+        // r[-1] should access the last column
+        var result = Transpile("data.rows.select(r => r[-1]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("r[r.Length - 1]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_NegativeIndex_SecondFromEnd()
+    {
+        // r[-2] should access the second to last column
+        var result = Transpile("data.rows.select(r => r[-2]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("r[r.Length - 2]", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_ColumnBindings_ResolvesBracketSyntax()
+    {
+        // When column bindings are provided, r[price] should resolve to r[__GetCol__("Price")]
+        var columnBindings = new Dictionary<string, string>
+        {
+            ["price"] = "Price",
+            ["qty"] = "Quantity"
+        };
+        var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r[price])", columnBindings);
+
+        Assert.False(result.RequiresObjectModel);
+        // Should resolve "price" to "Price" column name
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        Assert.DoesNotContain("__GetCol__(\"price\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_ColumnBindings_ResolvesDotSyntax()
+    {
+        // When column bindings are provided, r.price should resolve to r[__GetCol__("Price")]
+        var columnBindings = new Dictionary<string, string>
+        {
+            ["price"] = "Price"
+        };
+        var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r.price)", columnBindings);
+
+        Assert.False(result.RequiresObjectModel);
+        // Should resolve "price" to "Price" column name
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_ColumnBindings_MultipleBindings()
+    {
+        // Multiple column bindings should all resolve correctly
+        var columnBindings = new Dictionary<string, string>
+        {
+            ["price"] = "Price",
+            ["qty"] = "Quantity"
+        };
+        var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r[price] * r[qty])", columnBindings);
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Quantity\")", result.SourceCode);
+    }
+
     #endregion
 
     #region Row Predicate Methods (find, some, every)
@@ -1135,5 +1215,19 @@ public class TranspilerTests
 
         var transpiler = new CSharpTranspiler();
         return transpiler.Transpile(expression, source, preferredName);
+    }
+
+    private static TranspileResult TranspileWithBindings(string source, Dictionary<string, string> columnBindings)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var expression = parser.Parse();
+
+        Assert.NotNull(expression);
+        Assert.Empty(parser.Errors);
+
+        var transpiler = new CSharpTranspiler();
+        return transpiler.Transpile(expression, source, null, columnBindings);
     }
 }

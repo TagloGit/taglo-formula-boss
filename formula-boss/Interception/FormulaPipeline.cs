@@ -20,7 +20,12 @@ public record PipelineResult(bool Success, string? UdfName, string? ErrorMessage
 ///     Context for processing a DSL expression, used for LET integration.
 /// </summary>
 /// <param name="PreferredUdfName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
-public record ExpressionContext(string? PreferredUdfName);
+/// <param name="ColumnBindings">
+///     Optional column bindings from LET variables.
+///     Maps LET variable names to column names (e.g., "price" → "Price" from "price, tblSales[Price]").
+///     Used to resolve r.price to r[__GetCol__("Price")].
+/// </param>
+public record ExpressionContext(string? PreferredUdfName, Dictionary<string, string>? ColumnBindings = null);
 
 /// <summary>
 ///     Orchestrates the complete pipeline: parse → transpile → compile → register.
@@ -89,7 +94,7 @@ public class FormulaPipeline
             return new PipelineResult(false, null, $"Parse error: {errorMsg}", null);
         }
 
-        // Step 3: Transpile (pass preferred name if provided)
+        // Step 3: Transpile (pass preferred name and column bindings if provided)
         // Check for name collisions and generate unique name if needed
         var transpiler = new CSharpTranspiler();
         TranspileResult transpileResult;
@@ -103,7 +108,7 @@ public class FormulaPipeline
                 preferredName = GetUniqueUdfName(preferredName, expression);
             }
 
-            transpileResult = transpiler.Transpile(ast, expression, preferredName);
+            transpileResult = transpiler.Transpile(ast, expression, preferredName, context?.ColumnBindings);
         }
         catch (Exception ex)
         {

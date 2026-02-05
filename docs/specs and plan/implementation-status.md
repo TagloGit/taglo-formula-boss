@@ -2,7 +2,7 @@
 
 This document tracks implementation progress against the [Excel UDF Add-in Specification](excel-udf-addin-spec.md).
 
-**Last updated:** 2025-02-05
+**Last updated:** 2026-02-05
 
 ---
 
@@ -22,13 +22,14 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Type system + validation | ✅ Complete | With typo suggestions |
 | Null-safe access (?, ??) | ✅ Complete | |
 | Escape hatch (@) | ✅ Complete | |
-| Row-wise .reduce() with columns | ⏳ Not started | Core spec feature |
-| .scan() (running reduction) | ⏳ Not started | |
-| .find(), .some(), .every() | ⏳ Not started | |
-| Named column access (r[Price]) | ⏳ Not started | |
-| Table detection (ListObject) | ⏳ Not started | |
-| .withHeaders() | ⏳ Not started | |
-| LET robust column references | ⏳ Not started | |
+| Row-wise .reduce() with columns | ✅ Complete | Supports r[Price], r.Price |
+| .scan() (running reduction) | ✅ Complete | Returns intermediate values |
+| .find(), .some(), .every() | ✅ Complete | Row predicate methods |
+| Named column access (r[Price]) | ✅ Complete | With header dictionary |
+| Table detection (ListObject) | ✅ Complete | Object model path |
+| .withHeaders() | ✅ Complete | Auto-skips header row |
+| Negative index (r[-1]) | ✅ Complete | Last column access |
+| LET robust column references | ✅ Complete | Column binding detection |
 | Statement lambdas | ⏳ Not started | |
 | VBA transpiler | ⏳ Not started | Export feature |
 | Floating editor | ⏳ Not started | Post-MVP |
@@ -116,19 +117,18 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 
 ### Row-Wise Table Operations
 
-**This is the main area requiring implementation.**
-
 | Feature | Transpiler | Tests | Notes |
 |---------|------------|-------|-------|
-| `.reduce(init, fn)` on rows | ⏳ | ⏳ | Row object with column access |
-| `.scan(init, fn)` | ⏳ | ⏳ | Running reduction |
-| `.find(predicate)` | ⏳ | ⏳ | First matching row |
-| `.some(predicate)` | ⏳ | ⏳ | Any row matches |
-| `.every(predicate)` | ⏳ | ⏳ | All rows match |
+| `.reduce(init, fn)` on rows | ✅ | ✅ | Row object with column access |
+| `.scan(init, fn)` | ✅ | ✅ | Running reduction, returns intermediate values |
+| `.find(predicate)` | ✅ | ✅ | First matching row |
+| `.some(predicate)` | ✅ | ✅ | Any row matches |
+| `.every(predicate)` | ✅ | ✅ | All rows match |
 | Row index access `r[0]` | ✅ | ✅ | Works in .rows.where() |
-| Row named access `r[Price]` | ⏳ | ⏳ | Requires header detection |
-| Row dot notation `r.Price` | ⏳ | ⏳ | Requires header detection |
-| Negative index `r[-1]` | ⏳ | ⏳ | Last column |
+| Row named access `r[Price]` | ✅ | ✅ | Uses __GetCol__ lookup |
+| Row dot notation `r.Price` | ✅ | ✅ | Also uses __GetCol__ lookup |
+| Negative index `r[-1]` | ✅ | ✅ | Last column via r.Length - 1 |
+| String comparison | ✅ | ✅ | Auto .ToString() for column values |
 
 ---
 
@@ -136,10 +136,12 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 
 | Feature | Transpiler | Tests | Notes |
 |---------|------------|-------|-------|
-| Excel Table detection | ⏳ | ⏳ | ListObject lookup |
-| `.withHeaders()` modifier | ⏳ | ⏳ | First row as headers |
-| Header index building | ⏳ | ⏳ | Column name → index map |
-| Dynamic column lookup | ⏳ | ⏳ | Runtime, not hardcoded |
+| Excel Table detection | ✅ | ✅ | ListObject lookup in object model path |
+| `.withHeaders()` modifier | ✅ | ✅ | First row as headers, auto-skipped |
+| Header index building | ✅ | ✅ | Column name → index map |
+| Dynamic column lookup | ✅ | ✅ | Runtime via __GetCol__ helper |
+| Case-insensitive headers | ✅ | ✅ | StringComparer.OrdinalIgnoreCase |
+| Detailed error messages | ✅ | ✅ | Lists available columns on error |
 
 ---
 
@@ -149,10 +151,10 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 |---------|------------|-------|-------|
 | Basic LET variable tracking | ✅ | ✅ | ExpressionContext |
 | UDF naming from LET var | ✅ | ✅ | |
-| Source preservation (_src_) | ⏳ | ⏳ | |
+| Source preservation (_src_) | ✅ | ✅ | LetFormulaRewriter |
 | Table binding detection | ⏳ | ⏳ | `tbl, tblSales` |
-| Column binding detection | ⏳ | ⏳ | `price, tblSales[Price]` |
-| Robust column param gen | ⏳ | ⏳ | Pass column names to UDF |
+| Column binding detection | ✅ | ✅ | `price, tblSales[Price]` → "Price" |
+| Robust column param gen | ✅ | ✅ | r.price resolves via column bindings |
 | Edit mode reconstruction | ⏳ | ⏳ | Ctrl+Shift+` |
 
 ---
@@ -258,23 +260,23 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 
 Based on spec and competitive Excel use cases:
 
-### High Priority (Core Row Operations)
-1. **Row-wise `.reduce()` with column access** — enables `tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])`
-2. **Named column access** (`r[Price]`, `r.Price`) — requires header detection
-3. **Table detection** — recognise Excel Tables by name
-4. **`.withHeaders()`** — enable named access for plain ranges
+### ✅ High Priority (Core Row Operations) — COMPLETE
+1. ~~**Row-wise `.reduce()` with column access**~~ ✅ — `tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])`
+2. ~~**Named column access**~~ ✅ (`r[Price]`, `r.Price`) — header detection working
+3. ~~**Table detection**~~ ✅ — recognises Excel Tables via ListObject
+4. ~~**`.withHeaders()`**~~ ✅ — enables named access for plain ranges
 
-### Medium Priority (Enhanced Row Operations)
-5. `.scan()` — running totals, state accumulation
-6. `.find()`, `.some()`, `.every()` — row predicates
-7. Negative index support (`r[-1]`)
-8. LET robust column references
+### ✅ Medium Priority (Enhanced Row Operations) — COMPLETE
+5. ~~`.scan()`~~ ✅ — running totals, state accumulation
+6. ~~`.find()`, `.some()`, `.every()`~~ ✅ — row predicates
+7. ~~Negative index support (`r[-1]`)~~ ✅
+8. ~~LET robust column references~~ ✅
 
 ### Lower Priority (Polish & Export)
-9. Statement lambdas
-10. VBA transpiler
-11. Source preservation pattern
-12. Edit mode reconstruction
+9. Statement lambdas — not started
+10. VBA transpiler — not started
+11. ~~Source preservation pattern~~ ✅ — LetFormulaRewriter
+12. Edit mode reconstruction — not started
 
 ---
 
@@ -282,11 +284,17 @@ Based on spec and competitive Excel use cases:
 
 **Well-tested areas:**
 - Parser: 50+ tests
-- Transpiler: 80+ tests
-- Integration: ValuePathTests, ObjectModelTests
+- Transpiler: 230+ tests (including named column access, row methods)
+- Integration: 38 tests in ValuePathTests
+- LET integration: LetFormulaParserTests, LetFormulaRewriterTests
+
+**Test coverage added for row operations:**
+- Named column access (`r[Price]`, `r.Price`): 12 unit tests, 8 integration tests
+- Row predicate methods (.find, .some, .every): 5 unit tests, 6 integration tests
+- .scan() method: 2 unit tests, 1 integration test
+- Negative index: 2 unit tests, 2 integration tests
+- LET column bindings: 3 unit tests, 8 parser tests
 
 **Gaps:**
-- No tests for row-wise reduce/scan/find/some/every (not implemented)
-- No tests for named column access (not implemented)
-- No tests for table detection (not implemented)
 - No tests for statement lambdas (not implemented)
+- No full E2E tests for Excel Table detection (requires Excel COM)
