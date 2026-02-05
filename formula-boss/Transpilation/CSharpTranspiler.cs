@@ -222,14 +222,17 @@ public class CSharpTranspiler
             }
 
             // Also handle when both sides need casting (e.g., v * v, r[0] * r[1])
-            if (isArithmetic && NeedsNumericCast(binary.Left) && NeedsNumericCast(binary.Right))
+            // But NOT for + operator since it can be string concatenation
+            var isDefinitelyNumeric = binary.Operator is "-" or "*" or "/";
+            if (isDefinitelyNumeric && NeedsNumericCast(binary.Left) && NeedsNumericCast(binary.Right))
             {
                 left = WrapInConvertToDouble(left);
                 right = WrapInConvertToDouble(right);
             }
-            else if (isArithmetic)
+            else if (isDefinitelyNumeric)
             {
-                // Handle cases with another arithmetic expression (e.g., v * (v + 1), r[0] + r[1])
+                // Handle cases with another arithmetic expression (e.g., v * (v + 1), r[0] - r[1])
+                // Only for definitely-numeric operators (not + which can be string concatenation)
                 if (NeedsNumericCast(binary.Left) && !IsNumericLiteral(binary.Right))
                 {
                     left = WrapInConvertToDouble(left);
@@ -603,7 +606,42 @@ public class CSharpTranspiler
 
         // Two arguments: seed and accumulator function
         // aggregate(0, (acc, x) => acc + x)
-        return $"{target}.Aggregate({args[0]}, {args[1]})";
+        // Convert integer seeds to double to avoid type mismatch when lambda returns double
+        var seed = ConvertSeedToDouble(args[0]);
+        return $"{target}.Aggregate({seed}, {args[1]})";
+    }
+
+    /// <summary>
+    ///     Converts integer literal seeds to double literals for aggregate operations.
+    ///     This prevents type mismatches when the accumulator lambda returns double
+    ///     (common with Excel values which are often doubles).
+    /// </summary>
+    private static string ConvertSeedToDouble(string seed)
+    {
+        // If it's already a double literal (contains . or d/D suffix), leave it alone
+        if (seed.Contains('.') || seed.EndsWith("d", StringComparison.OrdinalIgnoreCase))
+        {
+            return seed;
+        }
+
+        // If it's an integer literal, convert to double
+        if (int.TryParse(seed, out _))
+        {
+            return $"{seed}d";
+        }
+
+        // Handle parenthesized negative integers like "(-1)"
+        if (seed.StartsWith("(-") && seed.EndsWith(")"))
+        {
+            var inner = seed[2..^1]; // Extract "1" from "(-1)"
+            if (int.TryParse(inner, out _))
+            {
+                return $"(-{inner}d)";
+            }
+        }
+
+        // Otherwise (could be a variable or expression), leave it alone
+        return seed;
     }
 
     private string TranspileLambda(LambdaExpr lambda)

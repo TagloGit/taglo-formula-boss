@@ -226,6 +226,26 @@ public class TranspilerTests
         Assert.Contains("Convert.ToDouble(v) * Convert.ToDouble(v)", result.SourceCode);
     }
 
+    [Fact]
+    public void Transpiler_GeneratesCode_ForAdditionWithLiteral()
+    {
+        var result = Transpile("data.values.select(v => v + 1).toArray()");
+
+        // When one side is a numeric literal, the lambda param should be cast
+        Assert.Contains("Convert.ToDouble(v) + 1", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForAdditionWithBothLambdaParams()
+    {
+        var result = Transpile("data.values.select(v => v + v).toArray()");
+
+        // Both sides are lambda params but + can be string concatenation,
+        // so we don't auto-cast (let C# infer or fail at compile time)
+        Assert.Contains("(v + v)", result.SourceCode);
+        Assert.DoesNotContain("Convert.ToDouble(v) + Convert.ToDouble(v)", result.SourceCode);
+    }
+
     #endregion
 
     #region Code Generation - LINQ Methods
@@ -616,7 +636,8 @@ public class TranspilerTests
         var result = Transpile("data.values.aggregate(0, (acc, x) => acc + x)");
 
         Assert.False(result.RequiresObjectModel);
-        Assert.Contains(".Aggregate(0, (acc, x) =>", result.SourceCode);
+        // Integer seed is converted to double to avoid type mismatch when lambda returns double
+        Assert.Contains(".Aggregate(0d, (acc, x) =>", result.SourceCode);
     }
 
     [Fact]
@@ -635,6 +656,51 @@ public class TranspilerTests
 
         Assert.False(result.RequiresObjectModel);
         Assert.Contains("(acc, r) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Aggregate_ConvertsDecimalSeedToDouble()
+    {
+        // 0.0 in DSL is parsed as double 0, which becomes "0" in transpiler,
+        // then converted to "0d" for type safety
+        var result = Transpile("data.values.aggregate(0.0, (acc, x) => acc + x)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Aggregate(0d, (acc, x) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Aggregate_PreservesNonIntegerSeed()
+    {
+        // 1.5 in DSL has a fractional part, so it's preserved as "1.5"
+        var result = Transpile("data.values.aggregate(1.5, (acc, x) => acc + x)");
+
+        Assert.False(result.RequiresObjectModel);
+        // Non-integer double seeds are preserved as-is (no "d" suffix needed)
+        Assert.Contains(".Aggregate(1.5, (acc, x) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Aggregate_ConvertsNegativeIntegerSeed()
+    {
+        var result = Transpile("data.values.aggregate(-1, (acc, x) => acc + x)");
+
+        Assert.False(result.RequiresObjectModel);
+        // Negative integer seeds (parsed as unary minus) also get converted to double
+        Assert.Contains(".Aggregate((-1d), (acc, x) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Aggregate_PreservesStringSeed()
+    {
+        var result = Transpile("data.values.aggregate(\"\", (acc, x) => acc + x)");
+
+        Assert.False(result.RequiresObjectModel);
+        // String seeds are preserved for string concatenation use cases
+        Assert.Contains(".Aggregate(\"\", (acc, x) =>", result.SourceCode);
+        // The + operator should NOT wrap in Convert.ToDouble for string concatenation
+        Assert.Contains("(acc + x)", result.SourceCode);
+        Assert.DoesNotContain("Convert.ToDouble(acc)", result.SourceCode);
     }
 
     #endregion
