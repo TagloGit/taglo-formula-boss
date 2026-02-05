@@ -1311,12 +1311,73 @@ public class CSharpTranspiler
         sb.AppendLine("        {");
         sb.AppendLine("            // Handle both ExcelReference (from range) and object[,] (from previous UDF)");
         sb.AppendLine("            object[,] values;");
+        sb.AppendLine("            object[] externalHeaders = null;"); // For ListObject header detection
         sb.AppendLine("            if (rangeRef?.GetType()?.Name == \"ExcelReference\")");
         sb.AppendLine("            {");
         sb.AppendLine("                // Extract values from ExcelReference via reflection");
         sb.AppendLine("                var getValueMethod = rangeRef.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
         sb.AppendLine("                var rawResult = getValueMethod?.Invoke(rangeRef, null);");
         sb.AppendLine("                values = rawResult is object[,] arr ? arr : new object[,] { { rawResult } };");
+
+        // Add ListObject detection for value-only path when headers are needed
+        if (needsHeaderContext)
+        {
+            sb.AppendLine();
+            sb.AppendLine("                // Try to detect if this is an Excel Table (ListObject) and get headers");
+            sb.AppendLine("                try");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    var excelDnaAssembly = rangeRef.GetType().Assembly;");
+            sb.AppendLine("                    var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
+            sb.AppendLine("                    var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
+            sb.AppendLine("                    dynamic app = appProperty?.GetValue(null);");
+            sb.AppendLine("                    if (app != null)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        // Get range from ExcelReference");
+            sb.AppendLine("                        var rowFirstProp = rangeRef.GetType().GetProperty(\"RowFirst\");");
+            sb.AppendLine("                        var rowLastProp = rangeRef.GetType().GetProperty(\"RowLast\");");
+            sb.AppendLine("                        var colFirstProp = rangeRef.GetType().GetProperty(\"ColumnFirst\");");
+            sb.AppendLine("                        var colLastProp = rangeRef.GetType().GetProperty(\"ColumnLast\");");
+            sb.AppendLine("                        var rowFirst = (int)rowFirstProp.GetValue(rangeRef) + 1;");
+            sb.AppendLine("                        var rowLast = (int)rowLastProp.GetValue(rangeRef) + 1;");
+            sb.AppendLine("                        var colFirst = (int)colFirstProp.GetValue(rangeRef) + 1;");
+            sb.AppendLine("                        var colLast = (int)colLastProp.GetValue(rangeRef) + 1;");
+            sb.AppendLine("                        Func<int, string> colToLetter = (col) => {");
+            sb.AppendLine("                            string result = \"\";");
+            sb.AppendLine("                            while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
+            sb.AppendLine("                            return result;");
+            sb.AppendLine("                        };");
+            sb.AppendLine("                        string address = rowFirst == rowLast && colFirst == colLast");
+            sb.AppendLine("                            ? colToLetter(colFirst) + rowFirst");
+            sb.AppendLine("                            : colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
+            sb.AppendLine("                        dynamic range = app.Range[address];");
+            sb.AppendLine("                        dynamic sheet = range.Worksheet;");
+            sb.AppendLine("                        foreach (dynamic lo in sheet.ListObjects)");
+            sb.AppendLine("                        {");
+            sb.AppendLine("                            dynamic intersection = app.Intersect(range, lo.Range);");
+            sb.AppendLine("                            if (intersection != null)");
+            sb.AppendLine("                            {");
+            sb.AppendLine("                                // Found a table - check if headers are NOT in the input range");
+            sb.AppendLine("                                dynamic headerRange = lo.HeaderRowRange;");
+            sb.AppendLine("                                if (headerRange != null)");
+            sb.AppendLine("                                {");
+            sb.AppendLine("                                    dynamic headerIntersect = app.Intersect(range, headerRange);");
+            sb.AppendLine("                                    if (headerIntersect == null)");
+            sb.AppendLine("                                    {");
+            sb.AppendLine("                                        // Headers NOT in range - extract them externally");
+            sb.AppendLine("                                        int headerColCount = headerRange.Columns.Count;");
+            sb.AppendLine("                                        externalHeaders = new object[headerColCount];");
+            sb.AppendLine("                                        for (int c = 1; c <= headerColCount; c++)");
+            sb.AppendLine("                                            externalHeaders[c - 1] = headerRange.Cells[1, c].Value;");
+            sb.AppendLine("                                    }");
+            sb.AppendLine("                                }");
+            sb.AppendLine("                                break;");
+            sb.AppendLine("                            }");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                }");
+            sb.AppendLine("                catch { /* ListObject detection failed, use first row as headers */ }");
+        }
+
         sb.AppendLine("            }");
         sb.AppendLine("            else if (rangeRef is object[,] inputArray)");
         sb.AppendLine("            {");
@@ -1333,6 +1394,26 @@ public class CSharpTranspiler
         sb.AppendLine("                return \"ERROR: Input is null\";");
         sb.AppendLine("            }");
         sb.AppendLine();
+
+        if (needsHeaderContext)
+        {
+            // If external headers were found, prepend them to the values array
+            sb.AppendLine("            // If external headers from ListObject, prepend to values");
+            sb.AppendLine("            if (externalHeaders != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var rowCount = values.GetLength(0);");
+            sb.AppendLine("                var colCount = values.GetLength(1);");
+            sb.AppendLine("                var newValues = new object[rowCount + 1, colCount];");
+            sb.AppendLine("                for (int c = 0; c < colCount && c < externalHeaders.Length; c++)");
+            sb.AppendLine("                    newValues[0, c] = externalHeaders[c];");
+            sb.AppendLine("                for (int r = 0; r < rowCount; r++)");
+            sb.AppendLine("                    for (int c = 0; c < colCount; c++)");
+            sb.AppendLine("                        newValues[r + 1, c] = values[r, c];");
+            sb.AppendLine("                values = newValues;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+        }
+
         sb.Append("            return ").Append(methodName).AppendLine("_Core(values);");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
