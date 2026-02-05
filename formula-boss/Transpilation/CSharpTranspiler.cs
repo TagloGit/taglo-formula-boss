@@ -267,14 +267,15 @@ public class CSharpTranspiler
             }
 
             // For + operator with row column access: if one side is a lambda parameter (accumulator)
-            // and the other needs numeric cast (column access), we should cast the column access.
+            // and the other is ROW COLUMN ACCESS (index/member on row param), cast the column access.
             // This handles: acc + r[Price], acc + r.Price in reduce operations
-            if (binary.Operator == "+" && NeedsNumericCast(binary.Right) && IsLambdaParameter(binary.Left))
+            // Only apply for row column access, not general lambda params (to preserve string concatenation)
+            if (binary.Operator == "+" && IsRowColumnAccess(binary.Right) && IsLambdaParameter(binary.Left))
             {
                 right = WrapInConvertToDouble(right);
             }
 
-            if (binary.Operator == "+" && NeedsNumericCast(binary.Left) && IsLambdaParameter(binary.Right))
+            if (binary.Operator == "+" && IsRowColumnAccess(binary.Left) && IsLambdaParameter(binary.Right))
             {
                 left = WrapInConvertToDouble(left);
             }
@@ -538,6 +539,14 @@ public class CSharpTranspiler
             "groupby" => GenerateGroupBy(target, args),
             // aggregate/reduce: custom fold/reduce operation
             "aggregate" or "reduce" => GenerateRowAwareAggregate(target, args, call),
+            // scan: running reduction returning array of intermediate states
+            "scan" => GenerateRowAwareScan(target, args, call),
+            // find: return first matching row, or null if not found
+            "find" => TranspileRowAwareMethod(target, args, call, "FirstOrDefault"),
+            // some: return true if any row matches predicate
+            "some" => TranspileRowAwareMethod(target, args, call, "Any"),
+            // every: return true if all rows match predicate
+            "every" => TranspileRowAwareMethod(target, args, call, "All"),
             _ => $"{target}.{call.Method}({string.Join(", ", args)})"
         };
     }
@@ -767,6 +776,67 @@ public class CSharpTranspiler
     }
 
     /// <summary>
+    ///     Generates row-aware scan (running reduction) that returns an array of intermediate accumulator values.
+    ///     scan(seed, (acc, r) => acc + r[Amount]) returns [acc1, acc2, acc3, ...]
+    /// </summary>
+    private string GenerateRowAwareScan(string target, List<string> preTranspiledArgs, MethodCall call)
+    {
+        if (preTranspiledArgs.Count < 2)
+        {
+            return $"{target}"; // Need both seed and lambda
+        }
+
+        var seed = ConvertSeedToDouble(preTranspiledArgs[0]);
+
+        // Check if operating on __rows__ with row context
+        var isRowContext = target == "__rows__" || target.Contains("__rows__");
+
+        if (isRowContext && call.Arguments.Count >= 2 && call.Arguments[1] is LambdaExpr lambda)
+        {
+            var rowParam = lambda.Parameters.Count > 1 ? lambda.Parameters[1] : null;
+            var accParam = lambda.Parameters.Count > 0 ? lambda.Parameters[0] : "acc";
+
+            if (rowParam != null)
+            {
+                _rowParameters.Add(rowParam);
+            }
+
+            var transpiledLambda = TranspileExpression(lambda);
+
+            if (rowParam != null)
+            {
+                _rowParameters.Remove(rowParam);
+            }
+
+            // Generate scan using Aggregate that collects intermediate values
+            // Wrap in a function that builds a list of all intermediate values
+            return $"((Func<IEnumerable<object>>)(() => {{ " +
+                   $"Func<double, object[], double> fn = {transpiledLambda}; " +
+                   $"var results = new List<object>(); " +
+                   $"var {accParam} = {seed}; " +
+                   $"foreach (var {rowParam} in {target}) {{ " +
+                   $"{accParam} = fn({accParam}, {rowParam}); " +
+                   $"results.Add({accParam}); " +
+                   $"}} " +
+                   $"return results; " +
+                   $"}}))()";
+        }
+
+        // Fall back to simple scan without row context
+        var simpleLambda = preTranspiledArgs[1];
+        return $"((Func<IEnumerable<object>>)(() => {{ " +
+               $"Func<double, object, double> fn = {simpleLambda}; " +
+               $"var results = new List<object>(); " +
+               $"var acc = {seed}; " +
+               $"foreach (var x in {target}) {{ " +
+               $"acc = fn(acc, x); " +
+               $"results.Add(acc); " +
+               $"}} " +
+               $"return results; " +
+               $"}}))()";
+    }
+
+    /// <summary
     ///     Converts integer literal seeds to double literals for aggregate operations.
     ///     This prevents type mismatches when the accumulator lambda returns double
     ///     (common with Excel values which are often doubles).
@@ -849,6 +919,22 @@ public class CSharpTranspiler
             // r.Price needs cast if r is a row parameter (not in object model mode)
             MemberAccess member when !_requiresObjectModel && member.Target is IdentifierExpr target
                                      && _rowParameters.Contains(target.Name) => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Checks if an expression is row column access (r[Price] or r.Price where r is a row parameter).
+    /// Used to determine when + operator should use numeric casting vs string concatenation.
+    /// </summary>
+    private bool IsRowColumnAccess(Expression expression)
+    {
+        return expression switch
+        {
+            // r[Price] where r is a row parameter and Price is an identifier (named column)
+            IndexAccess { Target: IdentifierExpr target, Index: IdentifierExpr } when _rowParameters.Contains(target.Name) => true,
+            // r.Price where r is a row parameter
+            MemberAccess { Target: IdentifierExpr target } when !_requiresObjectModel && _rowParameters.Contains(target.Name) => true,
             _ => false
         };
     }

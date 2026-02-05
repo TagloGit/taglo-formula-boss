@@ -807,6 +807,83 @@ public class TranspilerTests
 
     #endregion
 
+    #region Row Predicate Methods (find, some, every)
+
+    [Fact]
+    public void Transpiler_Find_GeneratesFirstOrDefault()
+    {
+        var result = Transpile("data.rows.find(r => r[0] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".FirstOrDefault(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Some_GeneratesAny()
+    {
+        var result = Transpile("data.rows.some(r => r[0] > 10)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Any(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Every_GeneratesAll()
+    {
+        var result = Transpile("data.rows.every(r => r[0] > 0)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".All(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Find_WithNamedColumn_GeneratesHeaderLookup()
+    {
+        var result = Transpile("data.rows.find(r => r[Price] > 100)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".FirstOrDefault(", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Some_WithNamedColumn_GeneratesHeaderLookup()
+    {
+        var result = Transpile("data.rows.some(r => r[Price] > 100)");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Any(", result.SourceCode);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Scan Method
+
+    [Fact]
+    public void Transpiler_Scan_GeneratesRunningReduction()
+    {
+        var result = Transpile("data.rows.scan(0, (acc, r) => acc + r[0])");
+
+        Assert.False(result.RequiresObjectModel);
+        // Should generate an IIFE that collects intermediate values
+        Assert.Contains("var results = new List<object>();", result.SourceCode);
+        Assert.Contains("foreach", result.SourceCode);
+        Assert.Contains("results.Add(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_Scan_WithNamedColumn_GeneratesHeaderLookup()
+    {
+        var result = Transpile("data.rows.scan(0, (sum, r) => sum + r[Amount])");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Amount\")", result.SourceCode);
+        Assert.Contains("results.Add(", result.SourceCode);
+    }
+
+    #endregion
+
     #region Deep Property Access
 
     [Fact]
