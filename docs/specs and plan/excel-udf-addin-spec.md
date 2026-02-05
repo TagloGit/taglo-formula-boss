@@ -111,6 +111,90 @@ An Excel add-in that allows power users to write inline expressions using a conc
 
 ---
 
+### Journey 7: Row-Wise Aggregation with Column Names
+
+**Scenario:** User needs to sum the product of two columns across all rows.
+
+1. User has a table `tblSales` with columns "Price", "Qty", "Region"
+2. User types:
+   ```
+   '=`tblSales.reduce(0, (acc, r) => acc + r[Price] * r[Qty])`
+   ```
+3. Add-in detects `tblSales` is an Excel Table, retrieves column names
+4. Transpiles to C# that iterates rows with dictionary-based column lookup
+5. Result appears immediately
+
+**Column reference syntax:**
+- `r[Column Name]` — brackets, spaces allowed in column name
+- `r.ColumnName` — dot notation for single-word column names
+
+---
+
+### Journey 8: Robust Column References via LET
+
+**Scenario:** User wants column references that survive table restructuring and benefit from Excel's autocomplete.
+
+1. User has a table `tblCarParks` with columns "Space Start", "Space End", "Zone"
+2. User types, using Excel's autocomplete to select header references:
+   ```
+   '=LET(
+       start, tblCarParks[Space Start],
+       end, tblCarParks[Space End],
+       tbl, tblCarParks,
+       `tbl.reduce(0, (acc, r) => acc + r.end - r.start)`
+   )
+   ```
+3. Add-in detects that `r.start` and `r.end` reference LET-bound column variables
+4. Transpiles to C# that dynamically looks up columns at runtime
+5. Result appears immediately
+
+**Benefits:**
+- Excel autocomplete for table/column references
+- Refactor-safe: if column names change, update one reference
+- Self-documenting: variable names describe the data
+
+---
+
+### Journey 9: Running Totals with State (Scan)
+
+**Scenario:** User needs a running total that resets when a category changes.
+
+1. User has table `tblTransactions` with columns "Category", "Amount"
+2. User types:
+   ```
+   '=LET(
+       cat, tblTransactions[Category],
+       amt, tblTransactions[Amount],
+       tbl, tblTransactions,
+       `tbl.scan({sum: 0, lastCat: ""}, (state, r) =>
+           LET(reset, r.cat != state.lastCat,
+               {sum: IF(reset, r.amt, state.sum + r.amt), lastCat: r.cat})
+       ).select(s => s.sum)`
+   )
+   ```
+3. Transpiles to C# with stateful iteration
+4. Returns spilling array of running totals
+
+---
+
+### Journey 10: Headerless Data with Index Access
+
+**Scenario:** User has raw data without headers, needs positional column access.
+
+1. User has data in `A1:D100` with no header row
+2. User types:
+   ```
+   '=`A1:D100.reduce(0, (acc, r) => acc + r[0] * r[2])`
+   ```
+3. Numeric indices `r[0]`, `r[2]` access columns by position (zero-based)
+4. Transpiles to direct index access in C#
+
+**Index syntax:**
+- `r[0]` — first column
+- `r[-1]` — last column (negative index)
+
+---
+
 ## MVP User Journeys
 
 ### MVP Journey 1: Quote-Prefix Inline Expression
@@ -178,14 +262,15 @@ An Excel add-in that allows power users to write inline expressions using a conc
 |--------|---------|--------------|
 | `range.cells` | Iterate cells with object model access | 1D (flattened) |
 | `range.values` | Iterate values only (fast path) | 1D (flattened) |
-| `range.rows` | Iterate rows as arrays | 2D (row count changes, columns preserved) |
+| `range.rows` | Iterate as Row objects with column access | 2D (row count changes, columns preserved) |
 | `range.cols` | Iterate columns as arrays | 2D (column count changes, rows preserved) |
 
-**Row-wise operations** enable filtering/sorting entire rows:
+**Row-wise operations** enable filtering/sorting entire rows with column access:
 ```
-data.rows.where(r => r[0] > 10)      // filter rows where first column > 10
-data.rows.orderBy(r => r[2])          // sort rows by third column
-data.rows.take(-3)                    // last 3 rows
+data.rows.where(r => r[0] > 10)           // filter rows where first column > 10
+data.rows.orderBy(r => r[Price])          // sort rows by Price column
+data.rows.where(r => r.Region == "North") // filter by column name (no spaces)
+tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])  // aggregate across rows
 ```
 
 **Cell Properties (object model required):**
@@ -217,9 +302,13 @@ data.rows.take(-3)                    // last 3 rows
 | `.skip(n)` | Skip first n elements (negative n skips last n) |
 | `.distinct()` | Remove duplicates |
 | `.groupBy(keySelector)` | Group elements |
-| `.aggregate(seed, func)` | Reduce/fold |
+| `.reduce(seed, func)` | Reduce/fold to single value |
+| `.scan(seed, func)` | Running reduction, returns array of intermediate states |
 | `.toArray()` | Output as 2D array |
 | `.sum()`, `.avg()`, `.min()`, `.max()`, `.count()` | Aggregations |
+| `.find(predicate)` | First element matching predicate (or null) |
+| `.some(predicate)` | True if any element matches |
+| `.every(predicate)` | True if all elements match |
 
 **`.map` vs `.select`:** Use `.map` when you want to transform each cell while keeping the original 2D shape:
 ```
@@ -234,6 +323,190 @@ data.map(c => c.color == 6 ? c.value * 2 : c.value)  // double yellow cells, pre
 |---------|---------|---------|
 | Implicit `.values` | Methods called directly on range default to values path | `data.where(v => v > 0)` equals `data.values.where(v => v > 0)` |
 | Implicit `.toArray()` | Collection results auto-convert to 2D arrays for Excel | `data.where(v => v > 0)` returns array without explicit `.toArray()` |
+
+---
+
+### Row-Wise Table Operations
+
+Many competitive Excel challenges involve tabular data where you need row-by-row operations — accumulating totals, running calculations, or transforming based on multiple columns per row. The DSL provides natural row-property access that transpiles to efficient C# iteration.
+
+**The Problem with Native Excel:**
+```excel
+=REDUCE(0, SEQUENCE(ROWS(tbl)), LAMBDA(acc, i,
+    LET(row, INDEX(tbl, i, ),
+        acc + INDEX(row, 3) * INDEX(row, 5)  -- What are columns 3 and 5?
+    )
+))
+```
+The indices are fragile, unreadable, and break if the table structure changes. Native Excel also cannot create reusable helper LAMBDAs that accept callback functions inside REDUCE.
+
+**The DSL Solution:**
+```
+tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+```
+
+#### Row Object and Column Access
+
+When iterating with `.rows`, `.reduce`, `.scan`, or related methods, the lambda parameter is a **Row object** with column access:
+
+| Syntax | Mode | Description |
+|--------|------|-------------|
+| `r[Column Name]` | Named | Bracket syntax, supports spaces in column names |
+| `r.ColumnName` | Named | Dot notation for single-word column names |
+| `r[0]`, `r[1]` | Index | Zero-based positional access |
+| `r[-1]` | Index | Negative index for last column |
+
+**Named column access** requires headers (see Table Detection below). **Index access** always works.
+
+#### Row-Wise Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `.reduce(init, fn)` | `(T, (T, Row) => T) => T` | Aggregate rows to single value |
+| `.scan(init, fn)` | `(T, (T, Row) => T) => T[]` | Running aggregation, returns array |
+| `.where(fn)` | `(Row => bool) => Row[]` | Filter rows by predicate |
+| `.select(fn)` | `(Row => U) => U[]` | Transform each row to value |
+| `.map(fn)` | `(Row => Row) => Row[]` | Transform rows preserving structure |
+| `.find(fn)` | `(Row => bool) => Row?` | First row matching predicate |
+| `.some(fn)` | `(Row => bool) => bool` | Any row matches |
+| `.every(fn)` | `(Row => bool) => bool` | All rows match |
+
+**Examples:**
+```
+// Sum product of two columns
+tblSales.reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+
+// Filter rows where first column > 10
+data.rows.where(r => r[0] > 10)
+
+// Running total that resets on category change
+tbl.scan({sum: 0, cat: ""}, (s, r) =>
+    LET(reset, r.Category != s.cat,
+        {sum: IF(reset, r.Amount, s.sum + r.Amount), cat: r.Category})
+).select(s => s.sum)
+
+// Sort rows by third column
+data.rows.orderBy(r => r[2])
+```
+
+---
+
+### Table Detection and Headers
+
+The DSL automatically detects whether data has headers based on its source:
+
+| Source | Header Detection | Column Access |
+|--------|-----------------|---------------|
+| Excel Table (`tblName`) | Automatic — uses table headers | Named + Index |
+| Range with `.withHeaders()` | First row treated as headers | Named + Index |
+| Plain range | No headers | Index only |
+
+**Excel Table Detection:**
+
+Formula Boss detects Excel Tables (ListObjects) by name. When you write:
+```
+=LET(tbl, tblSales, `tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])`)
+```
+
+Formula Boss:
+1. Recognises `tblSales` as a ListObject in the workbook
+2. Retrieves column names from the table headers
+3. Enables named column access in row lambdas
+
+**Explicit Headers for Ranges:**
+
+For non-table data with a header row:
+```
+A1:F100.withHeaders().reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+```
+
+The `.withHeaders()` modifier tells the DSL to treat the first row as column names.
+
+**Headerless Data:**
+
+For raw data without headers, use index-based access:
+```
+A1:D100.reduce(0, (acc, r) => acc + r[0] * r[2])
+```
+
+#### Row-Wise Transpilation
+
+**C# Output Example:**
+
+DSL input:
+```
+tblSales.reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+```
+
+Generated C#:
+```csharp
+public static object REDUCEPRICEQTY(object tableRef)
+{
+    // Get ListObject from table reference
+    var listObject = GetListObject(tableRef);
+    var data = listObject.DataBodyRange.Value as object[,];
+    var headers = BuildHeaderIndex(listObject);  // {"Price": 0, "Qty": 1, ...}
+
+    double acc = 0;
+    for (int i = 0; i < data.GetLength(0); i++)
+    {
+        var price = Convert.ToDouble(data[i, headers["Price"]]);
+        var qty = Convert.ToDouble(data[i, headers["Qty"]]);
+        acc = acc + price * qty;
+    }
+    return acc;
+}
+```
+
+**Robust Mode C# Output:**
+
+DSL input (with LET-bound columns):
+```
+=LET(price, tblSales[Price], qty, tblSales[Qty], tbl, tblSales,
+     `tbl.reduce(0, (acc, r) => acc + r.price * r.qty)`)
+```
+
+Generated C#:
+```csharp
+public static object REDUCEPRICEQTY(object tableRef, string priceCol, string qtyCol)
+{
+    var listObject = GetListObject(tableRef);
+    var data = listObject.DataBodyRange.Value as object[,];
+    var headers = BuildHeaderIndex(listObject);
+
+    double acc = 0;
+    for (int i = 0; i < data.GetLength(0); i++)
+    {
+        var price = Convert.ToDouble(data[i, headers[priceCol]]);
+        var qty = Convert.ToDouble(data[i, headers[qtyCol]]);
+        acc = acc + price * qty;
+    }
+    return acc;
+}
+```
+
+The column names are passed as parameters, enabling dynamic lookup.
+
+#### Edge Cases
+
+**Empty table:**
+- `.reduce(init, fn)` returns `init`
+- `.scan(init, fn)` returns empty array
+- `.where(fn)` returns empty array
+
+**Missing column name:**
+- Quick mode: Runtime error with clear message ("Column 'Pricee' not found in table. Available columns: Price, Qty, Region")
+- Robust mode: Error surfaces when Excel evaluates the invalid column reference
+
+**Numeric column headers:**
+- Work with bracket syntax: `r[2024]` for a column named "2024"
+
+**Duplicate column names:**
+- First occurrence wins for name-based access
+- Use index-based access for subsequent columns
+
+**Mixed header types:**
+- Empty header cells: accessible by index only
 
 ---
 
@@ -472,6 +745,37 @@ DSL Expression
 - Generated code prioritises correctness over elegance
 - Function names match ExcelDNA names for seamless switchover
 
+**Row-Wise VBA Example:**
+
+DSL input:
+```
+tblSales.reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+```
+
+Generated VBA:
+```vba
+Function REDUCEPRICEQTY(tbl As Range) As Variant
+    Dim headers As Object
+    Set headers = CreateObject("Scripting.Dictionary")
+    Dim c As Long
+    For c = 1 To tbl.Columns.Count
+        headers(tbl.Cells(1, c).Value) = c
+    Next c
+
+    Dim acc As Double
+    acc = 0
+    Dim i As Long
+    For i = 2 To tbl.Rows.Count
+        Dim price As Double, qty As Double
+        price = tbl.Cells(i, headers("Price")).Value
+        qty = tbl.Cells(i, headers("Qty")).Value
+        acc = acc + price * qty
+    Next i
+
+    REDUCEPRICEQTY = acc
+End Function
+```
+
 ### Trust Settings Requirement
 
 Programmatic VBA injection requires:
@@ -519,7 +823,13 @@ Programmatic VBA injection requires:
 
 ### Overview
 
-In competitive Excel, most solutions use `LET` functions to structure calculations into named steps. Formula Boss integrates seamlessly with this pattern, allowing users to add DSL expressions as individual LET steps.
+In competitive Excel, most solutions use `LET` functions to structure calculations into named steps. Formula Boss integrates seamlessly with this pattern, enabling:
+
+1. DSL expressions as individual LET steps
+2. **Robust column references** that survive table restructuring
+3. Dynamic column lookup at runtime (not hardcoded indices)
+
+---
 
 ### User Journey: LET Step Integration
 
@@ -545,13 +855,97 @@ In competitive Excel, most solutions use `LET` functions to structure calculatio
         result)
    ```
 
+---
+
+### Robust Column References
+
+The most powerful LET integration feature is **robust column detection** — referencing table columns in a way that:
+- Benefits from Excel's autocomplete
+- Survives column reordering or renaming
+- Resolves dynamically at runtime
+
+#### User Journey: Robust Mode
+
+1. User has a table `tblSales` with columns "Price", "Qty", "Region"
+2. User types, using Excel's autocomplete to select column references:
+   ```
+   '=LET(
+       price, tblSales[Price],
+       qty, tblSales[Qty],
+       tbl, tblSales,
+       `tbl.reduce(0, (acc, r) => acc + r.price * r.qty)`
+   )
+   ```
+3. Formula Boss performs semantic analysis:
+   - Detects `tbl` is bound to `tblSales` (an Excel Table)
+   - Detects `price` is bound to `tblSales[Price]` (a table column reference)
+   - Detects `qty` is bound to `tblSales[Qty]`
+   - In the DSL, `r.price` and `r.qty` reference these LET-bound column variables
+4. Transpiles to C# that:
+   - Accepts column names as string parameters
+   - Looks up column indices dynamically from the table at runtime
+   - Never hardcodes column positions
+5. Result appears immediately
+
+**Benefits:**
+- Excel autocomplete for table and column references
+- Refactor-safe: if column names change, update one reference
+- Self-documenting: variable names describe the data
+- Dynamic: UDF always retrieves the current column position from the table
+
+#### Resolution Order for `r.identifier`
+
+When Formula Boss encounters `r.identifier` in a row lambda:
+
+1. **LET-bound column variable** — If `identifier` matches a LET variable bound to a table column reference (e.g., `price, tblSales[Price]`), use that column name dynamically
+2. **Numeric literal** — If inside brackets and numeric (e.g., `r[0]`), use as column index
+3. **Literal column name** — Otherwise, treat as a literal column name string
+
+#### Semantic Analysis Requirements
+
+Formula Boss parses the surrounding LET structure to build context:
+
+| LET Pattern | Detected As | Effect |
+|-------------|-------------|--------|
+| `tbl, tblSales` | Table binding | `tbl` refers to the `tblSales` ListObject |
+| `price, tblSales[Price]` | Column binding | `price` holds the "Price" column name |
+| `data, A1:F20` | Range binding | Plain range, no automatic headers |
+
+**Table Column Reference Parsing:**
+
+The pattern `tableName[ColumnName]` (without `[#Headers]` or `[#All]`) is recognised as a column reference. Formula Boss:
+1. Validates `tableName` is a ListObject in the workbook
+2. Extracts `ColumnName` as the column identifier
+3. Passes the column name as a string parameter to the generated UDF
+
+**Runtime Behaviour:**
+
+The generated UDF does **not** hardcode column indices. Instead:
+1. UDF receives table data and column name strings as parameters
+2. At runtime, UDF retrieves the actual ListObject to get current column positions
+3. Column lookup happens fresh on each calculation
+
+This ensures formulas remain correct even if table columns are reordered.
+
+---
+
 ### Self-Documenting Pattern
 
-Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containing the original DSL expression. This provides:
+Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containing the original DSL expression:
 
+```
+=LET(
+    _src_result, "tbl.reduce(0, (acc, r) => acc + r.price * r.qty)",
+    result, RESULT(tbl, price, qty),
+    result)
+```
+
+This provides:
 - **Visibility:** Original expression visible in formula bar
 - **Persistence:** Saved with the formula
 - **No external dependencies:** No comments or side panels required
+
+---
 
 ### Editing Workflow
 
@@ -567,14 +961,17 @@ Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containin
 4. Cell shows:
    ```
    '=LET(
-       data, A1:F20,
-       coloredCells, `data.cells.where(c => c.color != -4142)`,
-       result, `coloredCells.select(c => c.value * 2).toArray()`,
-       result)
+       price, tblSales[Price],
+       qty, tblSales[Qty],
+       tbl, tblSales,
+       `tbl.reduce(0, (acc, r) => acc + r.price * r.qty)`
+   )
    ```
 5. User edits the backtick expressions
 6. User presses Enter
 7. Formula Boss regenerates UDFs (reusing existing UDF names where expressions match)
+
+---
 
 ### Technical Considerations
 
@@ -595,3 +992,17 @@ Each UDF call is preceded by an unused LET variable (prefixed `_src_`) containin
 - `Application.EnableEvents = false` prevents SheetChange from firing during reconstruction
 - `WrapText = false` keeps the multi-line formula readable
 - `SendKeys("{F2}")` enters edit mode automatically
+
+**Column Parameter Generation:**
+
+When robust mode detects column references, the generated UDF signature includes string parameters:
+```csharp
+public static object RESULT(object[,] tbl, string priceCol, string qtyCol)
+```
+
+The formula call passes the column reference values:
+```
+=RESULT(tblSales, tblSales[Price], tblSales[Qty])
+```
+
+Excel evaluates `tblSales[Price]` to the column's values, but Formula Boss intercepts this pattern and passes the column name string instead. (Implementation detail: may require wrapping in a helper that extracts the header name.)
