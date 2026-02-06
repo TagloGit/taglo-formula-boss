@@ -1,4 +1,6 @@
-﻿using Xunit;
+﻿using FormulaBoss.Interception;
+
+using Xunit;
 using Xunit.Abstractions;
 
 namespace FormulaBoss.IntegrationTests;
@@ -69,6 +71,38 @@ public class ValuePathTests
         }
 
         return result.ToString() ?? "null";
+    }
+
+    #endregion
+
+    #region Scan Method
+
+    [Fact]
+    public void Rows_Scan_ReturnsRunningTotals()
+    {
+        // Arrange
+        var values = new object[,] { { "Name", "Amount" }, { "A", 10.0 }, { "B", 20.0 }, { "C", 30.0 } };
+
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.scan(0, (sum, r) => sum + r[Amount]).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        // Running totals: 10, 30, 60 (output as 3 rows, 1 column - vertical)
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(1, arr.GetLength(1));
+        Assert.Equal(10.0, Convert.ToDouble(arr[0, 0]));
+        Assert.Equal(30.0, Convert.ToDouble(arr[1, 0]));
+        Assert.Equal(60.0, Convert.ToDouble(arr[2, 0]));
     }
 
     #endregion
@@ -325,10 +359,7 @@ public class ValuePathTests
         // Arrange: First row is headers
         var values = new object[,]
         {
-            { "Name", "Price", "Qty" },
-            { "Apple", 10.0, 5.0 },
-            { "Banana", 20.0, 3.0 },
-            { "Cherry", 15.0, 4.0 }
+            { "Name", "Price", "Qty" }, { "Apple", 10.0, 5.0 }, { "Banana", 20.0, 3.0 }, { "Cherry", 15.0, 4.0 }
         };
 
         var compilation = TestHelpers.CompileExpression("data.withHeaders().rows.where(r => r[Price] > 12).toArray()");
@@ -354,10 +385,7 @@ public class ValuePathTests
         // Arrange: First row is headers
         var values = new object[,]
         {
-            { "Name", "Price", "Qty" },
-            { "Apple", 10.0, 2.0 },
-            { "Banana", 20.0, 3.0 },
-            { "Cherry", 15.0, 4.0 }
+            { "Name", "Price", "Qty" }, { "Apple", 10.0, 2.0 }, { "Banana", 20.0, 3.0 }, { "Cherry", 15.0, 4.0 }
         };
 
         var compilation = TestHelpers.CompileExpression(
@@ -379,12 +407,7 @@ public class ValuePathTests
     public void Rows_WithHeaders_DotNotation_Works()
     {
         // Arrange: First row is headers
-        var values = new object[,]
-        {
-            { "Name", "Price", "Qty" },
-            { "Apple", 10.0, 2.0 },
-            { "Banana", 20.0, 3.0 }
-        };
+        var values = new object[,] { { "Name", "Price", "Qty" }, { "Apple", 10.0, 2.0 }, { "Banana", 20.0, 3.0 } };
 
         // Use dot notation r.Price instead of bracket notation r[Price]
         var compilation = TestHelpers.CompileExpression(
@@ -405,12 +428,7 @@ public class ValuePathTests
     public void Rows_WithHeaders_CaseInsensitive()
     {
         // Arrange: Headers in different case than access
-        var values = new object[,]
-        {
-            { "NAME", "PRICE", "QTY" },
-            { "Apple", 10.0, 2.0 },
-            { "Banana", 20.0, 3.0 }
-        };
+        var values = new object[,] { { "NAME", "PRICE", "QTY" }, { "Apple", 10.0, 2.0 }, { "Banana", 20.0, 3.0 } };
 
         // Access with lowercase column names
         var compilation = TestHelpers.CompileExpression(
@@ -431,11 +449,7 @@ public class ValuePathTests
     public void Rows_WithHeaders_MissingColumn_ThrowsDetailedError()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price", "Qty" },
-            { "Apple", 10.0, 2.0 }
-        };
+        var values = new object[,] { { "Name", "Price", "Qty" }, { "Apple", 10.0, 2.0 } };
 
         // Access non-existent column
         var compilation = TestHelpers.CompileExpression(
@@ -461,12 +475,7 @@ public class ValuePathTests
     public void Rows_NumericIndex_StillWorks()
     {
         // Arrange: Use numeric index without headers
-        var values = new object[,]
-        {
-            { 10.0, 2.0 },
-            { 20.0, 3.0 },
-            { 30.0, 4.0 }
-        };
+        var values = new object[,] { { 10.0, 2.0 }, { 20.0, 3.0 }, { 30.0, 4.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.rows.reduce(0, (acc, r) => acc + r[0] * r[1])");
@@ -489,9 +498,7 @@ public class ValuePathTests
         // Arrange: Filter by string column
         var values = new object[,]
         {
-            { "Name", "Category", "Price" },
-            { "Apple", "Fruit", 10.0 },
-            { "Carrot", "Vegetable", 8.0 },
+            { "Name", "Category", "Price" }, { "Apple", "Fruit", 10.0 }, { "Carrot", "Vegetable", 8.0 },
             { "Banana", "Fruit", 25.0 }
         };
 
@@ -520,11 +527,8 @@ public class ValuePathTests
         // Arrange: Filter by category, then sum prices
         var values = new object[,]
         {
-            { "Name", "Category", "Price" },
-            { "Apple", "Fruit", 10.0 },
-            { "Carrot", "Vegetable", 8.0 },
-            { "Banana", "Fruit", 25.0 },
-            { "Date", "Fruit", 30.0 }
+            { "Name", "Category", "Price" }, { "Apple", "Fruit", 10.0 }, { "Carrot", "Vegetable", 8.0 },
+            { "Banana", "Fruit", 25.0 }, { "Date", "Fruit", 30.0 }
         };
 
         var compilation = TestHelpers.CompileExpression(
@@ -546,12 +550,7 @@ public class ValuePathTests
     public void Rows_NegativeIndex_AccessesLastColumn()
     {
         // Arrange: r[-1] should access the last column
-        var values = new object[,]
-        {
-            { "A", "B", "C", 100.0 },
-            { "D", "E", "F", 200.0 },
-            { "G", "H", "I", 300.0 }
-        };
+        var values = new object[,] { { "A", "B", "C", 100.0 }, { "D", "E", "F", 200.0 }, { "G", "H", "I", 300.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.rows.select(r => r[-1]).toArray()");
@@ -563,7 +562,8 @@ public class ValuePathTests
         var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
 
         // Assert
-        var array = (object[,])result;
+        var array = result as object[,];
+        Assert.NotNull(array);
         _output.WriteLine($"Result dimensions: {array.GetLength(0)}x{array.GetLength(1)}");
         Assert.Equal(100.0, Convert.ToDouble(array[0, 0]));
         Assert.Equal(200.0, Convert.ToDouble(array[1, 0]));
@@ -574,11 +574,7 @@ public class ValuePathTests
     public void Rows_NegativeIndex_SecondFromEnd()
     {
         // Arrange: r[-2] should access the second to last column
-        var values = new object[,]
-        {
-            { "A", "B", "C", 100.0 },
-            { "D", "E", "F", 200.0 }
-        };
+        var values = new object[,] { { "A", "B", "C", 100.0 }, { "D", "E", "F", 200.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.rows.select(r => r[-2]).toArray()");
@@ -590,7 +586,8 @@ public class ValuePathTests
         var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
 
         // Assert
-        var array = (object[,])result;
+        var array = result as object[,];
+        Assert.NotNull(array);
         Assert.Equal("C", array[0, 0]);
         Assert.Equal("F", array[1, 0]);
     }
@@ -603,13 +600,7 @@ public class ValuePathTests
     public void Rows_Find_ReturnsFirstMatchingRow()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "Apple", 10.0 },
-            { "Banana", 25.0 },
-            { "Cherry", 15.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 25.0 }, { "Cherry", 15.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.withHeaders().rows.find(r => r[Price] > 20)");
@@ -636,12 +627,7 @@ public class ValuePathTests
     public void Rows_Find_ReturnsNullWhenNoMatch()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "Apple", 10.0 },
-            { "Banana", 20.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 20.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.withHeaders().rows.find(r => r[Price] > 100)");
@@ -662,12 +648,7 @@ public class ValuePathTests
     public void Rows_Some_ReturnsTrueWhenMatchExists()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "Apple", 10.0 },
-            { "Banana", 25.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 25.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.withHeaders().rows.some(r => r[Price] > 20)");
@@ -687,12 +668,7 @@ public class ValuePathTests
     public void Rows_Some_ReturnsFalseWhenNoMatch()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "Apple", 10.0 },
-            { "Banana", 20.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 20.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.withHeaders().rows.some(r => r[Price] > 100)");
@@ -712,12 +688,7 @@ public class ValuePathTests
     public void Rows_Every_ReturnsTrueWhenAllMatch()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "Apple", 10.0 },
-            { "Banana", 20.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 20.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.withHeaders().rows.every(r => r[Price] > 0)");
@@ -737,12 +708,7 @@ public class ValuePathTests
     public void Rows_Every_ReturnsFalseWhenSomeDontMatch()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "Apple", 10.0 },
-            { "Banana", 20.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 20.0 } };
 
         var compilation = TestHelpers.CompileExpression(
             "data.withHeaders().rows.every(r => r[Price] > 15)");
@@ -760,44 +726,6 @@ public class ValuePathTests
 
     #endregion
 
-    #region Scan Method
-
-    [Fact]
-    public void Rows_Scan_ReturnsRunningTotals()
-    {
-        // Arrange
-        var values = new object[,]
-        {
-            { "Name", "Amount" },
-            { "A", 10.0 },
-            { "B", 20.0 },
-            { "C", 30.0 }
-        };
-
-        var compilation = TestHelpers.CompileExpression(
-            "data.withHeaders().rows.scan(0, (sum, r) => sum + r[Amount]).toArray()");
-
-        _output.WriteLine(compilation.GetDiagnostics());
-        Assert.True(compilation.Success, compilation.ErrorMessage);
-
-        // Act
-        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
-
-        // Assert
-        _output.WriteLine($"Result: {FormatResult(result)}");
-        Assert.NotNull(result);
-        Assert.IsType<object[,]>(result);
-        var arr = (object[,])result;
-        // Running totals: 10, 30, 60 (output as 3 rows, 1 column - vertical)
-        Assert.Equal(3, arr.GetLength(0));
-        Assert.Equal(1, arr.GetLength(1));
-        Assert.Equal(10.0, Convert.ToDouble(arr[0, 0]));
-        Assert.Equal(30.0, Convert.ToDouble(arr[1, 0]));
-        Assert.Equal(60.0, Convert.ToDouble(arr[2, 0]));
-    }
-
-    #endregion
-
     #region Dynamic Column Name Parameters (LET Column Bindings)
 
     [Fact]
@@ -807,14 +735,11 @@ public class ValuePathTests
         // =LET(tbl, tblSales, p, tblSales[Price], q, tblSales[Qty], `tbl.rows.reduce(0, (acc, r) => acc + r.p * r.q)`)
         var values = new object[,]
         {
-            { "Name", "Price", "Qty" },
-            { "Apple", 10.0, 2.0 },
-            { "Banana", 20.0, 3.0 },
-            { "Cherry", 15.0, 4.0 }
+            { "Name", "Price", "Qty" }, { "Apple", 10.0, 2.0 }, { "Banana", 20.0, 3.0 }, { "Cherry", 15.0, 4.0 }
         };
 
         // Column bindings: p -> Price, q -> Qty
-        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
+        var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
             ["p"] = new("tblSales", "Price"),
             ["q"] = new("tblSales", "Qty")
@@ -838,7 +763,7 @@ public class ValuePathTests
         var result = TestHelpers.ExecuteWithValuesAndColumnNames(
             compilation.CoreMethod!,
             values,
-            "Price", "Qty");  // These are the actual column names
+            "Price", "Qty"); // These are the actual column names
 
         // Assert
         _output.WriteLine($"Result: {result}");
@@ -850,15 +775,10 @@ public class ValuePathTests
     public void ColumnBindings_SelectWithDynamicColumnNames_Works()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Product", "UnitPrice", "Quantity" },
-            { "A", 5.0, 3.0 },
-            { "B", 10.0, 2.0 }
-        };
+        var values = new object[,] { { "Product", "UnitPrice", "Quantity" }, { "A", 5.0, 3.0 }, { "B", 10.0, 2.0 } };
 
         // Column bindings with different names than headers (common pattern)
-        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
+        var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
             ["price"] = new("tbl", "UnitPrice"),
             ["qty"] = new("tbl", "Quantity")
@@ -890,18 +810,9 @@ public class ValuePathTests
     public void ColumnBindings_WhereWithDynamicColumnNames_Works()
     {
         // Arrange
-        var values = new object[,]
-        {
-            { "Item", "Cost" },
-            { "A", 50.0 },
-            { "B", 150.0 },
-            { "C", 75.0 }
-        };
+        var values = new object[,] { { "Item", "Cost" }, { "A", 50.0 }, { "B", 150.0 }, { "C", 75.0 } };
 
-        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
-        {
-            ["c"] = new("data", "Cost")
-        };
+        var columnBindings = new Dictionary<string, ColumnBindingInfo> { ["c"] = new("data", "Cost") };
 
         var compilation = TestHelpers.CompileExpressionWithColumnBindings(
             "data.withHeaders().rows.where(r => r.c > 60)",
@@ -927,17 +838,9 @@ public class ValuePathTests
     public void ColumnBindings_BracketNotation_Works()
     {
         // Test r[price] bracket notation with column bindings
-        var values = new object[,]
-        {
-            { "Name", "Price" },
-            { "X", 100.0 },
-            { "Y", 200.0 }
-        };
+        var values = new object[,] { { "Name", "Price" }, { "X", 100.0 }, { "Y", 200.0 } };
 
-        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
-        {
-            ["price"] = new("tbl", "Price")
-        };
+        var columnBindings = new Dictionary<string, ColumnBindingInfo> { ["price"] = new("tbl", "Price") };
 
         // Use bracket notation r[price] instead of r.price
         var compilation = TestHelpers.CompileExpressionWithColumnBindings(

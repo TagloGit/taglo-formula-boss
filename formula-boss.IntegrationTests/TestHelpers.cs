@@ -164,7 +164,8 @@ public static class TestHelpers
     ///     Executes a compiled _Core method with the given values array and additional column name parameters.
     ///     Used for testing dynamic column name resolution.
     /// </summary>
-    public static object? ExecuteWithValuesAndColumnNames(MethodInfo coreMethod, object[,] values, params string[] columnNames)
+    public static object? ExecuteWithValuesAndColumnNames(MethodInfo coreMethod, object[,] values,
+        params string[] columnNames)
     {
         var args = new object[1 + columnNames.Length];
         args[0] = values;
@@ -172,6 +173,7 @@ public static class TestHelpers
         {
             args[i + 1] = columnNames[i];
         }
+
         return coreMethod.Invoke(null, args);
     }
 
@@ -184,7 +186,7 @@ public static class TestHelpers
     /// <returns>A TestCompilationResult containing the compiled method and metadata</returns>
     public static TestCompilationResult CompileExpressionWithColumnBindings(
         string dslExpression,
-        Dictionary<string, Interception.ColumnBindingInfo> columnBindings)
+        Dictionary<string, ColumnBindingInfo> columnBindings)
     {
         // Parse
         var lexer = new Lexer(dslExpression);
