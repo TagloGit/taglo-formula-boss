@@ -40,6 +40,8 @@ public record ExpressionContext(
 /// </summary>
 public class FormulaPipeline
 {
+    // Cache for column parameters alongside UDF names
+    private readonly Dictionary<string, IReadOnlyList<ColumnParameter>?> _columnParamsCache = new();
     private readonly DynamicCompiler _compiler;
 
     // Maps UDF names to the expression they were created from, to detect collisions
@@ -57,9 +59,6 @@ public class FormulaPipeline
     /// <param name="expression">The DSL expression (without backticks).</param>
     /// <returns>The pipeline result.</returns>
     public PipelineResult Process(string expression) => Process(expression, null);
-
-    // Cache for column parameters alongside UDF names
-    private readonly Dictionary<string, IReadOnlyList<ColumnParameter>?> _columnParamsCache = new();
 
     /// <summary>
     ///     Processes a DSL expression with optional context for LET integration.

@@ -13,16 +13,16 @@ namespace FormulaBoss.Transpilation;
 public class CSharpTranspiler
 {
     private readonly HashSet<string> _lambdaParameters = [];
-    private readonly Dictionary<string, string> _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
+
+    private readonly Dictionary<string, string>
+        _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
+
     private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
     private readonly HashSet<string> _usedColumnBindings = []; // Column bindings that were actually referenced
     private Dictionary<string, ColumnBindingInfo>? _columnBindings; // LET-bound variable name -> (table, column)
-    private bool _requiresObjectModel;
-    private bool _usesRows;
-    private bool _usesCols;
-    private bool _usesMap;
     private bool _needsHeaderContext; // True if named column access is used (r[Price], r.Price)
-    private bool _hasHeaderContext; // True if .withHeaders() was called or table detected
+    private bool _requiresObjectModel;
+    private bool _usesCols;
 
     /// <summary>
     ///     Transpiles a DSL expression to a complete C# UDF class.
@@ -43,11 +43,8 @@ public class CSharpTranspiler
         Dictionary<string, ColumnBindingInfo>? columnBindings = null)
     {
         _requiresObjectModel = false;
-        _usesRows = false;
         _usesCols = false;
-        _usesMap = false;
         _needsHeaderContext = false;
-        _hasHeaderContext = false;
         _columnBindings = columnBindings;
         _lambdaParameters.Clear();
         _parameterTypes.Clear();
@@ -98,12 +95,8 @@ public class CSharpTranspiler
                     _requiresObjectModel = true;
                 }
 
-                // Track rows/cols usage separately
-                if (member.Member == "rows")
-                {
-                    _usesRows = true;
-                }
-                else if (member.Member == "cols")
+                // Track cols usage
+                if (member.Member == "cols")
                 {
                     _usesCols = true;
                 }
@@ -112,16 +105,9 @@ public class CSharpTranspiler
                 break;
 
             case MethodCall call:
-                // Track .map() usage
-                if (call.Method.Equals("map", StringComparison.OrdinalIgnoreCase))
-                {
-                    _usesMap = true;
-                }
-
                 // Track .withHeaders() usage - enables header context
                 if (call.Method.Equals("withHeaders", StringComparison.OrdinalIgnoreCase))
                 {
-                    _hasHeaderContext = true;
                     _needsHeaderContext = true;
                 }
 
@@ -157,7 +143,6 @@ public class CSharpTranspiler
                     && !indexIdent.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
                 {
                     _needsHeaderContext = true;
-                    _hasHeaderContext = true; // Assume headers are present when named access is used
                 }
 
                 DetectObjectModelUsage(indexAccess.Target);
@@ -240,7 +225,8 @@ public class CSharpTranspiler
                 // c.@Comment != null returns false on exception (treating as null)
                 // c.@Comment == null returns true on exception (treating as null)
                 var defaultValue = binary.Operator == "==" ? "true" : "false";
-                return $"((Func<bool>)(() => {{ try {{ return {left} {binary.Operator} {right}; }} catch {{ return {defaultValue}; }} }}))()";
+                return
+                    $"((Func<bool>)(() => {{ try {{ return {left} {binary.Operator} {right}; }} catch {{ return {defaultValue}; }} }}))()";
             }
         }
 
@@ -259,6 +245,7 @@ public class CSharpTranspiler
             {
                 left = $"{left}?.ToString()";
             }
+
             // If left side is string literal and right needs cast (column access), use ToString()
             if (IsStringLiteral(binary.Left) && NeedsNumericCast(binary.Right))
             {
@@ -347,6 +334,7 @@ public class CSharpTranspiler
             {
                 return $"((Func<dynamic>)(() => {{ try {{ return {escapedAccess}; }} catch {{ return null; }} }}))()";
             }
+
             return escapedAccess;
         }
 
@@ -372,6 +360,7 @@ public class CSharpTranspiler
             {
                 return $"((Func<dynamic>)(() => {{ try {{ return {rowColumnAccess}; }} catch {{ return null; }} }}))()";
             }
+
             return rowColumnAccess;
         }
 
@@ -392,7 +381,7 @@ public class CSharpTranspiler
                 "format" => $"(string)({target}.NumberFormat ?? \"General\")",
                 "formula" => $"(string)({target}.Formula ?? \"\")",
                 "address" => $"{target}.Address",
-                _ => (string?)null
+                _ => null
             };
 
             if (shorthandResult != null)
@@ -400,8 +389,10 @@ public class CSharpTranspiler
                 // Apply safe access wrapper if requested
                 if (member.IsSafeAccess)
                 {
-                    return $"((Func<dynamic>)(() => {{ try {{ return {shorthandResult}; }} catch {{ return null; }} }}))()";
+                    return
+                        $"((Func<dynamic>)(() => {{ try {{ return {shorthandResult}; }} catch {{ return null; }} }}))()";
                 }
+
                 return shorthandResult;
             }
 
@@ -439,14 +430,16 @@ public class CSharpTranspiler
         {
             return $"((Func<dynamic>)(() => {{ try {{ return {defaultAccess}; }} catch {{ return null; }} }}))()";
         }
+
         return defaultAccess;
     }
 
     /// <summary>
-    /// Transpiles a member access when we know the type of the target.
-    /// Uses the type system to validate properties and apply proper casting.
+    ///     Transpiles a member access when we know the type of the target.
+    ///     Uses the type system to validate properties and apply proper casting.
     /// </summary>
-    private string TranspileTypedMemberAccess(string target, string memberName, string targetType, bool isSafeAccess = false)
+    private string TranspileTypedMemberAccess(string target, string memberName, string targetType,
+        bool isSafeAccess = false)
     {
         if (ExcelTypeSystem.Types.TryGetValue(targetType, out var props))
         {
@@ -458,6 +451,7 @@ public class CSharpTranspiler
                 {
                     return $"((Func<dynamic>)(() => {{ try {{ return {result}; }} catch {{ return null; }} }}))()";
                 }
+
                 return result;
             }
 
@@ -465,7 +459,8 @@ public class CSharpTranspiler
             var similar = ExcelTypeSystem.FindSimilar(targetType, memberName);
             if (similar != null)
             {
-                throw new TranspileException($"Unknown property '{memberName}' on {targetType}. Did you mean '{similar}'?");
+                throw new TranspileException(
+                    $"Unknown property '{memberName}' on {targetType}. Did you mean '{similar}'?");
             }
 
             throw new TranspileException($"Unknown property '{memberName}' on {targetType}.");
@@ -477,11 +472,12 @@ public class CSharpTranspiler
         {
             return $"((Func<dynamic>)(() => {{ try {{ return {passThrough}; }} catch {{ return null; }} }}))()";
         }
+
         return passThrough;
     }
 
     /// <summary>
-    /// Gets the type of an expression based on type tracking context.
+    ///     Gets the type of an expression based on type tracking context.
     /// </summary>
     private string? GetExpressionType(Expression expr)
     {
@@ -494,7 +490,7 @@ public class CSharpTranspiler
     }
 
     /// <summary>
-    /// Gets the result type of a member access expression by looking up in the type system.
+    ///     Gets the result type of a member access expression by looking up in the type system.
     /// </summary>
     private string? GetMemberAccessResultType(MemberAccess ma)
     {
@@ -549,8 +545,8 @@ public class CSharpTranspiler
             "orderby" => $"{target}.OrderBy({string.Join(", ", args)})",
             "orderbydesc" => $"{target}.OrderByDescending({string.Join(", ", args)})",
             // take/skip with negative support: take(-2) gets last 2, skip(-2) skips last 2
-            "take" => GenerateTakeSkip(target, args, isTake: true),
-            "skip" => GenerateTakeSkip(target, args, isTake: false),
+            "take" => GenerateTakeSkip(target, args, true),
+            "skip" => GenerateTakeSkip(target, args, false),
             "distinct" => $"{target}.Distinct()",
             // For numeric aggregations, cast objects to double
             // On object model path, items might be COM cells - extract .Value if so
@@ -692,7 +688,8 @@ public class CSharpTranspiler
         {
             var paramPart = aggregator[..arrowIndex].Trim(); // "g"
             var bodyPart = aggregator[(arrowIndex + 2)..].Trim(); // "g.Sum(...)"
-            return $"{target}.GroupBy({keySelector}).Select({paramPart} => new object[] {{ {paramPart}.Key, {bodyPart} }})";
+            return
+                $"{target}.GroupBy({keySelector}).Select({paramPart} => new object[] {{ {paramPart}.Key, {bodyPart} }})";
         }
 
         // Fallback if no arrow found (shouldn't happen for valid lambda)
@@ -882,7 +879,7 @@ public class CSharpTranspiler
                $"}}))()";
     }
 
-    /// <summary
+    /// <summary>
     ///     Converts integer literal seeds to double literals for aggregate operations.
     ///     This prevents type mismatches when the accumulator lambda returns double
     ///     (common with Excel values which are often doubles).
@@ -952,35 +949,38 @@ public class CSharpTranspiler
         expression is IdentifierExpr ident && _lambdaParameters.Contains(ident.Name);
 
     /// <summary>
-    /// Checks if an expression needs numeric casting for comparisons/arithmetic.
-    /// This includes lambda parameters (v, r, c), index access on lambda parameters (r[0], r[Price]),
-    /// and member access on row parameters (r.Price).
+    ///     Checks if an expression needs numeric casting for comparisons/arithmetic.
+    ///     This includes lambda parameters (v, r, c), index access on lambda parameters (r[0], r[Price]),
+    ///     and member access on row parameters (r.Price).
     /// </summary>
     private bool NeedsNumericCast(Expression expression)
     {
         return expression switch
         {
             IdentifierExpr ident => _lambdaParameters.Contains(ident.Name),
-            IndexAccess indexAccess => NeedsNumericCast(indexAccess.Target), // r[0], r[Price] needs cast if r is lambda param
+            IndexAccess indexAccess => NeedsNumericCast(indexAccess
+                .Target), // r[0], r[Price] needs cast if r is lambda param
             // r.Price needs cast if r is a row parameter (not in object model mode)
             MemberAccess member when !_requiresObjectModel && member.Target is IdentifierExpr target
-                                     && _rowParameters.Contains(target.Name) => true,
+                                                           && _rowParameters.Contains(target.Name) => true,
             _ => false
         };
     }
 
     /// <summary>
-    /// Checks if an expression is row column access (r[Price] or r.Price where r is a row parameter).
-    /// Used to determine when + operator should use numeric casting vs string concatenation.
+    ///     Checks if an expression is row column access (r[Price] or r.Price where r is a row parameter).
+    ///     Used to determine when + operator should use numeric casting vs string concatenation.
     /// </summary>
     private bool IsRowColumnAccess(Expression expression)
     {
         return expression switch
         {
             // r[Price] where r is a row parameter and Price is an identifier (named column)
-            IndexAccess { Target: IdentifierExpr target, Index: IdentifierExpr } when _rowParameters.Contains(target.Name) => true,
+            IndexAccess { Target: IdentifierExpr target, Index: IdentifierExpr } when
+                _rowParameters.Contains(target.Name) => true,
             // r.Price where r is a row parameter
-            MemberAccess { Target: IdentifierExpr target } when !_requiresObjectModel && _rowParameters.Contains(target.Name) => true,
+            MemberAccess { Target: IdentifierExpr target } when !_requiresObjectModel &&
+                                                                _rowParameters.Contains(target.Name) => true,
             _ => false
         };
     }
@@ -1025,15 +1025,15 @@ public class CSharpTranspiler
     }
 
     /// <summary>
-    /// Resolves a LET-bound column variable to a column name or variable reference.
-    /// For example, if LET has "price, tblSales[Price]", then "price" resolves to either:
-    /// - The literal "Price" if dynamic column params are not enabled
-    /// - A variable reference "_price_colname_" if dynamic column params are enabled
+    ///     Resolves a LET-bound column variable to a column name or variable reference.
+    ///     For example, if LET has "price, tblSales[Price]", then "price" resolves to either:
+    ///     - The literal "Price" if dynamic column params are not enabled
+    ///     - A variable reference "_price_colname_" if dynamic column params are enabled
     /// </summary>
     /// <param name="variableName">The variable name to resolve.</param>
     /// <param name="useVariableReference">
-    /// If true, returns a variable reference (like "_price_colname_") for use with dynamic column params.
-    /// If false, returns the literal column name.
+    ///     If true, returns a variable reference (like "_price_colname_") for use with dynamic column params.
+    ///     If false, returns the literal column name.
     /// </param>
     /// <returns>The column name/variable reference if it's a bound column variable, null otherwise.</returns>
     private string? ResolveColumnBinding(string variableName, bool useVariableReference = true)
@@ -1051,12 +1051,13 @@ public class CSharpTranspiler
 
             return bindingInfo.ColumnName;
         }
+
         return null;
     }
 
     /// <summary>
-    /// Transpiles a MemberAccess without the safe-access wrapper.
-    /// Used when the safe-access needs to wrap a larger expression (e.g., method call chain).
+    ///     Transpiles a MemberAccess without the safe-access wrapper.
+    ///     Used when the safe-access needs to wrap a larger expression (e.g., method call chain).
     /// </summary>
     private string TranspileMemberAccessUnsafe(MemberAccess member)
     {
@@ -1118,6 +1119,7 @@ public class CSharpTranspiler
         {
             sb.Append(", object ").Append(binding.ToLowerInvariant()).Append("_col_param");
         }
+
         sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
@@ -1127,14 +1129,16 @@ public class CSharpTranspiler
         if (usedColumnBindings.Count > 0)
         {
             sb.AppendLine("            // Extract column names from parameters (dynamic column resolution)");
-            sb.AppendLine("            // Handle both string values and ExcelReference (if INDEX() didn't force value evaluation)");
+            sb.AppendLine(
+                "            // Handle both string values and ExcelReference (if INDEX() didn't force value evaluation)");
             sb.AppendLine("            Func<object, string> extractColName = (param) => {");
             sb.AppendLine("                if (param == null) return \"\";");
             sb.AppendLine("                if (param is string s) return s;");
             sb.AppendLine("                // Check if it's an ExcelReference and extract the actual value");
             sb.AppendLine("                if (param.GetType().Name == \"ExcelReference\")");
             sb.AppendLine("                {");
-            sb.AppendLine("                    var getValueMethod = param.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
+            sb.AppendLine(
+                "                    var getValueMethod = param.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
             sb.AppendLine("                    var value = getValueMethod?.Invoke(param, null);");
             sb.AppendLine("                    return value?.ToString() ?? \"\";");
             sb.AppendLine("                }");
@@ -1145,20 +1149,27 @@ public class CSharpTranspiler
             {
                 var varName = $"_{binding.ToLowerInvariant()}_colname_";
                 var paramName = $"{binding.ToLowerInvariant()}_col_param";
-                sb.Append("            var ").Append(varName).Append(" = extractColName(").Append(paramName).AppendLine(");");
+                sb.Append("            var ").Append(varName).Append(" = extractColName(").Append(paramName)
+                    .AppendLine(");");
             }
+
             sb.AppendLine();
         }
 
         sb.AppendLine("            // Get Range via reflection to avoid assembly identity issues");
-        sb.AppendLine("            // Object model features (.cells, .color, etc.) require a range reference - they cannot");
-        sb.AppendLine("            // work with array output from a previous UDF because cell formatting is not preserved.");
+        sb.AppendLine(
+            "            // Object model features (.cells, .color, etc.) require a range reference - they cannot");
+        sb.AppendLine(
+            "            // work with array output from a previous UDF because cell formatting is not preserved.");
         sb.AppendLine("            if (rangeRef?.GetType()?.Name != \"ExcelReference\")");
-        sb.AppendLine("                return \"ERROR: Cell properties require a range reference, not \" + (rangeRef?.GetType()?.Name ?? \"null\") + \". Use a cell range like A1:B10.\";");
+        sb.AppendLine(
+            "                return \"ERROR: Cell properties require a range reference, not \" + (rangeRef?.GetType()?.Name ?? \"null\") + \". Use a cell range like A1:B10.\";");
         sb.AppendLine();
         sb.AppendLine("            var excelDnaAssembly = rangeRef.GetType().Assembly;");
-        sb.AppendLine("            var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
-        sb.AppendLine("            var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
+        sb.AppendLine(
+            "            var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
+        sb.AppendLine(
+            "            var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
         sb.AppendLine("            dynamic app = appProperty?.GetValue(null);");
         sb.AppendLine("            if (app == null) return \"ERROR: Could not get Excel Application\";");
         sb.AppendLine();
@@ -1177,7 +1188,8 @@ public class CSharpTranspiler
         sb.AppendLine("            // Convert column numbers to letters");
         sb.AppendLine("            Func<int, string> colToLetter = (col) => {");
         sb.AppendLine("                string result = \"\";");
-        sb.AppendLine("                while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
+        sb.AppendLine(
+            "                while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
         sb.AppendLine("                return result;");
         sb.AppendLine("            };");
         sb.AppendLine();
@@ -1185,7 +1197,8 @@ public class CSharpTranspiler
         sb.AppendLine("            if (rowFirst == rowLast && colFirst == colLast)");
         sb.AppendLine("                address = colToLetter(colFirst) + rowFirst;");
         sb.AppendLine("            else");
-        sb.AppendLine("                address = colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
+        sb.AppendLine(
+            "                address = colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
         sb.AppendLine();
         sb.AppendLine("            dynamic range = app.Range[address];");
         // Call _Core with column name parameters
@@ -1195,6 +1208,7 @@ public class CSharpTranspiler
             var varName = $"_{binding.ToLowerInvariant()}_colname_";
             sb.Append(", ").Append(varName);
         }
+
         sb.AppendLine(");");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
@@ -1214,6 +1228,7 @@ public class CSharpTranspiler
         {
             sb.Append(", string ").Append("_").Append(binding.ToLowerInvariant()).Append("_colname_");
         }
+
         sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
@@ -1230,8 +1245,10 @@ public class CSharpTranspiler
         if (needsHeaderContext)
         {
             sb.AppendLine("            // Build header dictionary for named column access");
-            sb.AppendLine("            // First try to detect if this is an Excel Table (ListObject) and use its headers");
-            sb.AppendLine("            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
+            sb.AppendLine(
+                "            // First try to detect if this is an Excel Table (ListObject) and use its headers");
+            sb.AppendLine(
+                "            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
             sb.AppendLine("            var __skipHeaderRow__ = false;");
             sb.AppendLine("            try");
             sb.AppendLine("            {");
@@ -1250,9 +1267,12 @@ public class CSharpTranspiler
             sb.AppendLine("                            int headerColCount = headerRange.Columns.Count;");
             sb.AppendLine("                            for (int c = 1; c <= headerColCount; c++)");
             sb.AppendLine("                            {");
-            sb.AppendLine("                                var headerValue = headerRange.Cells[1, c].Value?.ToString() ?? \"\";");
-            sb.AppendLine("                                if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
-            sb.AppendLine("                                    __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
+            sb.AppendLine(
+                "                                var headerValue = headerRange.Cells[1, c].Value?.ToString() ?? \"\";");
+            sb.AppendLine(
+                "                                if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine(
+                "                                    __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
             sb.AppendLine("                            }");
             sb.AppendLine("                            // Check if input range includes header row - if so, skip it");
             sb.AppendLine("                            dynamic headerIntersect = app.Intersect(range, headerRange);");
@@ -1270,8 +1290,10 @@ public class CSharpTranspiler
             sb.AppendLine("                for (int c = 1; c <= colCount; c++)");
             sb.AppendLine("                {");
             sb.AppendLine("                    var headerValue = range.Cells[1, c].Value?.ToString() ?? \"\";");
-            sb.AppendLine("                    if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
-            sb.AppendLine("                        __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
+            sb.AppendLine(
+                "                    if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine(
+                "                        __headers__[headerValue] = c - 1;  // Store 0-based index for array access");
             sb.AppendLine("                }");
             sb.AppendLine("                __skipHeaderRow__ = true;  // First row is headers, skip it");
             sb.AppendLine("            }");
@@ -1279,25 +1301,31 @@ public class CSharpTranspiler
             sb.AppendLine("            // Column lookup helper with detailed error message");
             sb.AppendLine("            Func<string, int> __GetCol__ = (name) => {");
             sb.AppendLine("                if (__headers__.TryGetValue(name, out var idx)) return idx;");
-            sb.AppendLine("                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
+            sb.AppendLine(
+                "                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
             sb.AppendLine("            };");
             sb.AppendLine();
             sb.AppendLine("            // Build row arrays for .rows operations - skip header row if present in range");
             sb.AppendLine("            var __dataStartRow__ = __skipHeaderRow__ ? 2 : 1;");
             sb.AppendLine("            var __dataRowCount__ = __skipHeaderRow__ ? rowCount - 1 : rowCount;");
-            sb.AppendLine("            var __rows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(r =>");
-            sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+            sb.AppendLine(
+                "            var __rows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(r =>");
+            sb.AppendLine(
+                "                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
         }
         else
         {
             sb.AppendLine("            // Build row arrays for .rows operations (each row is an object[] of values)");
             sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount).Select(r =>");
-            sb.AppendLine("                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+            sb.AppendLine(
+                "                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
         }
+
         sb.AppendLine();
         sb.AppendLine("            // Build column arrays for .cols operations");
         sb.AppendLine("            var __cols__ = Enumerable.Range(1, colCount).Select(c =>");
-        sb.AppendLine("                Enumerable.Range(1, rowCount).Select(r => (object)range.Cells[r, c].Value).ToArray());");
+        sb.AppendLine(
+            "                Enumerable.Range(1, rowCount).Select(r => (object)range.Cells[r, c].Value).ToArray());");
         sb.AppendLine();
         sb.AppendLine("            // Helper for .map() - preserves 2D shape");
         sb.AppendLine("            Func<Func<dynamic, object>, object[,]> __MapPreserveShape__ = (transform) => {");
@@ -1319,7 +1347,8 @@ public class CSharpTranspiler
         sb.AppendLine();
         sb.AppendLine("            // Normalize result inline");
         sb.AppendLine("            if (result == null) return string.Empty;");
-        sb.AppendLine("            if (result is string || result is double || result is int || result is bool) return result;");
+        sb.AppendLine(
+            "            if (result is string || result is double || result is int || result is bool) return result;");
         sb.AppendLine("            if (result is object[,]) return result;");
         sb.AppendLine();
         sb.AppendLine("            // Handle IEnumerable<object[]> from .rows or .cols operations");
@@ -1362,6 +1391,7 @@ public class CSharpTranspiler
             sb.AppendLine("                            output[i, j] = string.Empty;");
             sb.AppendLine("                    }");
         }
+
         sb.AppendLine("                    return output;");
         sb.AppendLine("                }");
         sb.AppendLine();
@@ -1402,6 +1432,7 @@ public class CSharpTranspiler
         {
             sb.Append(", object ").Append(binding.ToLowerInvariant()).Append("_col_param");
         }
+
         sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
@@ -1411,14 +1442,16 @@ public class CSharpTranspiler
         if (usedColumnBindings.Count > 0)
         {
             sb.AppendLine("            // Extract column names from parameters (dynamic column resolution)");
-            sb.AppendLine("            // Handle both string values and ExcelReference (if INDEX() didn't force value evaluation)");
+            sb.AppendLine(
+                "            // Handle both string values and ExcelReference (if INDEX() didn't force value evaluation)");
             sb.AppendLine("            Func<object, string> extractColName = (param) => {");
             sb.AppendLine("                if (param == null) return \"\";");
             sb.AppendLine("                if (param is string s) return s;");
             sb.AppendLine("                // Check if it's an ExcelReference and extract the actual value");
             sb.AppendLine("                if (param.GetType().Name == \"ExcelReference\")");
             sb.AppendLine("                {");
-            sb.AppendLine("                    var getValueMethod = param.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
+            sb.AppendLine(
+                "                    var getValueMethod = param.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
             sb.AppendLine("                    var value = getValueMethod?.Invoke(param, null);");
             sb.AppendLine("                    return value?.ToString() ?? \"\";");
             sb.AppendLine("                }");
@@ -1429,8 +1462,10 @@ public class CSharpTranspiler
             {
                 var varName = $"_{binding.ToLowerInvariant()}_colname_";
                 var paramName = $"{binding.ToLowerInvariant()}_col_param";
-                sb.Append("            var ").Append(varName).Append(" = extractColName(").Append(paramName).AppendLine(");");
+                sb.Append("            var ").Append(varName).Append(" = extractColName(").Append(paramName)
+                    .AppendLine(");");
             }
+
             sb.AppendLine();
         }
 
@@ -1440,7 +1475,8 @@ public class CSharpTranspiler
         sb.AppendLine("            if (rangeRef?.GetType()?.Name == \"ExcelReference\")");
         sb.AppendLine("            {");
         sb.AppendLine("                // Extract values from ExcelReference via reflection");
-        sb.AppendLine("                var getValueMethod = rangeRef.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
+        sb.AppendLine(
+            "                var getValueMethod = rangeRef.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
         sb.AppendLine("                var rawResult = getValueMethod?.Invoke(rangeRef, null);");
         sb.AppendLine("                values = rawResult is object[,] arr ? arr : new object[,] { { rawResult } };");
 
@@ -1452,15 +1488,18 @@ public class CSharpTranspiler
             sb.AppendLine("                try");
             sb.AppendLine("                {");
             sb.AppendLine("                    var excelDnaAssembly = rangeRef.GetType().Assembly;");
-            sb.AppendLine("                    var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
-            sb.AppendLine("                    var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
+            sb.AppendLine(
+                "                    var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
+            sb.AppendLine(
+                "                    var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
             sb.AppendLine("                    dynamic app = appProperty?.GetValue(null);");
             sb.AppendLine("                    if (app != null)");
             sb.AppendLine("                    {");
             sb.AppendLine("                        // Get range from ExcelReference");
             sb.AppendLine("                        var rowFirstProp = rangeRef.GetType().GetProperty(\"RowFirst\");");
             sb.AppendLine("                        var rowLastProp = rangeRef.GetType().GetProperty(\"RowLast\");");
-            sb.AppendLine("                        var colFirstProp = rangeRef.GetType().GetProperty(\"ColumnFirst\");");
+            sb.AppendLine(
+                "                        var colFirstProp = rangeRef.GetType().GetProperty(\"ColumnFirst\");");
             sb.AppendLine("                        var colLastProp = rangeRef.GetType().GetProperty(\"ColumnLast\");");
             sb.AppendLine("                        var rowFirst = (int)rowFirstProp.GetValue(rangeRef) + 1;");
             sb.AppendLine("                        var rowLast = (int)rowLastProp.GetValue(rangeRef) + 1;");
@@ -1468,12 +1507,14 @@ public class CSharpTranspiler
             sb.AppendLine("                        var colLast = (int)colLastProp.GetValue(rangeRef) + 1;");
             sb.AppendLine("                        Func<int, string> colToLetter = (col) => {");
             sb.AppendLine("                            string result = \"\";");
-            sb.AppendLine("                            while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
+            sb.AppendLine(
+                "                            while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
             sb.AppendLine("                            return result;");
             sb.AppendLine("                        };");
             sb.AppendLine("                        string address = rowFirst == rowLast && colFirst == colLast");
             sb.AppendLine("                            ? colToLetter(colFirst) + rowFirst");
-            sb.AppendLine("                            : colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
+            sb.AppendLine(
+                "                            : colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
             sb.AppendLine("                        dynamic range = app.Range[address];");
             sb.AppendLine("                        dynamic sheet = range.Worksheet;");
             sb.AppendLine("                        foreach (dynamic lo in sheet.ListObjects)");
@@ -1481,18 +1522,21 @@ public class CSharpTranspiler
             sb.AppendLine("                            dynamic intersection = app.Intersect(range, lo.Range);");
             sb.AppendLine("                            if (intersection != null)");
             sb.AppendLine("                            {");
-            sb.AppendLine("                                // Found a table - check if headers are NOT in the input range");
+            sb.AppendLine(
+                "                                // Found a table - check if headers are NOT in the input range");
             sb.AppendLine("                                dynamic headerRange = lo.HeaderRowRange;");
             sb.AppendLine("                                if (headerRange != null)");
             sb.AppendLine("                                {");
-            sb.AppendLine("                                    dynamic headerIntersect = app.Intersect(range, headerRange);");
+            sb.AppendLine(
+                "                                    dynamic headerIntersect = app.Intersect(range, headerRange);");
             sb.AppendLine("                                    if (headerIntersect == null)");
             sb.AppendLine("                                    {");
             sb.AppendLine("                                        // Headers NOT in range - extract them externally");
             sb.AppendLine("                                        int headerColCount = headerRange.Columns.Count;");
             sb.AppendLine("                                        externalHeaders = new object[headerColCount];");
             sb.AppendLine("                                        for (int c = 1; c <= headerColCount; c++)");
-            sb.AppendLine("                                            externalHeaders[c - 1] = headerRange.Cells[1, c].Value;");
+            sb.AppendLine(
+                "                                            externalHeaders[c - 1] = headerRange.Cells[1, c].Value;");
             sb.AppendLine("                                    }");
             sb.AppendLine("                                }");
             sb.AppendLine("                                break;");
@@ -1546,6 +1590,7 @@ public class CSharpTranspiler
             var varName = $"_{binding.ToLowerInvariant()}_colname_";
             sb.Append(", ").Append(varName);
         }
+
         sb.AppendLine(");");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
@@ -1565,6 +1610,7 @@ public class CSharpTranspiler
         {
             sb.Append(", string ").Append("_").Append(binding.ToLowerInvariant()).Append("_colname_");
         }
+
         sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
@@ -1578,13 +1624,15 @@ public class CSharpTranspiler
         if (needsHeaderContext)
         {
             sb.AppendLine("            // Build header dictionary from first row for named column access");
-            sb.AppendLine("            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
+            sb.AppendLine(
+                "            var __headers__ = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);");
             sb.AppendLine("            if (rowCount > 0)");
             sb.AppendLine("            {");
             sb.AppendLine("                for (int c = 0; c < colCount; c++)");
             sb.AppendLine("                {");
             sb.AppendLine("                    var headerValue = values[0, c]?.ToString() ?? \"\";");
-            sb.AppendLine("                    if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
+            sb.AppendLine(
+                "                    if (!string.IsNullOrEmpty(headerValue) && !__headers__.ContainsKey(headerValue))");
             sb.AppendLine("                        __headers__[headerValue] = c;");
             sb.AppendLine("                }");
             sb.AppendLine("            }");
@@ -1592,23 +1640,28 @@ public class CSharpTranspiler
             sb.AppendLine("            // Column lookup helper with detailed error message");
             sb.AppendLine("            Func<string, int> __GetCol__ = (name) => {");
             sb.AppendLine("                if (__headers__.TryGetValue(name, out var idx)) return idx;");
-            sb.AppendLine("                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
+            sb.AppendLine(
+                "                throw new Exception($\"Column '{name}' not found. Available columns: {string.Join(\", \", __headers__.Keys)}\");");
             sb.AppendLine("            };");
             sb.AppendLine();
             sb.AppendLine("            // Build row arrays for .rows operations - skip header row");
             sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount - 1)");
-            sb.AppendLine("                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
+            sb.AppendLine(
+                "                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
         }
         else
         {
             sb.AppendLine("            // Build row arrays for .rows operations");
             sb.AppendLine("            var __rows__ = Enumerable.Range(0, rowCount)");
-            sb.AppendLine("                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
+            sb.AppendLine(
+                "                .Select(r => Enumerable.Range(0, colCount).Select(c => values[r, c]).ToArray());");
         }
+
         sb.AppendLine();
         sb.AppendLine("            // Build column arrays for .cols operations");
         sb.AppendLine("            var __cols__ = Enumerable.Range(0, colCount)");
-        sb.AppendLine("                .Select(c => Enumerable.Range(0, rowCount).Select(r => values[r, c]).ToArray());");
+        sb.AppendLine(
+            "                .Select(c => Enumerable.Range(0, rowCount).Select(r => values[r, c]).ToArray());");
         sb.AppendLine();
         sb.AppendLine("            // Helper for .map() - preserves 2D shape");
         sb.AppendLine("            Func<Func<object, object>, object[,]> __MapPreserveShape__ = (transform) => {");
@@ -1629,7 +1682,8 @@ public class CSharpTranspiler
         sb.AppendLine();
         sb.AppendLine("            // Normalize result inline");
         sb.AppendLine("            if (result == null) return string.Empty;");
-        sb.AppendLine("            if (result is string || result is double || result is int || result is bool) return result;");
+        sb.AppendLine(
+            "            if (result is string || result is double || result is int || result is bool) return result;");
         sb.AppendLine("            if (result is object[,]) return result;");
         sb.AppendLine();
         sb.AppendLine("            // Handle IEnumerable<object[]> from .rows or .cols operations");
@@ -1672,12 +1726,14 @@ public class CSharpTranspiler
             sb.AppendLine("                            output[i, j] = string.Empty;");
             sb.AppendLine("                    }");
         }
+
         sb.AppendLine("                    return output;");
         sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                // Single-column output");
         sb.AppendLine("                var singleColOutput = new object[list.Count, 1];");
-        sb.AppendLine("                for (var i = 0; i < list.Count; i++) singleColOutput[i, 0] = list[i] ?? string.Empty;");
+        sb.AppendLine(
+            "                for (var i = 0; i < list.Count; i++) singleColOutput[i, 0] = list[i] ?? string.Empty;");
         sb.AppendLine("                return singleColOutput;");
         sb.AppendLine("            }");
         sb.AppendLine("            return result;");
