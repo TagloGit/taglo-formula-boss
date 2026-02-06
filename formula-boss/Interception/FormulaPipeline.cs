@@ -14,7 +14,13 @@ namespace FormulaBoss.Interception;
 /// <param name="UdfName">The generated UDF name (if successful).</param>
 /// <param name="ErrorMessage">Error message (if failed).</param>
 /// <param name="InputParameter">The input parameter name extracted from the expression.</param>
-public record PipelineResult(bool Success, string? UdfName, string? ErrorMessage, string? InputParameter);
+/// <param name="ColumnParameters">Column bindings used in the expression that need header injection.</param>
+public record PipelineResult(
+    bool Success,
+    string? UdfName,
+    string? ErrorMessage,
+    string? InputParameter,
+    IReadOnlyList<ColumnParameter>? ColumnParameters = null);
 
 /// <summary>
 ///     Context for processing a DSL expression, used for LET integration.
@@ -22,10 +28,12 @@ public record PipelineResult(bool Success, string? UdfName, string? ErrorMessage
 /// <param name="PreferredUdfName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
 /// <param name="ColumnBindings">
 ///     Optional column bindings from LET variables.
-///     Maps LET variable names to column names (e.g., "price" → "Price" from "price, tblSales[Price]").
-///     Used to resolve r.price to r[__GetCol__("Price")].
+///     Maps LET variable names to column binding info (table and column names).
+///     Used to resolve r.price to r[__GetCol__("Price")] and generate dynamic column parameters.
 /// </param>
-public record ExpressionContext(string? PreferredUdfName, Dictionary<string, string>? ColumnBindings = null);
+public record ExpressionContext(
+    string? PreferredUdfName,
+    Dictionary<string, ColumnBindingInfo>? ColumnBindings = null);
 
 /// <summary>
 ///     Orchestrates the complete pipeline: parse → transpile → compile → register.
@@ -50,6 +58,9 @@ public class FormulaPipeline
     /// <returns>The pipeline result.</returns>
     public PipelineResult Process(string expression) => Process(expression, null);
 
+    // Cache for column parameters alongside UDF names
+    private readonly Dictionary<string, IReadOnlyList<ColumnParameter>?> _columnParamsCache = new();
+
     /// <summary>
     ///     Processes a DSL expression with optional context for LET integration.
     /// </summary>
@@ -66,9 +77,10 @@ public class FormulaPipeline
         // Check cache first
         if (_udfCache.TryGetValue(cacheKey, out var cachedUdfName))
         {
-            // Extract input parameter from expression for cache hit
+            // Extract input parameter and column params from cache
             var inputParam = ExtractInputParameter(expression);
-            return new PipelineResult(true, cachedUdfName, null, inputParam);
+            _columnParamsCache.TryGetValue(cacheKey, out var cachedColumnParams);
+            return new PipelineResult(true, cachedUdfName, null, inputParam, cachedColumnParams);
         }
 
         // Step 1: Lex
@@ -132,13 +144,35 @@ public class FormulaPipeline
         // Track which expression this UDF name was created from
         _registeredUdfExpressions[transpileResult.MethodName] = expression;
 
+        // Build column parameters from used column bindings
+        IReadOnlyList<ColumnParameter>? columnParameters = null;
+        if (transpileResult.UsedColumnBindings != null
+            && transpileResult.UsedColumnBindings.Count > 0
+            && context?.ColumnBindings != null)
+        {
+            var colParams = new List<ColumnParameter>();
+            foreach (var usedBinding in transpileResult.UsedColumnBindings)
+            {
+                if (context.ColumnBindings.TryGetValue(usedBinding, out var bindingInfo))
+                {
+                    colParams.Add(new ColumnParameter(usedBinding, bindingInfo.TableName, bindingInfo.ColumnName));
+                }
+            }
+
+            if (colParams.Count > 0)
+            {
+                columnParameters = colParams;
+            }
+        }
+
         // Cache the result
         _udfCache[cacheKey] = transpileResult.MethodName;
+        _columnParamsCache[cacheKey] = columnParameters;
 
         // Extract input parameter from the expression
         var inputParameter = ExtractInputParameter(expression);
 
-        return new PipelineResult(true, transpileResult.MethodName, null, inputParameter);
+        return new PipelineResult(true, transpileResult.MethodName, null, inputParameter, columnParameters);
     }
 
     /// <summary>

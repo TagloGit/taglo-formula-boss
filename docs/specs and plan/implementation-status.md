@@ -2,7 +2,7 @@
 
 This document tracks implementation progress against the [Excel UDF Add-in Specification](excel-udf-addin-spec.md).
 
-**Last updated:** 2026-02-05
+**Last updated:** 2026-02-06
 
 ---
 
@@ -30,6 +30,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | .withHeaders() | ✅ Complete | Auto-skips header row |
 | Negative index (r[-1]) | ✅ Complete | Last column access |
 | LET robust column references | ✅ Complete | Column binding detection |
+| Dynamic column params | ✅ Complete | Column renames survive via structured refs |
 | Statement lambdas | ⏳ Not started | |
 | VBA transpiler | ⏳ Not started | Export feature |
 | Floating editor | ⏳ Not started | Post-MVP |
@@ -155,6 +156,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Table binding detection | ⏳ | ⏳ | `tbl, tblSales` |
 | Column binding detection | ✅ | ✅ | `price, tblSales[Price]` → "Price" |
 | Robust column param gen | ✅ | ✅ | r.price resolves via column bindings |
+| Dynamic column params | ✅ | ✅ | UDF params for column names, header injection |
 | Edit mode reconstruction | ⏳ | ⏳ | Ctrl+Shift+` |
 
 ---

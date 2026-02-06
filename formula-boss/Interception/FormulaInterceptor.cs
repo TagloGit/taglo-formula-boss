@@ -178,7 +178,7 @@ public class FormulaInterceptor : IDisposable
         var columnBindings = LetFormulaParser.ExtractColumnBindings(letStructure);
         if (columnBindings.Count > 0)
         {
-            Debug.WriteLine($"Found {columnBindings.Count} column bindings: {string.Join(", ", columnBindings.Select(kv => $"{kv.Key}={kv.Value}"))}");
+            Debug.WriteLine($"Found {columnBindings.Count} column bindings: {string.Join(", ", columnBindings.Select(kv => $"{kv.Key}={kv.Value.TableName}[{kv.Value.ColumnName}]"))}");
         }
 
         foreach (var binding in letStructure.Bindings)
@@ -207,9 +207,10 @@ public class FormulaInterceptor : IDisposable
                         variableName,
                         dslExpression,
                         result.UdfName,
-                        result.InputParameter ?? variableName);
+                        result.InputParameter ?? variableName,
+                        result.ColumnParameters);
 
-                    Debug.WriteLine($"LET UDF generated: {result.UdfName}({result.InputParameter})");
+                    Debug.WriteLine($"LET UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
                 }
                 else
                 {
@@ -238,9 +239,10 @@ public class FormulaInterceptor : IDisposable
                         "_result",
                         dslExpression,
                         result.UdfName,
-                        result.InputParameter ?? "_result");
+                        result.InputParameter ?? "_result",
+                        result.ColumnParameters);
 
-                    Debug.WriteLine($"LET result UDF generated: {result.UdfName}({result.InputParameter})");
+                    Debug.WriteLine($"LET result UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
                 }
                 else
                 {

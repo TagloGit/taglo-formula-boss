@@ -221,4 +221,100 @@ public class LetFormulaRewriterTests
     }
 
     #endregion
+
+    #region Column Parameter Injection
+
+    [Fact]
+    public void Rewrite_InjectsHeaderBindings_ForColumnParameters()
+    {
+        var formula = "=LET(tbl, tblSales, price, tblSales[Price], result, `tbl.reduce(0, (acc, r) => acc + r.price)`, result)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var columnParams = new List<ColumnParameter>
+        {
+            new("price", "tblSales", "Price")
+        };
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["result"] = new("result", "tbl.reduce(0, (acc, r) => acc + r.price)", "RESULT", "tbl", columnParams)
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
+
+        // Should inject _price_hdr header binding before the UDF call
+        // Note: INDEX(...,1) forces value evaluation instead of returning a reference
+        Assert.Contains("_price_hdr, INDEX(tblSales[[#Headers],[Price]],1)", result);
+        // UDF call should include the header argument
+        Assert.Contains("RESULT(tbl, _price_hdr)", result);
+    }
+
+    [Fact]
+    public void Rewrite_InjectsMultipleHeaderBindings()
+    {
+        var formula = "=LET(tbl, tblSales, price, tblSales[Price], qty, tblSales[Qty], result, `tbl.reduce(0, (acc, r) => acc + r.price * r.qty)`, result)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var columnParams = new List<ColumnParameter>
+        {
+            new("price", "tblSales", "Price"),
+            new("qty", "tblSales", "Qty")
+        };
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["result"] = new("result", "tbl.reduce(0, (acc, r) => acc + r.price * r.qty)", "RESULT", "tbl", columnParams)
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
+
+        // Should inject both header bindings with INDEX() wrapper
+        Assert.Contains("_price_hdr, INDEX(tblSales[[#Headers],[Price]],1)", result);
+        Assert.Contains("_qty_hdr, INDEX(tblSales[[#Headers],[Qty]],1)", result);
+        // UDF call should include both header arguments
+        Assert.Contains("RESULT(tbl, _price_hdr, _qty_hdr)", result);
+    }
+
+    [Fact]
+    public void Rewrite_NoHeaderBindings_WhenNoColumnParameters()
+    {
+        var formula = "=LET(data, A1:A10, filtered, `data.where(v => v > 0)`, SUM(filtered))";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["filtered"] = new("filtered", "data.where(v => v > 0)", "FILTERED", "data")
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
+
+        // Should not have any _xxx_hdr bindings
+        Assert.DoesNotContain("_hdr,", result);
+        Assert.DoesNotContain("[[#Headers]", result);
+        // UDF call should just have the input parameter
+        Assert.Contains("FILTERED(data)", result);
+    }
+
+    [Fact]
+    public void Rewrite_DeduplicatesHeaderBindings_AcrossMultipleProcessedBindings()
+    {
+        var formula = "=LET(tbl, tblSales, price, tblSales[Price], filtered, `tbl.rows.where(r => r.price > 10)`, summed, `filtered.reduce(0, (acc, r) => acc + r.price)`, summed)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var priceParam = new List<ColumnParameter> { new("price", "tblSales", "Price") };
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["filtered"] = new("filtered", "tbl.rows.where(r => r.price > 10)", "FILTERED", "tbl", priceParam),
+            ["summed"] = new("summed", "filtered.reduce(0, (acc, r) => acc + r.price)", "SUMMED", "filtered", priceParam)
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
+
+        // Should only inject _price_hdr once (before first usage)
+        var headerBindingCount = result.Split("_price_hdr, INDEX(tblSales[[#Headers],[Price]],1)").Length - 1;
+        Assert.Equal(1, headerBindingCount);
+    }
+
+    #endregion
 }

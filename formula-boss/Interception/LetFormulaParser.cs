@@ -4,6 +4,14 @@ using System.Text.RegularExpressions;
 namespace FormulaBoss.Interception;
 
 /// <summary>
+///     Information about a column binding extracted from a LET variable.
+///     Used to generate structured references for dynamic column name resolution.
+/// </summary>
+/// <param name="TableName">The Excel Table name (e.g., "tblSales").</param>
+/// <param name="ColumnName">The column name (e.g., "Price").</param>
+public record ColumnBindingInfo(string TableName, string ColumnName);
+
+/// <summary>
 ///     Represents a variable binding in a LET formula.
 /// </summary>
 /// <param name="VariableName">The name of the LET variable.</param>
@@ -296,19 +304,21 @@ public static class LetFormulaParser
 
     /// <summary>
     ///     Extracts all column bindings from a LET structure.
-    ///     Returns a dictionary mapping LET variable names to column names.
+    ///     Returns a dictionary mapping LET variable names to column binding info (table and column names).
     /// </summary>
     /// <param name="structure">The parsed LET structure.</param>
-    /// <returns>Dictionary of variable name → column name.</returns>
-    public static Dictionary<string, string> ExtractColumnBindings(LetStructure structure)
+    /// <returns>Dictionary of variable name → column binding info.</returns>
+    public static Dictionary<string, ColumnBindingInfo> ExtractColumnBindings(LetStructure structure)
     {
-        var columnBindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var columnBindings = new Dictionary<string, ColumnBindingInfo>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var binding in structure.Bindings)
         {
-            if (IsColumnBinding(binding.Value, out _, out var columnName) && columnName != null)
+            if (IsColumnBinding(binding.Value, out var tableName, out var columnName)
+                && tableName != null
+                && columnName != null)
             {
-                columnBindings[binding.VariableName] = columnName;
+                columnBindings[binding.VariableName] = new ColumnBindingInfo(tableName, columnName);
             }
         }
 

@@ -8,6 +8,7 @@ namespace FormulaBoss.Interception;
 public static class LetFormulaReconstructor
 {
     private const string SourcePrefix = "_src_";
+    private const string HeaderSuffix = "_hdr"; // Header bindings for dynamic column names
     private const string Indent = "    ";
     private const char NewLine = '\n'; // Use LF only - Excel COM doesn't like \r\n
 
@@ -77,6 +78,13 @@ public static class LetFormulaReconstructor
 
             // Skip _src_ bindings - they become backtick expressions
             if (varName.StartsWith(SourcePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // Skip _*_hdr header bindings - these are injected machinery for dynamic column names
+            if (varName.StartsWith("_", StringComparison.Ordinal) &&
+                varName.EndsWith(HeaderSuffix, StringComparison.Ordinal))
             {
                 continue;
             }
