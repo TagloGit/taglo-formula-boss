@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 using ExcelDna.Integration;
 
@@ -12,6 +13,24 @@ namespace FormulaBoss.Commands;
 /// </summary>
 public static class EditFormulaCommand
 {
+    private const int VkNumlock = 0x90;
+    private const int KeyeventfExtendedkey = 0x0001;
+    private const int KeyeventfKeyup = 0x0002;
+
+    [DllImport("user32.dll")]
+    private static extern short GetKeyState(int keyCode);
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, int dwFlags, int dwExtraInfo);
+
+    private static bool IsNumLockOn() => (GetKeyState(VkNumlock) & 1) == 1;
+
+    private static void ToggleNumLock()
+    {
+        keybd_event(VkNumlock, 0x45, KeyeventfExtendedkey, 0);
+        keybd_event(VkNumlock, 0x45, KeyeventfExtendedkey | KeyeventfKeyup, 0);
+    }
+
     /// <summary>
     ///     Executes the edit formula command on the active cell.
     ///     If the cell contains a processed Formula Boss LET formula, reconstructs
@@ -57,7 +76,13 @@ public static class EditFormulaCommand
                 }
 
                 // Enter edit mode on the cell so user can immediately start editing
+                // SendKeys has a known bug that can toggle Num Lock, so we save and restore it
+                var numLockWasOn = IsNumLockOn();
                 app.SendKeys("{F2}");
+                if (IsNumLockOn() != numLockWasOn)
+                {
+                    ToggleNumLock();
+                }
             }
             else
             {
