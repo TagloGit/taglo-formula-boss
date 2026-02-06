@@ -157,7 +157,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Column binding detection | ✅ | ✅ | `price, tblSales[Price]` → "Price" |
 | Robust column param gen | ✅ | ✅ | r.price resolves via column bindings |
 | Dynamic column params | ✅ | ✅ | UDF params for column names, header injection |
-| Edit mode reconstruction | ⏳ | ⏳ | Ctrl+Shift+` |
+| Edit mode reconstruction | ✅ | ✅ | Ctrl+Shift+`, strips _*_hdr bindings |
 
 ---
 
@@ -278,17 +278,22 @@ Based on spec and competitive Excel use cases:
 9. Statement lambdas — not started
 10. VBA transpiler — not started
 11. ~~Source preservation pattern~~ ✅ — LetFormulaRewriter
-12. Edit mode reconstruction — not started
+12. ~~Edit mode reconstruction~~ ✅ — EditFormulaCommand with Ctrl+Shift+`
 
 ---
 
 ## Test Coverage Notes
 
+**Current test counts:**
+- Unit tests: 249
+- Integration tests: 42
+- **Total: 291 tests**
+
 **Well-tested areas:**
-- Parser: 50+ tests
-- Transpiler: 230+ tests (including named column access, row methods)
-- Integration: 38 tests in ValuePathTests
-- LET integration: LetFormulaParserTests, LetFormulaRewriterTests
+- Parser tests: lexer, AST nodes, operator precedence
+- Transpiler tests: all operations, named column access, row methods
+- Integration tests: ValuePathTests (compiled execution)
+- LET integration: LetFormulaParserTests, LetFormulaRewriterTests, LetFormulaReconstructorTests
 
 **Test coverage added for row operations:**
 - Named column access (`r[Price]`, `r.Price`): 12 unit tests, 8 integration tests
