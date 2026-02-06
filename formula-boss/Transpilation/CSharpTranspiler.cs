@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
+using FormulaBoss.Interception;
 using FormulaBoss.Parsing;
 
 namespace FormulaBoss.Transpilation;
@@ -14,7 +15,8 @@ public class CSharpTranspiler
     private readonly HashSet<string> _lambdaParameters = [];
     private readonly Dictionary<string, string> _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
     private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
-    private Dictionary<string, string>? _columnBindings; // LET-bound variable name -> column name (e.g., "price" -> "Price")
+    private readonly HashSet<string> _usedColumnBindings = []; // Column bindings that were actually referenced
+    private Dictionary<string, ColumnBindingInfo>? _columnBindings; // LET-bound variable name -> (table, column)
     private bool _requiresObjectModel;
     private bool _usesRows;
     private bool _usesCols;
@@ -29,16 +31,16 @@ public class CSharpTranspiler
     /// <param name="originalSource">The original DSL source text.</param>
     /// <param name="preferredName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
     /// <param name="columnBindings">
-    ///     Optional column bindings from LET variables. Maps LET variable names to column names
-    ///     (e.g., "price" → "Price" from "price, tblSales[Price]"). Used to resolve r.price or r[price]
-    ///     to the actual column name lookup.
+    ///     Optional column bindings from LET variables. Maps LET variable names to column binding info
+    ///     (e.g., "price" → (tblSales, Price)). Used to resolve r.price or r[price] to column name lookup
+    ///     and generate dynamic column parameters.
     /// </param>
     /// <returns>The transpilation result with generated code and metadata.</returns>
     public TranspileResult Transpile(
         Expression expression,
         string originalSource,
         string? preferredName = null,
-        Dictionary<string, string>? columnBindings = null)
+        Dictionary<string, ColumnBindingInfo>? columnBindings = null)
     {
         _requiresObjectModel = false;
         _usesRows = false;
@@ -50,6 +52,7 @@ public class CSharpTranspiler
         _lambdaParameters.Clear();
         _parameterTypes.Clear();
         _rowParameters.Clear();
+        _usedColumnBindings.Clear();
 
         // First pass: detect if object model is needed and track rows/cols/map usage
         DetectObjectModelUsage(expression);
@@ -63,7 +66,12 @@ public class CSharpTranspiler
         // Generate the complete UDF class
         var sourceCode = GenerateUdfClass(methodName, expressionCode);
 
-        return new TranspileResult(sourceCode, methodName, _requiresObjectModel, originalSource);
+        // Return used column bindings so pipeline can build column parameters
+        var usedBindings = _usedColumnBindings.Count > 0
+            ? _usedColumnBindings.ToList()
+            : null;
+
+        return new TranspileResult(sourceCode, methodName, _requiresObjectModel, originalSource, usedBindings);
     }
 
     private void DetectObjectModelUsage(Expression expression)
@@ -352,11 +360,14 @@ public class CSharpTranspiler
             _needsHeaderContext = true;
 
             // Check if memberName is a LET-bound column variable (r.price where price = tblSales[Price])
-            // In that case, resolve to the actual column name
-            var columnName = ResolveColumnBinding(memberName) ?? memberName;
+            // In that case, resolve to either a variable reference or the column name
+            var columnRef = ResolveColumnBinding(memberName);
+            var isVariableRef = columnRef != null && columnRef.EndsWith("_colname_");
+            var columnName = columnRef ?? memberName;
 
-            // Row column access via dot notation: r.Price -> r[__GetCol__("Price")]
-            var rowColumnAccess = $"{target}[__GetCol__(\"{columnName}\")]";
+            // Row column access via dot notation: r.Price -> r[__GetCol__("Price")] or r[__GetCol__(_price_colname_)]
+            var colArg = isVariableRef ? columnName : $"\"{columnName}\"";
+            var rowColumnAccess = $"{target}[__GetCol__({colArg})]";
             if (member.IsSafeAccess)
             {
                 return $"((Func<dynamic>)(() => {{ try {{ return {rowColumnAccess}; }} catch {{ return null; }} }}))()";
@@ -989,11 +1000,14 @@ public class CSharpTranspiler
             _needsHeaderContext = true;
 
             // Check if identifier is a LET-bound column variable (r[price] where price = tblSales[Price])
-            // In that case, resolve to the actual column name
-            var columnName = ResolveColumnBinding(indexIdent.Name) ?? indexIdent.Name;
+            // In that case, resolve to either a variable reference or the column name
+            var columnRef = ResolveColumnBinding(indexIdent.Name);
+            var isVariableRef = columnRef != null && columnRef.EndsWith("_colname_");
+            var columnName = columnRef ?? indexIdent.Name;
 
-            // Named column access: r[Price] -> r[__GetCol__("Price")]
-            return $"{target}[__GetCol__(\"{columnName}\")]";
+            // Named column access: r[Price] -> r[__GetCol__("Price")] or r[__GetCol__(_price_colname_)]
+            var colArg = isVariableRef ? columnName : $"\"{columnName}\"";
+            return $"{target}[__GetCol__({colArg})]";
         }
 
         // Handle negative index on row parameter: r[-1] accesses last column
@@ -1011,16 +1025,31 @@ public class CSharpTranspiler
     }
 
     /// <summary>
-    /// Resolves a LET-bound column variable to its column name.
-    /// For example, if LET has "price, tblSales[Price]", then "price" resolves to "Price".
+    /// Resolves a LET-bound column variable to a column name or variable reference.
+    /// For example, if LET has "price, tblSales[Price]", then "price" resolves to either:
+    /// - The literal "Price" if dynamic column params are not enabled
+    /// - A variable reference "_price_colname_" if dynamic column params are enabled
     /// </summary>
     /// <param name="variableName">The variable name to resolve.</param>
-    /// <returns>The column name if it's a bound column variable, null otherwise.</returns>
-    private string? ResolveColumnBinding(string variableName)
+    /// <param name="useVariableReference">
+    /// If true, returns a variable reference (like "_price_colname_") for use with dynamic column params.
+    /// If false, returns the literal column name.
+    /// </param>
+    /// <returns>The column name/variable reference if it's a bound column variable, null otherwise.</returns>
+    private string? ResolveColumnBinding(string variableName, bool useVariableReference = true)
     {
-        if (_columnBindings != null && _columnBindings.TryGetValue(variableName, out var columnName))
+        if (_columnBindings != null && _columnBindings.TryGetValue(variableName, out var bindingInfo))
         {
-            return columnName;
+            // Track that this column binding was used
+            _usedColumnBindings.Add(variableName);
+
+            if (useVariableReference)
+            {
+                // Return a variable reference that will be set from the UDF parameter
+                return $"_{variableName.ToLowerInvariant()}_colname_";
+            }
+
+            return bindingInfo.ColumnName;
         }
         return null;
     }
@@ -1057,13 +1086,16 @@ public class CSharpTranspiler
         sb.AppendLine("public static class GeneratedUdf");
         sb.AppendLine("{");
 
+        // Get the list of used column bindings for generating extra parameters
+        var usedBindings = _usedColumnBindings.ToList();
+
         if (_requiresObjectModel)
         {
-            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext);
+            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext, usedBindings);
         }
         else
         {
-            GenerateValueOnlyMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext);
+            GenerateValueOnlyMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext, usedBindings);
         }
 
         sb.AppendLine("}");
@@ -1071,13 +1103,53 @@ public class CSharpTranspiler
         return sb.ToString();
     }
 
-    private static void GenerateObjectModelMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols, bool needsHeaderContext)
+    private static void GenerateObjectModelMethod(
+        StringBuilder sb,
+        string methodName,
+        string expressionCode,
+        bool usesCols,
+        bool needsHeaderContext,
+        IReadOnlyList<string> usedColumnBindings)
     {
         // Generate the ExcelDNA entry point - uses reflection to avoid assembly identity issues
-        sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
+        // Add extra parameters for each used column binding
+        sb.Append("    public static object ").Append(methodName).Append("(object rangeRef");
+        foreach (var binding in usedColumnBindings)
+        {
+            sb.Append(", object ").Append(binding.ToLowerInvariant()).Append("_col_param");
+        }
+        sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
+
+        // Generate column name variable extraction from parameters
+        if (usedColumnBindings.Count > 0)
+        {
+            sb.AppendLine("            // Extract column names from parameters (dynamic column resolution)");
+            sb.AppendLine("            // Handle both string values and ExcelReference (if INDEX() didn't force value evaluation)");
+            sb.AppendLine("            Func<object, string> extractColName = (param) => {");
+            sb.AppendLine("                if (param == null) return \"\";");
+            sb.AppendLine("                if (param is string s) return s;");
+            sb.AppendLine("                // Check if it's an ExcelReference and extract the actual value");
+            sb.AppendLine("                if (param.GetType().Name == \"ExcelReference\")");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    var getValueMethod = param.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
+            sb.AppendLine("                    var value = getValueMethod?.Invoke(param, null);");
+            sb.AppendLine("                    return value?.ToString() ?? \"\";");
+            sb.AppendLine("                }");
+            sb.AppendLine("                return param.ToString() ?? \"\";");
+            sb.AppendLine("            };");
+            sb.AppendLine();
+            foreach (var binding in usedColumnBindings)
+            {
+                var varName = $"_{binding.ToLowerInvariant()}_colname_";
+                var paramName = $"{binding.ToLowerInvariant()}_col_param";
+                sb.Append("            var ").Append(varName).Append(" = extractColName(").Append(paramName).AppendLine(");");
+            }
+            sb.AppendLine();
+        }
+
         sb.AppendLine("            // Get Range via reflection to avoid assembly identity issues");
         sb.AppendLine("            // Object model features (.cells, .color, etc.) require a range reference - they cannot");
         sb.AppendLine("            // work with array output from a previous UDF because cell formatting is not preserved.");
@@ -1116,7 +1188,14 @@ public class CSharpTranspiler
         sb.AppendLine("                address = colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
         sb.AppendLine();
         sb.AppendLine("            dynamic range = app.Range[address];");
-        sb.Append("            return ").Append(methodName).AppendLine("_Core(range);");
+        // Call _Core with column name parameters
+        sb.Append("            return ").Append(methodName).Append("_Core(range");
+        foreach (var binding in usedColumnBindings)
+        {
+            var varName = $"_{binding.ToLowerInvariant()}_colname_";
+            sb.Append(", ").Append(varName);
+        }
+        sb.AppendLine(");");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
         sb.AppendLine("        {");
@@ -1126,10 +1205,16 @@ public class CSharpTranspiler
         sb.AppendLine();
 
         // Generate the testable core method (takes Range directly, no ExcelDNA dependencies)
+        // Also takes column name parameters for dynamic column resolution
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Core computation logic - can be called directly with an Excel Range for testing.");
         sb.AppendLine("    /// </summary>");
-        sb.Append("    public static object ").Append(methodName).AppendLine("_Core(dynamic range)");
+        sb.Append("    public static object ").Append(methodName).Append("_Core(dynamic range");
+        foreach (var binding in usedColumnBindings)
+        {
+            sb.Append(", string ").Append("_").Append(binding.ToLowerInvariant()).Append("_colname_");
+        }
+        sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
@@ -1302,13 +1387,53 @@ public class CSharpTranspiler
         sb.AppendLine("    }");
     }
 
-    private static void GenerateValueOnlyMethod(StringBuilder sb, string methodName, string expressionCode, bool usesCols, bool needsHeaderContext)
+    private static void GenerateValueOnlyMethod(
+        StringBuilder sb,
+        string methodName,
+        string expressionCode,
+        bool usesCols,
+        bool needsHeaderContext,
+        IReadOnlyList<string> usedColumnBindings)
     {
         // Generate the ExcelDNA entry point (uses RuntimeHelpers for ExcelReference → values conversion)
-        sb.Append("    public static object ").Append(methodName).AppendLine("(object rangeRef)");
+        // Add extra parameters for each used column binding
+        sb.Append("    public static object ").Append(methodName).Append("(object rangeRef");
+        foreach (var binding in usedColumnBindings)
+        {
+            sb.Append(", object ").Append(binding.ToLowerInvariant()).Append("_col_param");
+        }
+        sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
+
+        // Generate column name variable extraction from parameters
+        if (usedColumnBindings.Count > 0)
+        {
+            sb.AppendLine("            // Extract column names from parameters (dynamic column resolution)");
+            sb.AppendLine("            // Handle both string values and ExcelReference (if INDEX() didn't force value evaluation)");
+            sb.AppendLine("            Func<object, string> extractColName = (param) => {");
+            sb.AppendLine("                if (param == null) return \"\";");
+            sb.AppendLine("                if (param is string s) return s;");
+            sb.AppendLine("                // Check if it's an ExcelReference and extract the actual value");
+            sb.AppendLine("                if (param.GetType().Name == \"ExcelReference\")");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    var getValueMethod = param.GetType().GetMethod(\"GetValue\", Type.EmptyTypes);");
+            sb.AppendLine("                    var value = getValueMethod?.Invoke(param, null);");
+            sb.AppendLine("                    return value?.ToString() ?? \"\";");
+            sb.AppendLine("                }");
+            sb.AppendLine("                return param.ToString() ?? \"\";");
+            sb.AppendLine("            };");
+            sb.AppendLine();
+            foreach (var binding in usedColumnBindings)
+            {
+                var varName = $"_{binding.ToLowerInvariant()}_colname_";
+                var paramName = $"{binding.ToLowerInvariant()}_col_param";
+                sb.Append("            var ").Append(varName).Append(" = extractColName(").Append(paramName).AppendLine(");");
+            }
+            sb.AppendLine();
+        }
+
         sb.AppendLine("            // Handle both ExcelReference (from range) and object[,] (from previous UDF)");
         sb.AppendLine("            object[,] values;");
         sb.AppendLine("            object[] externalHeaders = null;"); // For ListObject header detection
@@ -1414,7 +1539,14 @@ public class CSharpTranspiler
             sb.AppendLine();
         }
 
-        sb.Append("            return ").Append(methodName).AppendLine("_Core(values);");
+        // Call _Core with column name parameters
+        sb.Append("            return ").Append(methodName).Append("_Core(values");
+        foreach (var binding in usedColumnBindings)
+        {
+            var varName = $"_{binding.ToLowerInvariant()}_colname_";
+            sb.Append(", ").Append(varName);
+        }
+        sb.AppendLine(");");
         sb.AppendLine("        }");
         sb.AppendLine("        catch (Exception ex)");
         sb.AppendLine("        {");
@@ -1424,10 +1556,16 @@ public class CSharpTranspiler
         sb.AppendLine();
 
         // Generate the testable core method (takes values directly, no ExcelDNA dependencies)
+        // Also takes column name parameters for dynamic column resolution
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Core computation logic - can be called directly with a values array for testing.");
         sb.AppendLine("    /// </summary>");
-        sb.Append("    public static object ").Append(methodName).AppendLine("_Core(object[,] values)");
+        sb.Append("    public static object ").Append(methodName).Append("_Core(object[,] values");
+        foreach (var binding in usedColumnBindings)
+        {
+            sb.Append(", string ").Append("_").Append(binding.ToLowerInvariant()).Append("_colname_");
+        }
+        sb.AppendLine(")");
         sb.AppendLine("    {");
         sb.AppendLine("        try");
         sb.AppendLine("        {");

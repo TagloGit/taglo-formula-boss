@@ -253,4 +253,65 @@ public class LetFormulaReconstructorTests
     }
 
     #endregion
+
+    #region Header Binding Stripping
+
+    [Fact]
+    public void TryReconstruct_StripsHeaderBindings()
+    {
+        // Header bindings (_*_hdr) are injected machinery for dynamic column names
+        // They should be stripped when reconstructing the editable formula
+        var processed = @"=LET(
+            tbl, tblSales,
+            price, tblSales[Price],
+            qty, tblSales[Qty],
+            _price_hdr, INDEX(tblSales[[#Headers],[Price]],1),
+            _qty_hdr, INDEX(tblSales[[#Headers],[Qty]],1),
+            _src_result, ""tbl.rows.reduce(0, (acc, r) => acc + r.price * r.qty)"",
+            result, RESULT(tbl, _price_hdr, _qty_hdr),
+            result)";
+
+        var success = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(success);
+        Assert.NotNull(editable);
+        // Header bindings should be stripped
+        Assert.DoesNotContain("_price_hdr", editable);
+        Assert.DoesNotContain("_qty_hdr", editable);
+        Assert.DoesNotContain("[[#Headers]", editable);
+        Assert.DoesNotContain("INDEX(", editable);
+        // Original LET bindings should be preserved
+        Assert.Contains("tbl, tblSales", editable);
+        Assert.Contains("price, tblSales[Price]", editable);
+        Assert.Contains("qty, tblSales[Qty]", editable);
+        // Backtick expression should be reconstructed
+        Assert.Contains("`tbl.rows.reduce(0, (acc, r) => acc + r.price * r.qty)`", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_StripsMultipleHeaderBindings()
+    {
+        var processed = @"=LET(
+            tbl, tblProducts,
+            name, tblProducts[Name],
+            price, tblProducts[Price],
+            qty, tblProducts[Quantity],
+            _name_hdr, INDEX(tblProducts[[#Headers],[Name]],1),
+            _price_hdr, INDEX(tblProducts[[#Headers],[Price]],1),
+            _qty_hdr, INDEX(tblProducts[[#Headers],[Quantity]],1),
+            _src_total, ""tbl.rows.reduce(0, (acc, r) => acc + r.price * r.qty)"",
+            total, TOTAL(tbl, _name_hdr, _price_hdr, _qty_hdr),
+            total)";
+
+        var success = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(success);
+        Assert.NotNull(editable);
+        // All header bindings should be stripped
+        Assert.DoesNotContain("_name_hdr", editable);
+        Assert.DoesNotContain("_price_hdr", editable);
+        Assert.DoesNotContain("_qty_hdr", editable);
+    }
+
+    #endregion
 }

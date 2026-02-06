@@ -349,8 +349,10 @@ public class LetFormulaParserTests
         var bindings = LetFormulaParser.ExtractColumnBindings(structure!);
 
         Assert.Equal(2, bindings.Count);
-        Assert.Equal("Price", bindings["price"]);
-        Assert.Equal("Qty", bindings["qty"]);
+        Assert.Equal("Price", bindings["price"].ColumnName);
+        Assert.Equal("tblSales", bindings["price"].TableName);
+        Assert.Equal("Qty", bindings["qty"].ColumnName);
+        Assert.Equal("tblSales", bindings["qty"].TableName);
     }
 
     [Fact]

@@ -797,4 +797,166 @@ public class ValuePathTests
     }
 
     #endregion
+
+    #region Dynamic Column Name Parameters (LET Column Bindings)
+
+    [Fact]
+    public void ColumnBindings_ReduceWithDynamicColumnNames_Works()
+    {
+        // Arrange: Simulate a LET formula with column bindings
+        // =LET(tbl, tblSales, p, tblSales[Price], q, tblSales[Qty], `tbl.rows.reduce(0, (acc, r) => acc + r.p * r.q)`)
+        var values = new object[,]
+        {
+            { "Name", "Price", "Qty" },
+            { "Apple", 10.0, 2.0 },
+            { "Banana", 20.0, 3.0 },
+            { "Cherry", 15.0, 4.0 }
+        };
+
+        // Column bindings: p -> Price, q -> Qty
+        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
+        {
+            ["p"] = new("tblSales", "Price"),
+            ["q"] = new("tblSales", "Qty")
+        };
+
+        // Expression uses r.p and r.q which should resolve via column bindings
+        var compilation = TestHelpers.CompileExpressionWithColumnBindings(
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r.p * r.q)",
+            columnBindings);
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Verify that column bindings were detected and used
+        Assert.NotNull(compilation.UsedColumnBindings);
+        Assert.Equal(2, compilation.UsedColumnBindings.Count);
+        Assert.Contains("p", compilation.UsedColumnBindings);
+        Assert.Contains("q", compilation.UsedColumnBindings);
+
+        // Act: Call _Core with column names passed as parameters (simulating Excel passing INDEX() results)
+        var result = TestHelpers.ExecuteWithValuesAndColumnNames(
+            compilation.CoreMethod!,
+            values,
+            "Price", "Qty");  // These are the actual column names
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        // 10*2 + 20*3 + 15*4 = 20 + 60 + 60 = 140
+        Assert.Equal(140.0, Convert.ToDouble(result));
+    }
+
+    [Fact]
+    public void ColumnBindings_SelectWithDynamicColumnNames_Works()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Product", "UnitPrice", "Quantity" },
+            { "A", 5.0, 3.0 },
+            { "B", 10.0, 2.0 }
+        };
+
+        // Column bindings with different names than headers (common pattern)
+        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
+        {
+            ["price"] = new("tbl", "UnitPrice"),
+            ["qty"] = new("tbl", "Quantity")
+        };
+
+        var compilation = TestHelpers.CompileExpressionWithColumnBindings(
+            "data.withHeaders().rows.select(r => r.price * r.qty)",
+            columnBindings);
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act: Pass actual column names
+        var result = TestHelpers.ExecuteWithValuesAndColumnNames(
+            compilation.CoreMethod!,
+            values,
+            "UnitPrice", "Quantity");
+
+        // Assert
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(15.0, Convert.ToDouble(arr[0, 0])); // 5*3
+        Assert.Equal(20.0, Convert.ToDouble(arr[1, 0])); // 10*2
+    }
+
+    [Fact]
+    public void ColumnBindings_WhereWithDynamicColumnNames_Works()
+    {
+        // Arrange
+        var values = new object[,]
+        {
+            { "Item", "Cost" },
+            { "A", 50.0 },
+            { "B", 150.0 },
+            { "C", 75.0 }
+        };
+
+        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
+        {
+            ["c"] = new("data", "Cost")
+        };
+
+        var compilation = TestHelpers.CompileExpressionWithColumnBindings(
+            "data.withHeaders().rows.where(r => r.c > 60)",
+            columnBindings);
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValuesAndColumnNames(
+            compilation.CoreMethod!,
+            values,
+            "Cost");
+
+        // Assert - should return B (150) and C (75)
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0));
+    }
+
+    [Fact]
+    public void ColumnBindings_BracketNotation_Works()
+    {
+        // Test r[price] bracket notation with column bindings
+        var values = new object[,]
+        {
+            { "Name", "Price" },
+            { "X", 100.0 },
+            { "Y", 200.0 }
+        };
+
+        var columnBindings = new Dictionary<string, FormulaBoss.Interception.ColumnBindingInfo>
+        {
+            ["price"] = new("tbl", "Price")
+        };
+
+        // Use bracket notation r[price] instead of r.price
+        var compilation = TestHelpers.CompileExpressionWithColumnBindings(
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r[price])",
+            columnBindings);
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValuesAndColumnNames(
+            compilation.CoreMethod!,
+            values,
+            "Price");
+
+        // Assert
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(300.0, Convert.ToDouble(result)); // 100 + 200
+    }
+
+    #endregion
 }

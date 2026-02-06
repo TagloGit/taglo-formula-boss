@@ -1,3 +1,4 @@
+using FormulaBoss.Interception;
 using FormulaBoss.Parsing;
 using FormulaBoss.Transpilation;
 
@@ -860,49 +861,67 @@ public class TranspilerTests
     [Fact]
     public void Transpiler_ColumnBindings_ResolvesBracketSyntax()
     {
-        // When column bindings are provided, r[price] should resolve to r[__GetCol__("Price")]
-        var columnBindings = new Dictionary<string, string>
+        // When column bindings are provided, r[price] should resolve to r[__GetCol__(_price_colname_)]
+        var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
-            ["price"] = "Price",
-            ["qty"] = "Quantity"
+            ["price"] = new ColumnBindingInfo("tblSales", "Price"),
+            ["qty"] = new ColumnBindingInfo("tblSales", "Quantity")
         };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r[price])", columnBindings);
 
         Assert.False(result.RequiresObjectModel);
-        // Should resolve "price" to "Price" column name
-        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
-        Assert.DoesNotContain("__GetCol__(\"price\")", result.SourceCode);
+        // Should use variable reference for dynamic column lookup
+        Assert.Contains("__GetCol__(_price_colname_)", result.SourceCode);
+        // Should generate UDF parameter for column name
+        Assert.Contains("object price_col_param", result.SourceCode);
+        // Should generate extractColName helper and use it
+        Assert.Contains("extractColName", result.SourceCode);
+        Assert.Contains("_price_colname_ = extractColName(price_col_param)", result.SourceCode);
+        // Should track used column bindings
+        Assert.NotNull(result.UsedColumnBindings);
+        Assert.Contains("price", result.UsedColumnBindings);
     }
 
     [Fact]
     public void Transpiler_ColumnBindings_ResolvesDotSyntax()
     {
-        // When column bindings are provided, r.price should resolve to r[__GetCol__("Price")]
-        var columnBindings = new Dictionary<string, string>
+        // When column bindings are provided, r.price should resolve to r[__GetCol__(_price_colname_)]
+        var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
-            ["price"] = "Price"
+            ["price"] = new ColumnBindingInfo("tblSales", "Price")
         };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r.price)", columnBindings);
 
         Assert.False(result.RequiresObjectModel);
-        // Should resolve "price" to "Price" column name
-        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        // Should use variable reference for dynamic column lookup
+        Assert.Contains("__GetCol__(_price_colname_)", result.SourceCode);
+        // Should track used column bindings
+        Assert.NotNull(result.UsedColumnBindings);
+        Assert.Contains("price", result.UsedColumnBindings);
     }
 
     [Fact]
     public void Transpiler_ColumnBindings_MultipleBindings()
     {
         // Multiple column bindings should all resolve correctly
-        var columnBindings = new Dictionary<string, string>
+        var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
-            ["price"] = "Price",
-            ["qty"] = "Quantity"
+            ["price"] = new ColumnBindingInfo("tblSales", "Price"),
+            ["qty"] = new ColumnBindingInfo("tblSales", "Quantity")
         };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r[price] * r[qty])", columnBindings);
 
         Assert.False(result.RequiresObjectModel);
-        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
-        Assert.Contains("__GetCol__(\"Quantity\")", result.SourceCode);
+        // Should use variable references for dynamic column lookup
+        Assert.Contains("__GetCol__(_price_colname_)", result.SourceCode);
+        Assert.Contains("__GetCol__(_qty_colname_)", result.SourceCode);
+        // Should generate parameters for both column names
+        Assert.Contains("object price_col_param", result.SourceCode);
+        Assert.Contains("object qty_col_param", result.SourceCode);
+        // Should track both used column bindings
+        Assert.NotNull(result.UsedColumnBindings);
+        Assert.Contains("price", result.UsedColumnBindings);
+        Assert.Contains("qty", result.UsedColumnBindings);
     }
 
     #endregion
@@ -1217,7 +1236,7 @@ public class TranspilerTests
         return transpiler.Transpile(expression, source, preferredName);
     }
 
-    private static TranspileResult TranspileWithBindings(string source, Dictionary<string, string> columnBindings)
+    private static TranspileResult TranspileWithBindings(string source, Dictionary<string, ColumnBindingInfo> columnBindings)
     {
         var lexer = new Lexer(source);
         var tokens = lexer.ScanTokens();
