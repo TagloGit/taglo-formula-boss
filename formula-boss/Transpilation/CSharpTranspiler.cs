@@ -20,6 +20,13 @@ public class CSharpTranspiler
     private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
     private readonly HashSet<string> _usedColumnBindings = []; // Column bindings that were actually referenced
     private readonly HashSet<string> _accumulatorParameters = []; // Lambda parameters that are accumulators (double)
+
+    // Typed row tracking
+    private readonly HashSet<string> _typedRowColumns = []; // Literal column names accessed via r.Column
+    private readonly HashSet<string> _typedRowLetColumns = []; // LET-bound columns accessed via r.p
+    private bool _needsTypedRows; // True when r.Property dot notation is used (triggers typed row generation)
+    private string? _typedRowClassName; // Generated TypedRow class name
+
     private Dictionary<string, ColumnBindingInfo>? _columnBindings; // LET-bound variable name -> (table, column)
     private bool _hasStatementLambda; // True if any statement lambda is used (needs helper methods)
     private bool _needsHeaderContext; // True if named column access is used (r[Price], r.Price)
@@ -48,15 +55,26 @@ public class CSharpTranspiler
         _usesCols = false;
         _needsHeaderContext = false;
         _hasStatementLambda = false;
+        _needsTypedRows = false;
+        _typedRowClassName = null;
         _columnBindings = columnBindings;
         _lambdaParameters.Clear();
         _parameterTypes.Clear();
         _rowParameters.Clear();
         _accumulatorParameters.Clear();
         _usedColumnBindings.Clear();
+        _typedRowColumns.Clear();
+        _typedRowLetColumns.Clear();
 
         // First pass: detect if object model is needed and track rows/cols/map usage
         DetectObjectModelUsage(expression);
+
+        // Generate TypedRow class name after detection (so it can be referenced during transpilation)
+        if (_needsTypedRows)
+        {
+            var hash = GenerateTypedRowHash();
+            _typedRowClassName = $"TypedRow_{hash}";
+        }
 
         // Generate the method name - use preferred name if provided, otherwise hash
         var methodName = GenerateMethodName(originalSource, preferredName);
@@ -136,9 +154,34 @@ public class CSharpTranspiler
                 DetectObjectModelUsage(lambda.Body);
                 break;
 
-            case StatementLambdaExpr:
-                // Statement lambdas: we can't analyze the block easily, but we set the flag
-                // The helper methods will be generated when statement lambdas are transpiled
+            case StatementLambdaExpr stmtLambda:
+                // Statement lambdas: scan the block for property access patterns on parameters
+                // This enables typed row detection for statement lambda bodies
+                foreach (var param in stmtLambda.Parameters)
+                {
+                    // Look for patterns like "r.PropertyName" in the block
+                    var pattern = $@"\b{System.Text.RegularExpressions.Regex.Escape(param)}\.(\w+)";
+                    var matches = System.Text.RegularExpressions.Regex.Matches(stmtLambda.StatementBlock, pattern);
+                    foreach (System.Text.RegularExpressions.Match match in matches)
+                    {
+                        var propertyName = match.Groups[1].Value;
+                        // "cells" is a special property for cell access
+                        if (propertyName.Equals("cells", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _needsTypedRows = true;
+                            _needsHeaderContext = true;
+                            _requiresObjectModel = true;
+                        }
+                        else if (!IsReservedProperty(propertyName))
+                        {
+                            // Assume it's a column property access
+                            _needsTypedRows = true;
+                            _needsHeaderContext = true;
+                            _requiresObjectModel = true;
+                            _typedRowColumns.Add(propertyName);
+                        }
+                    }
+                }
                 break;
 
             case GroupingExpr grouping:
@@ -348,30 +391,51 @@ public class CSharpTranspiler
             return escapedAccess;
         }
 
-        // Check for row column access: r.Price where r is a row parameter
-        // This takes precedence over Cell property handling when not in object model mode
+        // Check for row property access: r.Property where r is a row parameter
+        // Dot notation on rows triggers typed row generation
         if (member.Target is IdentifierExpr targetIdent
-            && _rowParameters.Contains(targetIdent.Name)
-            && !_requiresObjectModel)
+            && _rowParameters.Contains(targetIdent.Name))
         {
-            // Set flag to generate header dictionary in the method
-            _needsHeaderContext = true;
-
-            // Check if memberName is a LET-bound column variable (r.price where price = tblSales[Price])
-            // In that case, resolve to either a variable reference or the column name
-            var columnRef = ResolveColumnBinding(memberName);
-            var isVariableRef = columnRef != null && columnRef.EndsWith("_colname_");
-            var columnName = columnRef ?? memberName;
-
-            // Row column access via dot notation: r.Price -> r[__GetCol__("Price")] or r[__GetCol__(_price_colname_)]
-            var colArg = isVariableRef ? columnName : $"\"{columnName}\"";
-            var rowColumnAccess = $"{target}[__GetCol__({colArg})]";
-            if (member.IsSafeAccess)
+            // Special case: r.cells gives access to the underlying Excel Range objects
+            if (memberName.Equals("cells", StringComparison.OrdinalIgnoreCase))
             {
-                return $"((Func<dynamic>)(() => {{ try {{ return {rowColumnAccess}; }} catch {{ return null; }} }}))()";
+                _needsTypedRows = true;
+                _needsHeaderContext = true;
+                _requiresObjectModel = true;
+
+                var cellsAccess = $"{target}.cells";
+                if (member.IsSafeAccess)
+                {
+                    return $"((Func<dynamic>)(() => {{ try {{ return {cellsAccess}; }} catch {{ return null; }} }}))()";
+                }
+                return cellsAccess;
             }
 
-            return rowColumnAccess;
+            // Dot notation on row parameter triggers typed rows
+            _needsTypedRows = true;
+            _needsHeaderContext = true;
+            _requiresObjectModel = true; // Auto-switch to object model for typed rows
+
+            // Track the column reference for TypedRow class generation
+            var columnRef = ResolveColumnBinding(memberName);
+            if (columnRef != null && columnRef.EndsWith("_colname_"))
+            {
+                // LET-bound column: r.p where p = tbl[Price]
+                _typedRowLetColumns.Add(memberName);
+            }
+            else
+            {
+                // Literal column: r.Price
+                _typedRowColumns.Add(memberName);
+            }
+
+            // Return property access - TypedRow will have this property
+            var propAccess = $"{target}.{memberName}";
+            if (member.IsSafeAccess)
+            {
+                return $"((Func<dynamic>)(() => {{ try {{ return {propAccess}; }} catch {{ return null; }} }}))()";
+            }
+            return propAccess;
         }
 
         // Special handling for cell properties on lambda parameters (shorthand syntax)
@@ -425,6 +489,13 @@ public class CSharpTranspiler
                 "cols" => "__cols__",
                 _ => $"__source__.{memberName}"
             };
+        }
+
+        // Handle data.rows.rows fallback to raw object[][] (bypasses typed rows)
+        // Only use __rawRows__ when typed rows are active; otherwise __rows__ is already raw
+        if (target == "__rows__" && memberName.Equals("rows", StringComparison.OrdinalIgnoreCase))
+        {
+            return _needsTypedRows ? "__rawRows__" : "__rows__";
         }
 
         // Check if target has a known type (for deep property access like c.Interior.ColorIndex)
@@ -529,7 +600,6 @@ public class CSharpTranspiler
         }
 
         var target = TranspileExpression(call.Target);
-        var args = call.Arguments.Select(TranspileExpression).ToList();
 
         // Handle .withHeaders() BEFORE the implicit __values__ conversion
         // .withHeaders() should preserve __source__ so .rows can become __rows__
@@ -545,11 +615,35 @@ public class CSharpTranspiler
             target = "__values__";
         }
 
+        // For row-aware methods on __rows__, DON'T eagerly transpile arguments - they need row context
+        // These methods will transpile the lambda with _rowParameters set up
+        var methodNameLower = call.Method.ToLowerInvariant();
+        var isRowContext = target == "__rows__" || target.Contains("__rows__");
+        if (isRowContext && methodNameLower is "where" or "select" or "find" or "some" or "every")
+        {
+            return methodNameLower switch
+            {
+                "where" => TranspileRowAwareMethod(target, [], call, "Where"),
+                "select" => TranspileRowAwareMethod(target, [], call, "Select"),
+                "find" => TranspileRowAwareMethod(target, [], call, "FirstOrDefault"),
+                "some" => TranspileRowAwareMethod(target, [], call, "Any"),
+                "every" => TranspileRowAwareMethod(target, [], call, "All"),
+                _ => throw new InvalidOperationException("Unreachable")
+            };
+        }
+
+        // For other methods, eagerly transpile arguments
+        var args = call.Arguments.Select(TranspileExpression).ToList();
+
         // Map DSL methods to C#/LINQ equivalents
         return call.Method.ToLowerInvariant() switch
         {
-            "where" => TranspileRowAwareMethod(target, args, call, "Where"),
-            "select" => TranspileRowAwareMethod(target, args, call, "Select"),
+            // Standard LINQ methods (for non-row context - row context is handled above)
+            "where" => $"{target}.Where({string.Join(", ", args)})",
+            "select" => $"{target}.Select({string.Join(", ", args)})",
+            "find" => $"{target}.FirstOrDefault({string.Join(", ", args)})",
+            "some" => $"{target}.Any({string.Join(", ", args)})",
+            "every" => $"{target}.All({string.Join(", ", args)})",
             "map" => $"__MapPreserveShape__({string.Join(", ", args)})",
             "toarray" => $"{target}.ToArray()",
             "orderby" => $"{target}.OrderBy({string.Join(", ", args)})",
@@ -593,12 +687,7 @@ public class CSharpTranspiler
             "aggregate" or "reduce" => GenerateRowAwareAggregate(target, args, call),
             // scan: running reduction returning array of intermediate states
             "scan" => GenerateRowAwareScan(target, args, call),
-            // find: return first matching row, or null if not found
-            "find" => TranspileRowAwareMethod(target, args, call, "FirstOrDefault"),
-            // some: return true if any row matches predicate
-            "some" => TranspileRowAwareMethod(target, args, call, "Any"),
-            // every: return true if all rows match predicate
-            "every" => TranspileRowAwareMethod(target, args, call, "All"),
+            // Note: find, some, every are handled above (row-aware methods)
             _ => $"{target}.{call.Method}({string.Join(", ", args)})"
         };
     }
@@ -1080,8 +1169,15 @@ public class CSharpTranspiler
             }
             else if (_rowParameters.Contains(param))
             {
-                // Row parameter - use object[] for indexing support
-                paramTypes.Add($"object[] {param}");
+                // Row parameter - use TypedRow if typed rows are needed, otherwise object[]
+                if (_needsTypedRows && _typedRowClassName != null)
+                {
+                    paramTypes.Add($"{_typedRowClassName} {param}");
+                }
+                else
+                {
+                    paramTypes.Add($"object[] {param}");
+                }
             }
             else if (stmtLambda.Parameters.Count == 1)
             {
@@ -1245,9 +1341,17 @@ public class CSharpTranspiler
         // Get the list of used column bindings for generating extra parameters
         var usedBindings = _usedColumnBindings.ToList();
 
+        // Ensure TypedRow class name is generated before method generation
+        // (it may have been detected during transpilation rather than initial detection)
+        if (_needsTypedRows && _typedRowClassName == null)
+        {
+            _typedRowClassName = $"TypedRow_{GenerateTypedRowHash()}";
+        }
+
         if (_requiresObjectModel)
         {
-            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext, usedBindings);
+            GenerateObjectModelMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext, usedBindings,
+                _needsTypedRows, _typedRowClassName, _typedRowLetColumns);
         }
         else
         {
@@ -1258,6 +1362,12 @@ public class CSharpTranspiler
         if (_hasStatementLambda)
         {
             GenerateHelperMethods(sb);
+        }
+
+        // Generate TypedRow class for typed row access
+        if (_needsTypedRows)
+        {
+            GenerateTypedRowClass(sb);
         }
 
         sb.AppendLine("}");
@@ -1338,13 +1448,161 @@ public class CSharpTranspiler
         sb.AppendLine("    }");
     }
 
+    /// <summary>
+    /// Generates a TypedRow class for typed row access.
+    /// The class provides typed properties for column access and a cells property for Range access.
+    /// Note: _typedRowClassName must be set before calling this method.
+    /// </summary>
+    private void GenerateTypedRowClass(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine($"    // TypedRow class for typed row access");
+        sb.AppendLine($"    private class {_typedRowClassName}");
+        sb.AppendLine("    {");
+
+        // Fields
+        sb.AppendLine("        public readonly object[] __values__;");
+        sb.AppendLine("        public readonly dynamic[] cells;");
+        sb.AppendLine("        private readonly Func<string, int> _getCol;");
+
+        // Fields for LET-bound column indices
+        foreach (var letCol in _typedRowLetColumns)
+        {
+            sb.AppendLine($"        private readonly int _{letCol}_idx;");
+        }
+
+        sb.AppendLine();
+
+        // Constructor
+        sb.Append($"        public {_typedRowClassName}(object[] values, dynamic[] cells, Func<string, int> getCol");
+        foreach (var letCol in _typedRowLetColumns)
+        {
+            sb.Append($", int {letCol}_idx");
+        }
+        sb.AppendLine(")");
+        sb.AppendLine("        {");
+        sb.AppendLine("            __values__ = values;");
+        sb.AppendLine("            this.cells = cells;");
+        sb.AppendLine("            _getCol = getCol;");
+        foreach (var letCol in _typedRowLetColumns)
+        {
+            sb.AppendLine($"            _{letCol}_idx = {letCol}_idx;");
+        }
+        sb.AppendLine("        }");
+        sb.AppendLine();
+
+        // Literal column properties - use runtime lookup
+        foreach (var col in _typedRowColumns)
+        {
+            var safeName = SanitizePropertyName(col);
+            sb.AppendLine($"        public dynamic {safeName} => __values__[_getCol(\"{col}\")];");
+        }
+
+        // LET-bound column properties - use pre-resolved index
+        foreach (var letCol in _typedRowLetColumns)
+        {
+            sb.AppendLine($"        public dynamic {letCol} => __values__[_{letCol}_idx];");
+        }
+
+        sb.AppendLine();
+
+        // Indexers for bracket access
+        sb.AppendLine("        public dynamic this[int index] => __values__[index];");
+        sb.AppendLine("        public dynamic this[string colName] => __values__[_getCol(colName)];");
+
+        sb.AppendLine("    }");
+    }
+
+    /// <summary>
+    /// Generates a hash for the TypedRow class name based on column names.
+    /// </summary>
+    private string GenerateTypedRowHash()
+    {
+        var columns = string.Join(",", _typedRowColumns.OrderBy(c => c))
+            + "|" + string.Join(",", _typedRowLetColumns.OrderBy(c => c));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(columns));
+        return Convert.ToHexString(hash)[..8];
+    }
+
+    /// <summary>
+    /// Sanitizes a column name to be a valid C# property name.
+    /// </summary>
+    private static string SanitizePropertyName(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return "_";
+
+        var sb = new StringBuilder();
+
+        // First character must be letter or underscore
+        var first = name[0];
+        if (char.IsLetter(first) || first == '_')
+            sb.Append(first);
+        else
+            sb.Append('_');
+
+        // Subsequent characters can be letters, digits, or underscore
+        for (int i = 1; i < name.Length; i++)
+        {
+            var c = name[i];
+            if (char.IsLetterOrDigit(c) || c == '_')
+                sb.Append(c);
+            else
+                sb.Append('_');
+        }
+
+        // Avoid C# reserved keywords
+        var result = sb.ToString();
+        if (IsCSharpKeyword(result))
+            return "_" + result;
+
+        return result;
+    }
+
+    private static bool IsCSharpKeyword(string word)
+    {
+        return word switch
+        {
+            "abstract" or "as" or "base" or "bool" or "break" or "byte" or "case" or "catch" or
+            "char" or "checked" or "class" or "const" or "continue" or "decimal" or "default" or
+            "delegate" or "do" or "double" or "else" or "enum" or "event" or "explicit" or
+            "extern" or "false" or "finally" or "fixed" or "float" or "for" or "foreach" or
+            "goto" or "if" or "implicit" or "in" or "int" or "interface" or "internal" or
+            "is" or "lock" or "long" or "namespace" or "new" or "null" or "object" or
+            "operator" or "out" or "override" or "params" or "private" or "protected" or
+            "public" or "readonly" or "ref" or "return" or "sbyte" or "sealed" or "short" or
+            "sizeof" or "stackalloc" or "static" or "string" or "struct" or "switch" or
+            "this" or "throw" or "true" or "try" or "typeof" or "uint" or "ulong" or
+            "unchecked" or "unsafe" or "ushort" or "using" or "virtual" or "void" or
+            "volatile" or "while" => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Checks if a property name is reserved (not a column name) for statement lambda detection.
+    /// </summary>
+    private static bool IsReservedProperty(string name)
+    {
+        // Common object properties that aren't column names
+        return name.ToLowerInvariant() switch
+        {
+            "length" or "count" or "value" or "tostring" or "gethashcode" or
+            "gettype" or "equals" or "cells" => true,
+            _ => false
+        };
+    }
+
     private static void GenerateObjectModelMethod(
         StringBuilder sb,
         string methodName,
         string expressionCode,
         bool usesCols,
         bool needsHeaderContext,
-        IReadOnlyList<string> usedColumnBindings)
+        IReadOnlyList<string> usedColumnBindings,
+        bool needsTypedRows,
+        string? typedRowClassName,
+        IReadOnlySet<string> typedRowLetColumns)
     {
         // Generate the ExcelDNA entry point - uses reflection to avoid assembly identity issues
         // Add extra parameters for each used column binding
@@ -1542,10 +1800,41 @@ public class CSharpTranspiler
             sb.AppendLine("            // Build row arrays for .rows operations - skip header row if present in range");
             sb.AppendLine("            var __dataStartRow__ = __skipHeaderRow__ ? 2 : 1;");
             sb.AppendLine("            var __dataRowCount__ = __skipHeaderRow__ ? rowCount - 1 : rowCount;");
-            sb.AppendLine(
-                "            var __rows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(r =>");
-            sb.AppendLine(
-                "                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+
+            if (needsTypedRows && typedRowClassName != null)
+            {
+                // Generate raw rows fallback (for data.rows.rows access)
+                sb.AppendLine(
+                    "            var __rawRows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(r =>");
+                sb.AppendLine(
+                    "                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+                sb.AppendLine();
+
+                // Pre-resolve column indices for LET-bound columns
+                foreach (var letCol in typedRowLetColumns)
+                {
+                    sb.AppendLine($"            var _{letCol}_colIndex_ = __GetCol__(_{letCol}_colname_);");
+                }
+
+                // Build typed rows with cell access
+                sb.AppendLine("            var __rows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(__rowNum__ => {");
+                sb.AppendLine("                var __rowValues__ = Enumerable.Range(1, colCount).Select(c => (object)range.Cells[__rowNum__, c].Value).ToArray();");
+                sb.AppendLine("                var __rowCells__ = Enumerable.Range(1, colCount).Select(c => (dynamic)range.Cells[__rowNum__, c]).ToArray();");
+                sb.Append($"                return new {typedRowClassName}(__rowValues__, __rowCells__, __GetCol__");
+                foreach (var letCol in typedRowLetColumns)
+                {
+                    sb.Append($", _{letCol}_colIndex_");
+                }
+                sb.AppendLine(");");
+                sb.AppendLine("            });");
+            }
+            else
+            {
+                sb.AppendLine(
+                    "            var __rows__ = Enumerable.Range(__dataStartRow__, __dataRowCount__).Select(r =>");
+                sb.AppendLine(
+                    "                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
+            }
         }
         else
         {

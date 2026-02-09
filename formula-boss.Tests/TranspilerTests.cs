@@ -719,13 +719,14 @@ public class TranspilerTests
     }
 
     [Fact]
-    public void Transpiler_RowMemberAccess_GeneratesHeaderLookup()
+    public void Transpiler_RowMemberAccess_UsesTypedRows()
     {
+        // Dot notation (r.Price) now triggers TypedRow generation
         var result = Transpile("data.rows.where(r => r.Price > 10).toArray()");
 
-        Assert.False(result.RequiresObjectModel);
-        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
-        Assert.Contains("__headers__", result.SourceCode);
+        Assert.True(result.RequiresObjectModel); // Dot notation triggers object model
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        Assert.Contains("public dynamic Price =>", result.SourceCode);
     }
 
     [Fact]
@@ -819,11 +820,12 @@ public class TranspilerTests
     [Fact]
     public void Transpiler_StringComparison_WithDotNotation()
     {
+        // Dot notation triggers TypedRow which returns dynamic, so ToString() comparison still works
         var result = Transpile("data.rows.where(r => r.Status == \"Active\").toArray()");
 
-        Assert.False(result.RequiresObjectModel);
-        // Dot notation column access should also be converted to string
-        Assert.Contains("?.ToString()", result.SourceCode);
+        Assert.True(result.RequiresObjectModel); // Dot notation triggers object model
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        Assert.Contains("public dynamic Status =>", result.SourceCode);
     }
 
     [Fact]
@@ -885,16 +887,17 @@ public class TranspilerTests
     [Fact]
     public void Transpiler_ColumnBindings_ResolvesDotSyntax()
     {
-        // When column bindings are provided, r.price should resolve to r[__GetCol__(_price_colname_)]
+        // Dot notation with LET-bound column triggers TypedRow with pre-resolved index
         var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
             ["price"] = new ColumnBindingInfo("tblSales", "Price")
         };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r.price)", columnBindings);
 
-        Assert.False(result.RequiresObjectModel);
-        // Should use variable reference for dynamic column lookup
-        Assert.Contains("__GetCol__(_price_colname_)", result.SourceCode);
+        Assert.True(result.RequiresObjectModel); // Dot notation triggers object model
+        // TypedRow class with LET-bound property
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        Assert.Contains("public dynamic price =>", result.SourceCode);
         // Should track used column bindings
         Assert.NotNull(result.UsedColumnBindings);
         Assert.Contains("price", result.UsedColumnBindings);
@@ -1305,6 +1308,127 @@ public class TranspilerTests
 
         // IsEmpty should use reflection for ExcelEmpty check
         Assert.Contains("x.GetType().Name == \"ExcelEmpty\"", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Typed Row Objects
+
+    [Fact]
+    public void Transpiler_GeneratesTypedRow_WhenDotNotationUsed()
+    {
+        var result = Transpile("data.rows.where(r => r.Price > 10).toArray()");
+
+        Assert.True(result.RequiresObjectModel); // Dot notation triggers object model
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        Assert.Contains("public dynamic Price =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesTypedRow_WithCellsProperty()
+    {
+        var result = Transpile("data.rows.select(r => r.cells[0].Value).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        Assert.Contains("public readonly dynamic[] cells;", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesTypedRow_WithMultipleColumns()
+    {
+        var result = Transpile("data.rows.select(r => r.Price * r.Qty).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("public dynamic Price =>", result.SourceCode);
+        Assert.Contains("public dynamic Qty =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesTypedRow_WithIndexers()
+    {
+        var result = Transpile("data.rows.select(r => r.Price).toArray()");
+
+        Assert.Contains("public dynamic this[int index] => __values__[index];", result.SourceCode);
+        Assert.Contains("public dynamic this[string colName] => __values__[_getCol(colName)];", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesRawRowsFallback_WhenTypedRowsUsed()
+    {
+        var result = Transpile("data.rows.select(r => r.Price).toArray()");
+
+        Assert.Contains("var __rawRows__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_TranspilesRowsRows_ToRawRows_WhenTypedRowsUsed()
+    {
+        // When typed rows are used, data.rows.rows gives raw object[][] fallback
+        var result = Transpile("data.rows.where(r => r.Price > 10).select(r => r).rows.count()");
+
+        Assert.Contains("__rawRows__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_TranspilesRowsRows_ToRows_WhenNoTypedRows()
+    {
+        // When typed rows aren't used, data.rows.rows just stays as __rows__
+        var result = Transpile("data.rows.rows.count()");
+
+        // Should NOT generate TypedRow class
+        Assert.DoesNotContain("private class TypedRow_", result.SourceCode);
+        // data.rows.rows should become __rows__ (since __rawRows__ doesn't exist)
+        Assert.Contains("__rows__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_DoesNotGenerateTypedRow_WhenBracketNotationOnly()
+    {
+        var result = Transpile("data.rows.where(r => r[0] > 10).toArray()");
+
+        // Bracket notation should NOT trigger typed rows (backward compat)
+        Assert.DoesNotContain("private class TypedRow_", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesTypedRow_ForLetBoundColumns()
+    {
+        var bindings = new Dictionary<string, ColumnBindingInfo>
+        {
+            ["p"] = new ColumnBindingInfo("tblSales", "Price"),
+            ["q"] = new ColumnBindingInfo("tblSales", "Quantity")
+        };
+
+        var result = TranspileWithBindings("data.rows.select(r => r.p * r.q).toArray()", bindings);
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        // LET-bound columns use pre-resolved indices
+        Assert.Contains("public dynamic p =>", result.SourceCode);
+        Assert.Contains("public dynamic q =>", result.SourceCode);
+        Assert.Contains("_p_colIndex_", result.SourceCode);
+        Assert.Contains("_q_colIndex_", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StatementLambda_UsesTypedRowType()
+    {
+        var result = Transpile("data.rows.where(r => { return r.Price > 10; }).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        // Statement lambda should use TypedRow type for parameter
+        Assert.Matches(@"\(TypedRow_\w+ r\)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_SanitizesColumnNames_ForProperties()
+    {
+        // Column names with spaces or special chars should be sanitized
+        var result = Transpile("data.rows.select(r => r.Sales_Amount).toArray()");
+
+        Assert.Contains("public dynamic Sales_Amount =>", result.SourceCode);
     }
 
     #endregion
