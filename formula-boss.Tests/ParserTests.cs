@@ -721,11 +721,167 @@ public class ParserTests
 
     #endregion
 
+    #region Statement Lambda Tests
+
+    [Fact]
+    public void Parser_StatementLambda_SingleParam()
+    {
+        var expr = Parse("data.where(c => { return c > 0; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        Assert.Equal("where", call.Method);
+        Assert.Single(call.Arguments);
+
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Equal("c", lambda.Parameter);
+        Assert.Equal("{ return c > 0; }", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_MultiParam()
+    {
+        var expr = Parse("data.reduce((acc, x) => { return acc + x; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        Assert.Equal("reduce", call.Method);
+        Assert.Single(call.Arguments);
+
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Equal(2, lambda.Parameters.Count);
+        Assert.Equal("acc", lambda.Parameters[0]);
+        Assert.Equal("x", lambda.Parameters[1]);
+        Assert.Equal("{ return acc + x; }", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_NestedBraces()
+    {
+        var expr = Parse("data.where(c => { if (c > 0) { return true; } return false; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Equal("c", lambda.Parameter);
+        Assert.Equal("{ if (c > 0) { return true; } return false; }", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_StringWithBraces()
+    {
+        var expr = Parse("data.where(c => { var s = \"{\"; return true; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Equal("{ var s = \"{\"; return true; }", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_VerbatimString()
+    {
+        var expr = Parse("data.where(c => { var s = @\"{}\"; return true; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Equal("{ var s = @\"{}\"; return true; }", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_SingleLineComment()
+    {
+        var source = "data.where(c => { // { comment\n return true; })";
+        var expr = Parse(source);
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Contains("// { comment", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_MultiLineComment()
+    {
+        var expr = Parse("data.where(c => { /* } */ return true; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Contains("/* } */", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_StatementLambda_CharLiteral()
+    {
+        var expr = Parse("data.where(c => { var ch = '{'; return true; })");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
+        Assert.Equal("{ var ch = '{'; return true; }", lambda.StatementBlock);
+    }
+
+    [Fact]
+    public void Parser_ExpressionLambda_StillWorks()
+    {
+        // Ensure regular expression lambdas still work
+        var expr = Parse("data.where(c => c > 0)");
+
+        var call = Assert.IsType<MethodCall>(expr);
+        var lambda = Assert.IsType<LambdaExpr>(call.Arguments[0]);
+        Assert.Equal("c", lambda.Parameter);
+    }
+
+    [Fact]
+    public void Lexer_CaptureStatementBlock_SimpleBraces()
+    {
+        var source = "{ return true; }";
+        var result = Lexer.CaptureStatementBlock(source, 0);
+
+        Assert.NotNull(result);
+        Assert.Equal("{ return true; }", result.Value.Block);
+        Assert.Equal(source.Length, result.Value.EndPosition);
+    }
+
+    [Fact]
+    public void Lexer_CaptureStatementBlock_NestedBraces()
+    {
+        var source = "{ if (x) { return 1; } return 0; }";
+        var result = Lexer.CaptureStatementBlock(source, 0);
+
+        Assert.NotNull(result);
+        Assert.Equal(source, result.Value.Block);
+    }
+
+    [Fact]
+    public void Lexer_CaptureStatementBlock_UnbalancedBraces()
+    {
+        var source = "{ return true;";
+        var result = Lexer.CaptureStatementBlock(source, 0);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Lexer_CaptureStatementBlock_NotStartingWithBrace()
+    {
+        var source = "return true;";
+        var result = Lexer.CaptureStatementBlock(source, 0);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Lexer_CaptureStatementBlock_SkipsLeadingWhitespace()
+    {
+        var source = "   { return true; }";
+        var result = Lexer.CaptureStatementBlock(source, 0);
+
+        Assert.NotNull(result);
+        Assert.Equal("{ return true; }", result.Value.Block);
+    }
+
+    #endregion
+
     private static Expression? Parse(string source)
     {
         var lexer = new Lexer(source);
         var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
+        var parser = new Parser(tokens, source);
         return parser.Parse();
     }
 }

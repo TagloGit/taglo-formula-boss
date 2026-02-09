@@ -19,7 +19,9 @@ public class CSharpTranspiler
 
     private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
     private readonly HashSet<string> _usedColumnBindings = []; // Column bindings that were actually referenced
+    private readonly HashSet<string> _accumulatorParameters = []; // Lambda parameters that are accumulators (double)
     private Dictionary<string, ColumnBindingInfo>? _columnBindings; // LET-bound variable name -> (table, column)
+    private bool _hasStatementLambda; // True if any statement lambda is used (needs helper methods)
     private bool _needsHeaderContext; // True if named column access is used (r[Price], r.Price)
     private bool _requiresObjectModel;
     private bool _usesCols;
@@ -45,10 +47,12 @@ public class CSharpTranspiler
         _requiresObjectModel = false;
         _usesCols = false;
         _needsHeaderContext = false;
+        _hasStatementLambda = false;
         _columnBindings = columnBindings;
         _lambdaParameters.Clear();
         _parameterTypes.Clear();
         _rowParameters.Clear();
+        _accumulatorParameters.Clear();
         _usedColumnBindings.Clear();
 
         // First pass: detect if object model is needed and track rows/cols/map usage
@@ -132,6 +136,11 @@ public class CSharpTranspiler
                 DetectObjectModelUsage(lambda.Body);
                 break;
 
+            case StatementLambdaExpr:
+                // Statement lambdas: we can't analyze the block easily, but we set the flag
+                // The helper methods will be generated when statement lambdas are transpiled
+                break;
+
             case GroupingExpr grouping:
                 DetectObjectModelUsage(grouping.Inner);
                 break;
@@ -164,6 +173,7 @@ public class CSharpTranspiler
             MemberAccess member => TranspileMemberAccess(member),
             MethodCall call => TranspileMethodCall(call),
             LambdaExpr lambda => TranspileLambda(lambda),
+            StatementLambdaExpr stmtLambda => TranspileStatementLambda(stmtLambda),
             GroupingExpr grouping => $"({TranspileExpression(grouping.Inner)})",
             IndexAccess indexAccess => TranspileIndexAccess(indexAccess),
             _ => throw new InvalidOperationException($"Unknown expression type: {expression.GetType().Name}")
@@ -752,6 +762,25 @@ public class CSharpTranspiler
             return $"{target}.{csharpMethod}({transpiledLambda})";
         }
 
+        // Handle statement lambdas in row context
+        if (isRowContext && call.Arguments.Count > 0 && call.Arguments[0] is StatementLambdaExpr stmtLambda)
+        {
+            var rowParam = stmtLambda.Parameters.FirstOrDefault();
+            if (rowParam != null)
+            {
+                _rowParameters.Add(rowParam);
+            }
+
+            var transpiledLambda = TranspileExpression(stmtLambda);
+
+            if (rowParam != null)
+            {
+                _rowParameters.Remove(rowParam);
+            }
+
+            return $"{target}.{csharpMethod}({transpiledLambda})";
+        }
+
         // Not in row context, use normal args
         return $"{target}.{csharpMethod}({string.Join(", ", args)})";
     }
@@ -772,6 +801,7 @@ public class CSharpTranspiler
         // For row-aware aggregate, we need to re-transpile the lambda with row context
         if (isRowContext)
         {
+            // Handle expression lambdas
             if (call.Arguments.Count == 1 && call.Arguments[0] is LambdaExpr lambda1)
             {
                 // Single argument: unseeded aggregate
@@ -809,6 +839,42 @@ public class CSharpTranspiler
                 {
                     _rowParameters.Remove(rowParam);
                 }
+
+                return $"{target}.Aggregate({seed}, {transpiledLambda})";
+            }
+
+            // Handle statement lambdas
+            if (call.Arguments.Count == 1 && call.Arguments[0] is StatementLambdaExpr stmtLambda1)
+            {
+                var rowParam = stmtLambda1.Parameters.Count > 1 ? stmtLambda1.Parameters[1] : null;
+                if (rowParam != null)
+                {
+                    _rowParameters.Add(rowParam);
+                }
+
+                var transpiledLambda = TranspileExpression(stmtLambda1);
+
+                if (rowParam != null)
+                {
+                    _rowParameters.Remove(rowParam);
+                }
+
+                return $"{target}.Aggregate({transpiledLambda})";
+            }
+
+            if (call.Arguments.Count >= 2 && call.Arguments[1] is StatementLambdaExpr stmtLambda2)
+            {
+                var seed = ConvertSeedToDouble(preTranspiledArgs[0]);
+                var rowParam = stmtLambda2.Parameters.Count > 1 ? stmtLambda2.Parameters[1] : null;
+                var accParam = stmtLambda2.Parameters.Count > 0 ? stmtLambda2.Parameters[0] : null;
+
+                if (rowParam != null) _rowParameters.Add(rowParam);
+                if (accParam != null) _accumulatorParameters.Add(accParam);
+
+                var transpiledLambda = TranspileExpression(stmtLambda2);
+
+                if (rowParam != null) _rowParameters.Remove(rowParam);
+                if (accParam != null) _accumulatorParameters.Remove(accParam);
 
                 return $"{target}.Aggregate({seed}, {transpiledLambda})";
             }
@@ -860,6 +926,33 @@ public class CSharpTranspiler
                    $"foreach (var {rowParam} in {target}) {{ " +
                    $"{accParam} = fn({accParam}, {rowParam}); " +
                    $"results.Add({accParam}); " +
+                   $"}} " +
+                   $"return results; " +
+                   $"}}))()";
+        }
+
+        // Handle statement lambdas in row context
+        if (isRowContext && call.Arguments.Count >= 2 && call.Arguments[1] is StatementLambdaExpr stmtLambda)
+        {
+            var rowParam = stmtLambda.Parameters.Count > 1 ? stmtLambda.Parameters[1] : null;
+            var accParam = stmtLambda.Parameters.Count > 0 ? stmtLambda.Parameters[0] : null;
+            var accParamName = accParam ?? "acc";
+
+            if (rowParam != null) _rowParameters.Add(rowParam);
+            if (accParam != null) _accumulatorParameters.Add(accParam);
+
+            var transpiledLambda = TranspileExpression(stmtLambda);
+
+            if (rowParam != null) _rowParameters.Remove(rowParam);
+            if (accParam != null) _accumulatorParameters.Remove(accParam);
+
+            return $"((Func<IEnumerable<object>>)(() => {{ " +
+                   $"Func<double, object[], double> fn = {transpiledLambda}; " +
+                   $"var results = new List<object>(); " +
+                   $"var {accParamName} = {seed}; " +
+                   $"foreach (var {rowParam} in {target}) {{ " +
+                   $"{accParamName} = fn({accParamName}, {rowParam}); " +
+                   $"results.Add({accParamName}); " +
                    $"}} " +
                    $"return results; " +
                    $"}}))()";
@@ -943,6 +1036,68 @@ public class CSharpTranspiler
 
         // Multi-parameter: (acc, x) => body
         return $"({string.Join(", ", lambda.Parameters)}) => {body}";
+    }
+
+    /// <summary>
+    /// Transpiles a statement lambda expression.
+    /// Uses explicit parameter types: (dynamic c) for object-model, (object v) for value-only.
+    /// </summary>
+    private string TranspileStatementLambda(StatementLambdaExpr stmtLambda)
+    {
+        _hasStatementLambda = true;
+
+        // Add all parameters to the tracking set
+        foreach (var param in stmtLambda.Parameters)
+        {
+            _lambdaParameters.Add(param);
+
+            if (_requiresObjectModel && stmtLambda.Parameters.Count == 1)
+            {
+                _parameterTypes[param] = "Cell";
+            }
+        }
+
+        // Remove all parameters from the tracking set when done
+        foreach (var param in stmtLambda.Parameters)
+        {
+            _lambdaParameters.Remove(param);
+            _parameterTypes.Remove(param);
+        }
+
+        // Determine parameter types
+        // For accumulator params (in aggregate/scan with seed): double
+        // For row params: object[] (for indexing)
+        // For single-param lambdas: (dynamic c) for object model, (object v) for value-only
+        // For multi-param lambdas (like reduce): (double acc, object[] r)
+        var paramTypes = new List<string>();
+        for (var i = 0; i < stmtLambda.Parameters.Count; i++)
+        {
+            var param = stmtLambda.Parameters[i];
+            if (_accumulatorParameters.Contains(param))
+            {
+                // Accumulator parameter in aggregate/scan - use double to match seed type
+                paramTypes.Add($"double {param}");
+            }
+            else if (_rowParameters.Contains(param))
+            {
+                // Row parameter - use object[] for indexing support
+                paramTypes.Add($"object[] {param}");
+            }
+            else if (stmtLambda.Parameters.Count == 1)
+            {
+                // Single param: dynamic for object model (to access cell properties), object for value-only
+                paramTypes.Add(_requiresObjectModel ? $"dynamic {param}" : $"object {param}");
+            }
+            else
+            {
+                // Other params (like current item in reduce)
+                paramTypes.Add($"object {param}");
+            }
+        }
+
+        // Generate the statement lambda syntax with explicit types
+        var paramsStr = string.Join(", ", paramTypes);
+        return $"({paramsStr}) => {stmtLambda.StatementBlock}";
     }
 
     private bool IsLambdaParameter(Expression expression) =>
@@ -1099,9 +1254,88 @@ public class CSharpTranspiler
             GenerateValueOnlyMethod(sb, methodName, expressionCode, _usesCols, _needsHeaderContext, usedBindings);
         }
 
+        // Generate helper methods for statement lambdas
+        if (_hasStatementLambda)
+        {
+            GenerateHelperMethods(sb);
+        }
+
         sb.AppendLine("}");
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Generates helper methods for use inside statement lambdas.
+    /// These provide type-safe conversions since statement lambda bodies deal with object types.
+    /// </summary>
+    private static void GenerateHelperMethods(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("    // Helper methods for statement lambdas");
+        sb.AppendLine("    // These provide safe type conversions for working with Excel values");
+        sb.AppendLine();
+
+        // Num: Convert to double, null → 0
+        sb.AppendLine("    /// <summary>Converts a value to double. Returns 0 for null.</summary>");
+        sb.AppendLine("    private static double Num(object x)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (x == null) return 0;");
+        sb.AppendLine("        if (x is double d) return d;");
+        sb.AppendLine("        if (x is int i) return i;");
+        sb.AppendLine("        if (x is long l) return l;");
+        sb.AppendLine("        if (x is decimal dec) return (double)dec;");
+        sb.AppendLine("        if (double.TryParse(x.ToString(), out var parsed)) return parsed;");
+        sb.AppendLine("        return 0;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Str: Convert to string, null → ""
+        sb.AppendLine("    /// <summary>Converts a value to string. Returns empty string for null.</summary>");
+        sb.AppendLine("    private static string Str(object x)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        return x?.ToString() ?? \"\";");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Bool: Convert to bool, handles "TRUE"/"FALSE" strings
+        sb.AppendLine("    /// <summary>Converts a value to bool. Handles TRUE/FALSE strings.</summary>");
+        sb.AppendLine("    private static bool Bool(object x)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (x == null) return false;");
+        sb.AppendLine("        if (x is bool b) return b;");
+        sb.AppendLine("        var s = x.ToString();");
+        sb.AppendLine("        if (string.Equals(s, \"TRUE\", StringComparison.OrdinalIgnoreCase)) return true;");
+        sb.AppendLine("        if (string.Equals(s, \"FALSE\", StringComparison.OrdinalIgnoreCase)) return false;");
+        sb.AppendLine("        if (double.TryParse(s, out var d)) return d != 0;");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Int: Convert to int, null → 0
+        sb.AppendLine("    /// <summary>Converts a value to int. Returns 0 for null.</summary>");
+        sb.AppendLine("    private static int Int(object x)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (x == null) return 0;");
+        sb.AppendLine("        if (x is int i) return i;");
+        sb.AppendLine("        if (x is double d) return (int)d;");
+        sb.AppendLine("        if (x is long l) return (int)l;");
+        sb.AppendLine("        if (x is decimal dec) return (int)dec;");
+        sb.AppendLine("        if (int.TryParse(x.ToString(), out var parsed)) return parsed;");
+        sb.AppendLine("        return 0;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // IsEmpty: Check if null/empty/ExcelEmpty
+        sb.AppendLine("    /// <summary>Returns true if value is null, empty string, or ExcelEmpty.</summary>");
+        sb.AppendLine("    private static bool IsEmpty(object x)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (x == null) return true;");
+        sb.AppendLine("        if (x is string s && string.IsNullOrEmpty(s)) return true;");
+        sb.AppendLine("        // Use reflection to check for ExcelEmpty type (avoids assembly identity issues)");
+        sb.AppendLine("        if (x.GetType().Name == \"ExcelEmpty\") return true;");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
     }
 
     private static void GenerateObjectModelMethod(

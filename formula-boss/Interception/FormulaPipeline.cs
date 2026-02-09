@@ -93,8 +93,8 @@ public class FormulaPipeline
             return new PipelineResult(false, null, $"Lexer error: {errorToken.Lexeme}", null);
         }
 
-        // Step 2: Parse
-        var parser = new Parser(tokens);
+        // Step 2: Parse (pass source for statement lambda support)
+        var parser = new Parser(tokens, expression);
         var ast = parser.Parse();
 
         if (ast == null || parser.Errors.Count > 0)
@@ -137,6 +137,11 @@ public class FormulaPipeline
         if (compileErrors.Count > 0)
         {
             var errorMsg = string.Join("; ", compileErrors);
+            // Add hints for common type-related errors in statement lambdas
+            if (ContainsTypeError(errorMsg))
+            {
+                errorMsg += GetStatementLambdaHint();
+            }
             return new PipelineResult(false, null, $"Compile error: {errorMsg}", null);
         }
 
@@ -244,4 +249,37 @@ public class FormulaPipeline
         var dotIndex = expression.IndexOf('.');
         return dotIndex > 0 ? expression[..dotIndex] : expression;
     }
+
+    /// <summary>
+    ///     Checks if an error message contains type-related keywords that suggest
+    ///     the user might need to use helper methods in a statement lambda.
+    /// </summary>
+    private static bool ContainsTypeError(string errorMsg)
+    {
+        var typeKeywords = new[]
+        {
+            "cannot convert",
+            "no implicit conversion",
+            "cannot implicitly convert",
+            "operator",
+            "cannot be applied to operands of type",
+            "does not contain a definition for",
+            "cannot be used as",
+            "cannot assign"
+        };
+
+        return typeKeywords.Any(keyword =>
+            errorMsg.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    ///     Returns a hint message about available helper methods for statement lambdas.
+    /// </summary>
+    private static string GetStatementLambdaHint() =>
+        "\n\nHint: In statement lambdas, use helper methods for type conversion:\n" +
+        "  Num(x) - convert to double\n" +
+        "  Str(x) - convert to string\n" +
+        "  Bool(x) - convert to bool\n" +
+        "  Int(x) - convert to int\n" +
+        "  IsEmpty(x) - check if null/empty";
 }
