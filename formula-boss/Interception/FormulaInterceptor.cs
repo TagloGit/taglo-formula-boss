@@ -95,7 +95,7 @@ public class FormulaInterceptor : IDisposable
             if (cellsToProcess.Count > 0)
             {
                 // Get worksheet reference for later
-                dynamic worksheet = target.Worksheet;
+                var worksheet = target.Worksheet;
 
                 // Queue processing as a macro - registration must happen in macro context
                 ExcelAsyncUtil.QueueAsMacro(() =>
@@ -178,7 +178,8 @@ public class FormulaInterceptor : IDisposable
         var columnBindings = LetFormulaParser.ExtractColumnBindings(letStructure);
         if (columnBindings.Count > 0)
         {
-            Debug.WriteLine($"Found {columnBindings.Count} column bindings: {string.Join(", ", columnBindings.Select(kv => $"{kv.Key}={kv.Value.TableName}[{kv.Value.ColumnName}]"))}");
+            Debug.WriteLine(
+                $"Found {columnBindings.Count} column bindings: {string.Join(", ", columnBindings.Select(kv => $"{kv.Key}={kv.Value.TableName}[{kv.Value.ColumnName}]"))}");
         }
 
         foreach (var binding in letStructure.Bindings)
@@ -210,7 +211,8 @@ public class FormulaInterceptor : IDisposable
                         result.InputParameter ?? variableName,
                         result.ColumnParameters);
 
-                    Debug.WriteLine($"LET UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
+                    Debug.WriteLine(
+                        $"LET UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
                 }
                 else
                 {
@@ -242,7 +244,8 @@ public class FormulaInterceptor : IDisposable
                         result.InputParameter ?? "_result",
                         result.ColumnParameters);
 
-                    Debug.WriteLine($"LET result UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
+                    Debug.WriteLine(
+                        $"LET result UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
                 }
                 else
                 {

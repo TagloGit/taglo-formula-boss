@@ -529,6 +529,17 @@ public class TranspilerTests
     }
 
     [Fact]
+    public void Transpiler_Map_WithColorProperty_TranslatesCorrectly()
+    {
+        var result = Transpile("data.cells.map(c => c.color)");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("__MapPreserveShape__", result.SourceCode);
+        // .color should translate to .Interior.ColorIndex
+        Assert.Contains("Interior.ColorIndex", result.SourceCode);
+    }
+
+    [Fact]
     public void Transpiler_MapPreservesShapeHelper_IsGenerated()
     {
         var result = Transpile("data.map(v => v * 2)");

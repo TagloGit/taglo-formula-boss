@@ -397,10 +397,11 @@ public class CSharpTranspiler
             && _rowParameters.Contains(targetIdent.Name))
         {
             // Special case: r.cells gives access to the underlying Excel Range objects
+            // Note: r.cells doesn't need header context - it's purely index-based access
             if (memberName.Equals("cells", StringComparison.OrdinalIgnoreCase))
             {
                 _needsTypedRows = true;
-                _needsHeaderContext = true;
+                // Don't set _needsHeaderContext - r.cells is index-based, not named column access
                 _requiresObjectModel = true;
 
                 var cellsAccess = $"{target}.cells";
@@ -1835,6 +1836,22 @@ public class CSharpTranspiler
                 sb.AppendLine(
                     "                Enumerable.Range(1, colCount).Select(c => (object)range.Cells[r, c].Value).ToArray());");
             }
+        }
+        else if (needsTypedRows && typedRowClassName != null)
+        {
+            // TypedRow without header context - for r.cells access only (no named columns)
+            // All rows included (no header skipping), but provide a dummy __GetCol__ that throws if used
+            sb.AppendLine("            // Column lookup - not available without header context");
+            sb.AppendLine("            Func<string, int> __GetCol__ = (name) => {");
+            sb.AppendLine("                throw new Exception($\"Named column access '{name}' requires .withHeaders() or using a table reference. Use numeric index instead.\");");
+            sb.AppendLine("            };");
+            sb.AppendLine();
+            sb.AppendLine("            // Build typed rows for .rows operations - includes all rows (no header detection)");
+            sb.AppendLine("            var __rows__ = Enumerable.Range(1, rowCount).Select(__rowNum__ => {");
+            sb.AppendLine("                var __rowValues__ = Enumerable.Range(1, colCount).Select(c => (object)range.Cells[__rowNum__, c].Value).ToArray();");
+            sb.AppendLine("                var __rowCells__ = Enumerable.Range(1, colCount).Select(c => (dynamic)range.Cells[__rowNum__, c]).ToArray();");
+            sb.AppendLine($"                return new {typedRowClassName}(__rowValues__, __rowCells__, __GetCol__);");
+            sb.AppendLine("            });");
         }
         else
         {
