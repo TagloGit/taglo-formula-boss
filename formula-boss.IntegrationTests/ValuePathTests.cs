@@ -404,14 +404,14 @@ public class ValuePathTests
     }
 
     [Fact]
-    public void Rows_WithHeaders_DotNotation_Works()
+    public void Rows_WithHeaders_BracketNotation_Works()
     {
         // Arrange: First row is headers
         var values = new object[,] { { "Name", "Price", "Qty" }, { "Apple", 10.0, 2.0 }, { "Banana", 20.0, 3.0 } };
 
-        // Use dot notation r.Price instead of bracket notation r[Price]
+        // Use bracket notation r[Price] (dot notation r.Price requires object model/Excel Range)
         var compilation = TestHelpers.CompileExpression(
-            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r.Price)");
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r[Price])");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
@@ -732,7 +732,7 @@ public class ValuePathTests
     public void ColumnBindings_ReduceWithDynamicColumnNames_Works()
     {
         // Arrange: Simulate a LET formula with column bindings
-        // =LET(tbl, tblSales, p, tblSales[Price], q, tblSales[Qty], `tbl.rows.reduce(0, (acc, r) => acc + r.p * r.q)`)
+        // =LET(tbl, tblSales, p, tblSales[Price], q, tblSales[Qty], `tbl.rows.reduce(0, (acc, r) => acc + r[p] * r[q])`)
         var values = new object[,]
         {
             { "Name", "Price", "Qty" }, { "Apple", 10.0, 2.0 }, { "Banana", 20.0, 3.0 }, { "Cherry", 15.0, 4.0 }
@@ -745,9 +745,9 @@ public class ValuePathTests
             ["q"] = new("tblSales", "Qty")
         };
 
-        // Expression uses r.p and r.q which should resolve via column bindings
+        // Expression uses r[p] and r[q] which resolve via column bindings (bracket notation for value-only mode)
         var compilation = TestHelpers.CompileExpressionWithColumnBindings(
-            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r.p * r.q)",
+            "data.withHeaders().rows.reduce(0, (acc, r) => acc + r[p] * r[q])",
             columnBindings);
 
         _output.WriteLine(compilation.GetDiagnostics());
@@ -784,8 +784,9 @@ public class ValuePathTests
             ["qty"] = new("tbl", "Quantity")
         };
 
+        // Use bracket notation for value-only mode (dot notation requires object model)
         var compilation = TestHelpers.CompileExpressionWithColumnBindings(
-            "data.withHeaders().rows.select(r => r.price * r.qty)",
+            "data.withHeaders().rows.select(r => r[price] * r[qty])",
             columnBindings);
 
         _output.WriteLine(compilation.GetDiagnostics());
@@ -814,8 +815,9 @@ public class ValuePathTests
 
         var columnBindings = new Dictionary<string, ColumnBindingInfo> { ["c"] = new("data", "Cost") };
 
+        // Use bracket notation for value-only mode (dot notation requires object model)
         var compilation = TestHelpers.CompileExpressionWithColumnBindings(
-            "data.withHeaders().rows.where(r => r.c > 60)",
+            "data.withHeaders().rows.where(r => r[c] > 60)",
             columnBindings);
 
         _output.WriteLine(compilation.GetDiagnostics());
