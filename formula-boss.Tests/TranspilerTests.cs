@@ -1217,6 +1217,98 @@ public class TranspilerTests
 
     #endregion
 
+    #region Statement Lambda Tests
+
+    [Fact]
+    public void Transpiler_StatementLambda_ObjectModel_UsesDynamicParam()
+    {
+        var result = Transpile("data.cells.where(c => { return c.color == 6; })");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("(dynamic c) => { return c.color == 6; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StatementLambda_ValueOnly_UsesObjectParam()
+    {
+        var result = Transpile("data.values.where(v => { return Num(v) > 0; })");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("(object v) => { return Num(v) > 0; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StatementLambda_GeneratesHelperMethods()
+    {
+        var result = Transpile("data.values.where(v => { return Num(v) > 0; })");
+
+        // Should generate all helper methods
+        Assert.Contains("private static double Num(object x)", result.SourceCode);
+        Assert.Contains("private static string Str(object x)", result.SourceCode);
+        Assert.Contains("private static bool Bool(object x)", result.SourceCode);
+        Assert.Contains("private static int Int(object x)", result.SourceCode);
+        Assert.Contains("private static bool IsEmpty(object x)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_ExpressionLambda_DoesNotGenerateHelperMethods()
+    {
+        var result = Transpile("data.values.where(v => v > 0)");
+
+        // Expression lambdas should NOT generate helper methods
+        Assert.DoesNotContain("private static double Num(object x)", result.SourceCode);
+        Assert.DoesNotContain("private static string Str(object x)", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StatementLambda_MultiParam_UsesObjectTypes()
+    {
+        var result = Transpile("data.values.reduce((acc, x) => { return acc + x; })");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("(object acc, object x) => { return acc + x; }", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StatementLambda_WithRowContext()
+    {
+        var result = Transpile("data.rows.reduce(0, (acc, r) => { return Num(acc) + Num(r[0]); })");
+
+        Assert.False(result.RequiresObjectModel);
+        // Accumulator should be double (matches seed), row parameter should be object[]
+        Assert.Contains("(double acc, object[] r) =>", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_StatementLambda_PreservesBlockContent()
+    {
+        var result = Transpile("data.cells.where(c => { var color = (int)(c.Interior.ColorIndex ?? 0); return color == 6; })");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("var color = (int)(c.Interior.ColorIndex ?? 0); return color == 6;", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_HelperMethod_Num_HandlesNullAndNumbers()
+    {
+        var result = Transpile("data.values.where(v => { return Num(v) > 0; })");
+
+        // Verify Num helper has correct implementation
+        Assert.Contains("if (x == null) return 0;", result.SourceCode);
+        Assert.Contains("if (x is double d) return d;", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_HelperMethod_IsEmpty_UsesReflection()
+    {
+        var result = Transpile("data.values.where(v => { return !IsEmpty(v); })");
+
+        // IsEmpty should use reflection for ExcelEmpty check
+        Assert.Contains("x.GetType().Name == \"ExcelEmpty\"", result.SourceCode);
+    }
+
+    #endregion
+
     private static TranspileResult Transpile(string source)
     {
         return TranspileWithName(source, null);
@@ -1226,7 +1318,7 @@ public class TranspilerTests
     {
         var lexer = new Lexer(source);
         var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
+        var parser = new Parser(tokens, source);
         var expression = parser.Parse();
 
         Assert.NotNull(expression);
@@ -1240,7 +1332,7 @@ public class TranspilerTests
     {
         var lexer = new Lexer(source);
         var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
+        var parser = new Parser(tokens, source);
         var expression = parser.Parse();
 
         Assert.NotNull(expression);

@@ -81,6 +81,30 @@ public record LambdaExpr(IReadOnlyList<string> Parameters, Expression Body) : Ex
 }
 
 /// <summary>
+/// A lambda with a statement block body (e.g., c => { var x = ...; return x; }).
+/// The block content is passed through verbatim to C#.
+/// </summary>
+/// <param name="Parameters">The parameter names (one or more).</param>
+/// <param name="StatementBlock">The C# statement block including braces.</param>
+/// <param name="SourcePosition">The position in source where the block starts.</param>
+public record StatementLambdaExpr(
+    IReadOnlyList<string> Parameters,
+    string StatementBlock,
+    int SourcePosition) : Expression
+{
+    /// <summary>
+    /// Convenience constructor for single-parameter statement lambdas.
+    /// </summary>
+    public StatementLambdaExpr(string parameter, string block, int pos)
+        : this(new[] { parameter }, block, pos) { }
+
+    /// <summary>
+    /// Gets the first (or only) parameter name for backwards compatibility.
+    /// </summary>
+    public string Parameter => Parameters[0];
+}
+
+/// <summary>
 /// A parenthesized expression (for grouping).
 /// </summary>
 /// <param name="Inner">The inner expression.</param>

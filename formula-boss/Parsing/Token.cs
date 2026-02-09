@@ -9,11 +9,13 @@ public enum TokenType
     Identifier,
     Number,
     StringLiteral,
+    CharLiteral,  // 'x' (for statement lambdas)
 
     // Operators
     Dot,
     Comma,
     Arrow,        // =>
+    Assign,       // = (for statement lambdas - not used in expression parsing)
     Plus,
     Minus,
     Star,
@@ -37,6 +39,9 @@ public enum TokenType
     RightParen,
     LeftBracket,
     RightBracket,
+    LeftBrace,   // { (for statement lambdas)
+    RightBrace,  // } (for statement lambdas)
+    Semicolon,   // ; (for statement lambdas)
 
     // Special
     Eof,

@@ -18,6 +18,16 @@ public class Lexer
     }
 
     /// <summary>
+    /// Gets the source string being tokenized.
+    /// </summary>
+    public string Source => _source;
+
+    /// <summary>
+    /// Gets the current position in the source string.
+    /// </summary>
+    public int Position => _position;
+
+    /// <summary>
     /// Scans the entire source and returns all tokens.
     /// </summary>
     public List<Token> ScanTokens()
@@ -74,6 +84,15 @@ public class Lexer
             case ']':
                 AddToken(TokenType.RightBracket, start);
                 break;
+            case '{':
+                AddToken(TokenType.LeftBrace, start);
+                break;
+            case '}':
+                AddToken(TokenType.RightBrace, start);
+                break;
+            case ';':
+                AddToken(TokenType.Semicolon, start);
+                break;
             case ':':
                 AddToken(TokenType.Colon, start);
                 break;
@@ -102,7 +121,8 @@ public class Lexer
                 }
                 else
                 {
-                    AddErrorToken(start, "Unexpected '='. Did you mean '==' or '=>'?");
+                    // Single = is valid inside statement lambdas (C# assignment)
+                    AddToken(TokenType.Assign, start);
                 }
 
                 break;
@@ -164,6 +184,9 @@ public class Lexer
             case '"':
                 ScanString(start);
                 break;
+            case '\'':
+                ScanCharLiteral(start);
+                break;
             default:
                 if (char.IsDigit(c))
                 {
@@ -216,6 +239,51 @@ public class Lexer
         Advance(); // consume closing quote
         var lexeme = _source[start.._position];
         _tokens.Add(new Token(TokenType.StringLiteral, lexeme, sb.ToString(), start));
+    }
+
+    private void ScanCharLiteral(int start)
+    {
+        // Handle escape sequences
+        char value;
+        if (!IsAtEnd() && Peek() == '\\')
+        {
+            Advance(); // consume backslash
+            if (IsAtEnd())
+            {
+                AddErrorToken(start, "Unterminated character literal");
+                return;
+            }
+            var escaped = Advance();
+            value = escaped switch
+            {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '\'' => '\'',
+                '\\' => '\\',
+                '0' => '\0',
+                _ => escaped
+            };
+        }
+        else if (!IsAtEnd())
+        {
+            value = Advance();
+        }
+        else
+        {
+            AddErrorToken(start, "Unterminated character literal");
+            return;
+        }
+
+        if (IsAtEnd() || Peek() != '\'')
+        {
+            AddErrorToken(start, "Unterminated character literal");
+            return;
+        }
+
+        Advance(); // consume closing quote
+        var lexeme = _source[start.._position];
+        _tokens.Add(new Token(TokenType.CharLiteral, lexeme, value, start));
     }
 
     private void ScanNumber(int start)
@@ -289,5 +357,163 @@ public class Lexer
     private void AddErrorToken(int start, string message)
     {
         _tokens.Add(new Token(TokenType.Error, message, null, start));
+    }
+
+    /// <summary>
+    /// Captures a brace-balanced statement block from source starting at given position.
+    /// Handles string literals, verbatim strings, char literals, and comments that may contain braces.
+    /// </summary>
+    /// <param name="source">The source string to capture from.</param>
+    /// <param name="startPosition">The position to start capturing from.</param>
+    /// <returns>A tuple of (block content including braces, end position), or null if not a valid block.</returns>
+    public static (string Block, int EndPosition)? CaptureStatementBlock(string source, int startPosition)
+    {
+        var pos = startPosition;
+
+        // Skip whitespace
+        while (pos < source.Length && char.IsWhiteSpace(source[pos]))
+        {
+            pos++;
+        }
+
+        // Verify starts with {
+        if (pos >= source.Length || source[pos] != '{')
+        {
+            return null;
+        }
+
+        var blockStart = pos;
+        var depth = 0;
+
+        while (pos < source.Length)
+        {
+            var c = source[pos];
+
+            switch (c)
+            {
+                case '{':
+                    depth++;
+                    pos++;
+                    break;
+
+                case '}':
+                    depth--;
+                    pos++;
+                    if (depth == 0)
+                    {
+                        // Successfully captured the block
+                        return (source[blockStart..pos], pos);
+                    }
+                    break;
+
+                case '"':
+                    // Check for verbatim string (@"...")
+                    if (pos > 0 && source[pos - 1] == '@')
+                    {
+                        pos++; // skip opening quote
+                        // Verbatim string: ends at " not followed by another "
+                        while (pos < source.Length)
+                        {
+                            if (source[pos] == '"')
+                            {
+                                pos++;
+                                if (pos >= source.Length || source[pos] != '"')
+                                {
+                                    break; // End of verbatim string
+                                }
+                                pos++; // Skip escaped ""
+                            }
+                            else
+                            {
+                                pos++;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Regular string literal
+                        pos++; // skip opening quote
+                        while (pos < source.Length && source[pos] != '"')
+                        {
+                            if (source[pos] == '\\' && pos + 1 < source.Length)
+                            {
+                                pos += 2; // Skip escape sequence
+                            }
+                            else
+                            {
+                                pos++;
+                            }
+                        }
+                        if (pos < source.Length)
+                        {
+                            pos++; // skip closing quote
+                        }
+                    }
+                    break;
+
+                case '\'':
+                    // Character literal
+                    pos++; // skip opening quote
+                    while (pos < source.Length && source[pos] != '\'')
+                    {
+                        if (source[pos] == '\\' && pos + 1 < source.Length)
+                        {
+                            pos += 2; // Skip escape sequence
+                        }
+                        else
+                        {
+                            pos++;
+                        }
+                    }
+                    if (pos < source.Length)
+                    {
+                        pos++; // skip closing quote
+                    }
+                    break;
+
+                case '/':
+                    if (pos + 1 < source.Length)
+                    {
+                        if (source[pos + 1] == '/')
+                        {
+                            // Single-line comment
+                            pos += 2;
+                            while (pos < source.Length && source[pos] != '\n')
+                            {
+                                pos++;
+                            }
+                        }
+                        else if (source[pos + 1] == '*')
+                        {
+                            // Multi-line comment
+                            pos += 2;
+                            while (pos + 1 < source.Length && !(source[pos] == '*' && source[pos + 1] == '/'))
+                            {
+                                pos++;
+                            }
+                            if (pos + 1 < source.Length)
+                            {
+                                pos += 2; // skip */
+                            }
+                        }
+                        else
+                        {
+                            pos++;
+                        }
+                    }
+                    else
+                    {
+                        pos++;
+                    }
+                    break;
+
+                default:
+                    pos++;
+                    break;
+            }
+        }
+
+        // Unbalanced braces
+        return null;
     }
 }

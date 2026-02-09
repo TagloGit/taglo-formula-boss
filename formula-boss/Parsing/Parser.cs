@@ -1,26 +1,28 @@
-namespace FormulaBoss.Parsing;
+﻿namespace FormulaBoss.Parsing;
 
 /// <summary>
-/// Parses a list of tokens into an AST.
+///     Parses a list of tokens into an AST.
 /// </summary>
 public class Parser
 {
+    private readonly List<string> _errors = [];
+    private readonly string? _source;
     private readonly List<Token> _tokens;
     private int _current;
-    private readonly List<string> _errors = [];
 
-    public Parser(List<Token> tokens)
+    public Parser(List<Token> tokens, string? source = null)
     {
         _tokens = tokens;
+        _source = source;
     }
 
     /// <summary>
-    /// Gets any parsing errors that occurred.
+    ///     Gets any parsing errors that occurred.
     /// </summary>
     public IReadOnlyList<string> Errors => _errors;
 
     /// <summary>
-    /// Parses the tokens into an expression AST.
+    ///     Parses the tokens into an expression AST.
     /// </summary>
     /// <returns>The parsed expression, or null if parsing failed.</returns>
     public Expression? Parse()
@@ -169,7 +171,8 @@ public class Parser
             {
                 // Check for escape hatch: .@property bypasses type validation
                 var isEscaped = Match(TokenType.At);
-                var name = Consume(TokenType.Identifier, isEscaped ? "Expected identifier after '@'" : "Expected identifier after '.'");
+                var name = Consume(TokenType.Identifier,
+                    isEscaped ? "Expected identifier after '@'" : "Expected identifier after '.'");
                 if (Match(TokenType.LeftParen))
                 {
                     // Method call (escape hatch doesn't apply to methods)
@@ -209,8 +212,7 @@ public class Parser
             do
             {
                 args.Add(ParseArgumentExpression());
-            }
-            while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma));
         }
 
         return args;
@@ -218,16 +220,31 @@ public class Parser
 
     private Expression ParseArgumentExpression()
     {
-        // Check for single-param lambda: identifier => expression
+        // Check for single-param lambda: identifier => expression or identifier => { block }
         if (Check(TokenType.Identifier) && CheckNext(TokenType.Arrow))
         {
             var param = Advance();
-            Advance(); // consume =>
+            var arrowToken = Advance(); // consume =>
+
+            // Check for statement lambda: => { ... }
+            if (Check(TokenType.LeftBrace) && _source != null)
+            {
+                var braceToken = Current();
+                var captureResult = Lexer.CaptureStatementBlock(_source, braceToken.Position);
+                if (captureResult.HasValue)
+                {
+                    var (block, endPos) = captureResult.Value;
+                    // Skip tokens until we're past the block
+                    SkipTokensUntilPosition(endPos);
+                    return new StatementLambdaExpr(param.Lexeme, block, braceToken.Position);
+                }
+            }
+
             var body = ParseExpression();
             return new LambdaExpr(param.Lexeme, body);
         }
 
-        // Check for multi-param lambda: (param1, param2, ...) => expression
+        // Check for multi-param lambda: (param1, param2, ...) => expression or => { block }
         if (Check(TokenType.LeftParen))
         {
             // Look ahead to see if this is a lambda or just a grouped expression
@@ -255,7 +272,21 @@ public class Parser
 
                 if (Match(TokenType.RightParen) && Match(TokenType.Arrow))
                 {
-                    // This is a multi-param lambda
+                    // Check for statement lambda: => { ... }
+                    if (Check(TokenType.LeftBrace) && _source != null)
+                    {
+                        var braceToken = Current();
+                        var captureResult = Lexer.CaptureStatementBlock(_source, braceToken.Position);
+                        if (captureResult.HasValue)
+                        {
+                            var (block, endPos) = captureResult.Value;
+                            // Skip tokens until we're past the block
+                            SkipTokensUntilPosition(endPos);
+                            return new StatementLambdaExpr(parameters, block, braceToken.Position);
+                        }
+                    }
+
+                    // This is a multi-param expression lambda
                     var body = ParseExpression();
                     return new LambdaExpr(parameters, body);
                 }
@@ -266,6 +297,18 @@ public class Parser
         }
 
         return ParseExpression();
+    }
+
+    /// <summary>
+    ///     Skips tokens until the current token's position is at or past the given position.
+    ///     Used after capturing a statement block to sync the token stream.
+    /// </summary>
+    private void SkipTokensUntilPosition(int position)
+    {
+        while (!IsAtEnd() && Current().Position < position)
+        {
+            _current++;
+        }
     }
 
     private Expression ParsePrimary()
