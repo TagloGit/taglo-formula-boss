@@ -1136,24 +1136,6 @@ public class CSharpTranspiler
     {
         _hasStatementLambda = true;
 
-        // Add all parameters to the tracking set
-        foreach (var param in stmtLambda.Parameters)
-        {
-            _lambdaParameters.Add(param);
-
-            if (_requiresObjectModel && stmtLambda.Parameters.Count == 1)
-            {
-                _parameterTypes[param] = "Cell";
-            }
-        }
-
-        // Remove all parameters from the tracking set when done
-        foreach (var param in stmtLambda.Parameters)
-        {
-            _lambdaParameters.Remove(param);
-            _parameterTypes.Remove(param);
-        }
-
         // Determine parameter types
         // For accumulator params (in aggregate/scan with seed): double
         // For row params: object[] (for indexing)
