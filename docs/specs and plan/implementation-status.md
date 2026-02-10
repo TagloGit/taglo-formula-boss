@@ -2,7 +2,7 @@
 
 This document tracks implementation progress against the [Excel UDF Add-in Specification](excel-udf-addin-spec.md).
 
-**Last updated:** 2026-02-06
+**Last updated:** 2026-02-10
 
 ---
 
@@ -31,7 +31,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Negative index (r[-1]) | ✅ Complete | Last column access |
 | LET robust column references | ✅ Complete | Column binding detection |
 | Dynamic column params | ✅ Complete | Column renames survive via structured refs |
-| Statement lambdas | ⏳ Not started | |
+| Statement lambdas | ✅ Complete | x => { ... } multi-statement blocks |
 | VBA transpiler | ⏳ Not started | Export feature |
 | Floating editor | ⏳ Not started | Post-MVP |
 
@@ -58,7 +58,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Lambda (=>) | ✅ | ✅ | ✅ | |
 | Single-param lambda | ✅ | ✅ | ✅ | x => expr |
 | Multi-param lambda | ✅ | ✅ | ✅ | (a, b) => expr |
-| Statement lambda | ⏳ | ⏳ | ⏳ | x => { ... } |
+| Statement lambda | ✅ | ✅ | ✅ | x => { ... } |
 | Method chains | ✅ | ✅ | ✅ | .where().select() |
 | Index access | ✅ | ✅ | ✅ | arr[0] |
 | Member access | ✅ | ✅ | ✅ | obj.prop |
@@ -153,7 +153,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Basic LET variable tracking | ✅ | ✅ | ExpressionContext |
 | UDF naming from LET var | ✅ | ✅ | |
 | Source preservation (_src_) | ✅ | ✅ | LetFormulaRewriter |
-| Table binding detection | ⏳ | ⏳ | `tbl, tblSales` |
+| Table binding detection | ✅ | ✅ | Runtime ListObject detection handles this |
 | Column binding detection | ✅ | ✅ | `price, tblSales[Price]` → "Price" |
 | Robust column param gen | ✅ | ✅ | r.price resolves via column bindings |
 | Dynamic column params | ✅ | ✅ | UDF params for column names, header injection |
@@ -211,9 +211,9 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 
 | Feature | Lexer | Parser | Transpiler | Tests |
 |---------|-------|--------|------------|-------|
-| Detect `{` after `=>` | ⏳ | ⏳ | ⏳ | ⏳ |
-| Brace-balanced capture | ⏳ | ⏳ | ⏳ | ⏳ |
-| Emit as literal C# | ⏳ | ⏳ | ⏳ | ⏳ |
+| Detect `{` after `=>` | ✅ | ✅ | ✅ | ✅ |
+| Brace-balanced capture | ✅ | ✅ | ✅ | ✅ |
+| Emit as literal C# | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
@@ -275,7 +275,7 @@ Based on spec and competitive Excel use cases:
 8. ~~LET robust column references~~ ✅
 
 ### Lower Priority (Polish & Export)
-9. Statement lambdas — not started
+9. ~~Statement lambdas~~ ✅ — multi-statement C# blocks
 10. VBA transpiler — not started
 11. ~~Source preservation pattern~~ ✅ — LetFormulaRewriter
 12. ~~Edit mode reconstruction~~ ✅ — EditFormulaCommand with Ctrl+Shift+`
@@ -285,9 +285,9 @@ Based on spec and competitive Excel use cases:
 ## Test Coverage Notes
 
 **Current test counts:**
-- Unit tests: 249
+- Unit tests: 284
 - Integration tests: 42
-- **Total: 291 tests**
+- **Total: 326 tests**
 
 **Well-tested areas:**
 - Parser tests: lexer, AST nodes, operator precedence
