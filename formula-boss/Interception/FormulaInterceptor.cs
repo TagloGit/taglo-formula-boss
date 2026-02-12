@@ -79,41 +79,38 @@ public class FormulaInterceptor : IDisposable
         {
             _isProcessing = true;
 
-            // Collect cells that need processing and unwrap them immediately
-            var cellsToProcess = new List<string>();
-            foreach (var cell in target.Cells)
+            // Only process single-cell changes — backtick formulas are entered one cell at a time
+            if (target.Cells.CountLarge != 1)
             {
-                var cellText = cell.Formula as string;
-                if (BacktickExtractor.IsBacktickFormula(cellText) && cell.Address is string address)
+                return;
+            }
+
+            var cellText = target.Formula as string;
+            if (!BacktickExtractor.IsBacktickFormula(cellText))
+            {
+                return;
+            }
+
+            // Unwrap immediately so cell doesn't stay tall while waiting for processing
+            target.WrapText = false;
+            var address = target.Address as string;
+
+            // Get worksheet reference for later
+            var worksheet = target.Worksheet;
+
+            // Queue processing as a macro - registration must happen in macro context
+            ExcelAsyncUtil.QueueAsMacro(() =>
+            {
+                try
                 {
-                    // Unwrap immediately so cell doesn't stay tall while waiting for processing
-                    cell.WrapText = false;
-                    cellsToProcess.Add(address);
+                    var cell = worksheet.Range[address];
+                    ProcessCell(cell);
                 }
-            }
-
-            if (cellsToProcess.Count > 0)
-            {
-                // Get worksheet reference for later
-                var worksheet = target.Worksheet;
-
-                // Queue processing as a macro - registration must happen in macro context
-                ExcelAsyncUtil.QueueAsMacro(() =>
+                catch (Exception ex)
                 {
-                    foreach (var address in cellsToProcess)
-                    {
-                        try
-                        {
-                            var cell = worksheet.Range[address];
-                            ProcessCell(cell);
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"ProcessCell error for {address}: {ex.Message}");
-                        }
-                    }
-                });
-            }
+                    Debug.WriteLine($"ProcessCell error for {address}: {ex.Message}");
+                }
+            });
         }
         catch (Exception ex)
         {
