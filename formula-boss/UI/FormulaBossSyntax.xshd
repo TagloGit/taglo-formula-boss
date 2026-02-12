@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<SyntaxDefinition name="FormulaBoss" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Method" foreground="#0066CC" fontWeight="bold" />
+  <Color name="Accessor" foreground="#008080" fontWeight="bold" />
+  <Color name="CellProperty" foreground="#8B008B" />
+  <Color name="Number" foreground="#B5563C" />
+  <Color name="String" foreground="#A31515" />
+  <Color name="Operator" foreground="#666666" />
+  <Color name="Arrow" foreground="#FF4500" fontWeight="bold" />
+  <Color name="Keyword" foreground="#0000FF" fontWeight="bold" />
+
+  <RuleSet>
+    <!-- Strings -->
+    <Span color="String">
+      <Begin>"</Begin>
+      <End>"</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <!-- Character literals -->
+    <Span color="String">
+      <Begin>'</Begin>
+      <End>'</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <!-- Arrow operator -->
+    <Rule color="Arrow">=&gt;</Rule>
+
+    <!-- Null coalescing -->
+    <Rule color="Operator">\?\?</Rule>
+
+    <!-- Logical operators -->
+    <Rule color="Operator">&amp;&amp;</Rule>
+    <Rule color="Operator">\|\|</Rule>
+
+    <!-- Comparison operators -->
+    <Rule color="Operator">==|!=|&gt;=|&lt;=|&gt;|&lt;</Rule>
+
+    <!-- C# keywords used in statement lambdas -->
+    <Keywords color="Keyword">
+      <Word>var</Word>
+      <Word>return</Word>
+      <Word>if</Word>
+      <Word>else</Word>
+      <Word>new</Word>
+      <Word>true</Word>
+      <Word>false</Word>
+      <Word>null</Word>
+    </Keywords>
+
+    <!-- Data accessor methods -->
+    <Keywords color="Accessor">
+      <Word>cells</Word>
+      <Word>values</Word>
+      <Word>rows</Word>
+      <Word>cols</Word>
+      <Word>withHeaders</Word>
+    </Keywords>
+
+    <!-- LINQ-style methods -->
+    <Keywords color="Method">
+      <Word>where</Word>
+      <Word>select</Word>
+      <Word>find</Word>
+      <Word>some</Word>
+      <Word>every</Word>
+      <Word>map</Word>
+      <Word>orderBy</Word>
+      <Word>orderByDesc</Word>
+      <Word>take</Word>
+      <Word>skip</Word>
+      <Word>distinct</Word>
+      <Word>groupBy</Word>
+      <Word>reduce</Word>
+      <Word>aggregate</Word>
+      <Word>scan</Word>
+      <Word>sum</Word>
+      <Word>avg</Word>
+      <Word>average</Word>
+      <Word>min</Word>
+      <Word>max</Word>
+      <Word>count</Word>
+      <Word>first</Word>
+      <Word>firstOrDefault</Word>
+      <Word>last</Word>
+      <Word>lastOrDefault</Word>
+      <Word>toArray</Word>
+    </Keywords>
+
+    <!-- Cell properties -->
+    <Keywords color="CellProperty">
+      <Word>value</Word>
+      <Word>color</Word>
+      <Word>rgb</Word>
+      <Word>bold</Word>
+      <Word>italic</Word>
+      <Word>fontSize</Word>
+      <Word>format</Word>
+      <Word>formula</Word>
+      <Word>row</Word>
+      <Word>col</Word>
+      <Word>address</Word>
+    </Keywords>
+
+    <!-- Numbers -->
+    <Rule color="Number">\b\d+(\.\d+)?\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>
