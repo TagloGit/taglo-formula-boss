@@ -83,13 +83,11 @@ public partial class FloatingEditorWindow
             return;
         }
 
-        // Let completion window decide whether to accept/dismiss on this keystroke
-        if (_completionWindow != null)
+        // Close completion on non-identifier chars (space, operators, etc.)
+        // Tab and Enter acceptance is handled natively by CompletionWindow
+        if (_completionWindow != null && !char.IsLetterOrDigit(e.Text[0]))
         {
-            if (!char.IsLetterOrDigit(e.Text[0]) && e.Text[0] != '.')
-            {
-                _completionWindow.CompletionList.RequestInsertion(e);
-            }
+            _completionWindow.Close();
         }
 
         if (!e.Handled && EditorBehaviors.TrySkipClosingChar(FormulaEditor, e.Text[0]))
