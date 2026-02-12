@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -81,43 +82,63 @@ public partial class FloatingEditorWindow
 
     private void OnTextEntering(object sender, TextCompositionEventArgs e)
     {
-        if (e.Text.Length != 1)
+        try
         {
-            return;
-        }
+            if (e.Text.Length != 1)
+            {
+                return;
+            }
 
-        // Close completion on non-identifier chars (space, operators, etc.)
-        // Tab and Enter acceptance is handled natively by CompletionWindow
-        if (_completionWindow != null && !char.IsLetterOrDigit(e.Text[0]))
-        {
-            _completionWindow.Close();
-        }
+            // Close completion on non-identifier chars (space, operators, etc.)
+            // Tab and Enter acceptance is handled natively by CompletionWindow
+            if (_completionWindow != null && !char.IsLetterOrDigit(e.Text[0]))
+            {
+                _completionWindow.Close();
+            }
 
-        if (!e.Handled && EditorBehaviors.TrySkipClosingChar(FormulaEditor, e.Text[0]))
+            if (!e.Handled && EditorBehaviors.TrySkipClosingChar(FormulaEditor, e.Text[0]))
+            {
+                e.Handled = true;
+            }
+        }
+        catch (Exception ex)
         {
-            e.Handled = true;
+            Debug.WriteLine($"OnTextEntering error: {ex.Message}");
         }
     }
 
     private void OnTextEntered(object sender, TextCompositionEventArgs e)
     {
-        if (e.Text.Length != 1)
+        try
         {
-            return;
+            if (e.Text.Length != 1)
+            {
+                return;
+            }
+
+            var ch = e.Text[0];
+            if (ch == '{')
+            {
+                EditorBehaviors.DeIndentOpenBrace(FormulaEditor);
+            }
+
+            EditorBehaviors.AutoInsertClosingChar(FormulaEditor, ch);
+
+            // Trigger completion on '.' or any letter
+            if (ch == '.' || char.IsLetter(ch))
+            {
+                ShowCompletion();
+            }
+
+            // Close completion window if filtering has removed all visible items
+            if (_completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0)
+            {
+                _completionWindow.Close();
+            }
         }
-
-        var ch = e.Text[0];
-        if (ch == '{')
+        catch (Exception ex)
         {
-            EditorBehaviors.DeIndentOpenBrace(FormulaEditor);
-        }
-
-        EditorBehaviors.AutoInsertClosingChar(FormulaEditor, ch);
-
-        // Trigger completion on '.' or any letter
-        if (ch == '.' || char.IsLetter(ch))
-        {
-            ShowCompletion();
+            Debug.WriteLine($"OnTextEntered error: {ex.Message}");
         }
     }
 
@@ -167,31 +188,38 @@ public partial class FloatingEditorWindow
             _completionWindow.CompletionList.CompletionData.Add(item);
         }
 
-        _completionWindow.Show();
-        _completionWindow.Closed += (_, _) => _completionWindow = null;
-
         // Force initial filter - the document change that triggered us already
         // happened before the window was hooked into document events
         if (wordLength > 0)
         {
             _completionWindow.CompletionList.SelectItem(textUpToCaret[^wordLength..]);
         }
+
+        _completionWindow.Show();
+        _completionWindow.Closed += (_, _) => _completionWindow = null;
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None
-                               && EditorBehaviors.TryExpandBraceBlock(FormulaEditor))
+        try
         {
-            e.Handled = true;
-            return;
-        }
+            if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None
+                                   && EditorBehaviors.TryExpandBraceBlock(FormulaEditor))
+            {
+                e.Handled = true;
+                return;
+            }
 
-        if (e is { Key: Key.Enter, KeyboardDevice.Modifiers: ModifierKeys.Control })
+            if (e is { Key: Key.Enter, KeyboardDevice.Modifiers: ModifierKeys.Control })
+            {
+                e.Handled = true;
+                FormulaApplied?.Invoke(this, FormulaText);
+                Hide();
+            }
+        }
+        catch (Exception ex)
         {
-            e.Handled = true;
-            FormulaApplied?.Invoke(this, FormulaText);
-            Hide();
+            Debug.WriteLine($"OnPreviewKeyDown error: {ex.Message}");
         }
     }
 
