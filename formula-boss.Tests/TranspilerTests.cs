@@ -1,4 +1,4 @@
-using FormulaBoss.Interception;
+﻿using FormulaBoss.Interception;
 using FormulaBoss.Parsing;
 using FormulaBoss.Transpilation;
 
@@ -8,6 +8,37 @@ namespace FormulaBoss.Tests;
 
 public class TranspilerTests
 {
+    private static TranspileResult Transpile(string source) => TranspileWithName(source, null);
+
+    private static TranspileResult TranspileWithName(string source, string? preferredName)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens, source);
+        var expression = parser.Parse();
+
+        Assert.NotNull(expression);
+        Assert.Empty(parser.Errors);
+
+        var transpiler = new CSharpTranspiler();
+        return transpiler.Transpile(expression, source, preferredName);
+    }
+
+    private static TranspileResult TranspileWithBindings(string source,
+        Dictionary<string, ColumnBindingInfo> columnBindings)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens, source);
+        var expression = parser.Parse();
+
+        Assert.NotNull(expression);
+        Assert.Empty(parser.Errors);
+
+        var transpiler = new CSharpTranspiler();
+        return transpiler.Transpile(expression, source, null, columnBindings);
+    }
+
     #region Object Model Detection
 
     [Fact]
@@ -877,8 +908,8 @@ public class TranspilerTests
         // When column bindings are provided, r[price] should resolve to r[__GetCol__(_price_colname_)]
         var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
-            ["price"] = new ColumnBindingInfo("tblSales", "Price"),
-            ["qty"] = new ColumnBindingInfo("tblSales", "Quantity")
+            ["price"] = new("tblSales", "Price"),
+            ["qty"] = new("tblSales", "Quantity")
         };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r[price])", columnBindings);
 
@@ -899,10 +930,7 @@ public class TranspilerTests
     public void Transpiler_ColumnBindings_ResolvesDotSyntax()
     {
         // Dot notation with LET-bound column triggers TypedRow with pre-resolved index
-        var columnBindings = new Dictionary<string, ColumnBindingInfo>
-        {
-            ["price"] = new ColumnBindingInfo("tblSales", "Price")
-        };
+        var columnBindings = new Dictionary<string, ColumnBindingInfo> { ["price"] = new("tblSales", "Price") };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r.price)", columnBindings);
 
         Assert.True(result.RequiresObjectModel); // Dot notation triggers object model
@@ -920,8 +948,8 @@ public class TranspilerTests
         // Multiple column bindings should all resolve correctly
         var columnBindings = new Dictionary<string, ColumnBindingInfo>
         {
-            ["price"] = new ColumnBindingInfo("tblSales", "Price"),
-            ["qty"] = new ColumnBindingInfo("tblSales", "Quantity")
+            ["price"] = new("tblSales", "Price"),
+            ["qty"] = new("tblSales", "Quantity")
         };
         var result = TranspileWithBindings("data.rows.reduce(0, (acc, r) => acc + r[price] * r[qty])", columnBindings);
 
@@ -1296,7 +1324,8 @@ public class TranspilerTests
     [Fact]
     public void Transpiler_StatementLambda_PreservesBlockContent()
     {
-        var result = Transpile("data.cells.where(c => { var color = (int)(c.Interior.ColorIndex ?? 0); return color == 6; })");
+        var result =
+            Transpile("data.cells.where(c => { var color = (int)(c.Interior.ColorIndex ?? 0); return color == 6; })");
 
         Assert.True(result.RequiresObjectModel);
         Assert.Contains("var color = (int)(c.Interior.ColorIndex ?? 0); return color == 6;", result.SourceCode);
@@ -1407,8 +1436,8 @@ public class TranspilerTests
     {
         var bindings = new Dictionary<string, ColumnBindingInfo>
         {
-            ["p"] = new ColumnBindingInfo("tblSales", "Price"),
-            ["q"] = new ColumnBindingInfo("tblSales", "Quantity")
+            ["p"] = new("tblSales", "Price"),
+            ["q"] = new("tblSales", "Quantity")
         };
 
         var result = TranspileWithBindings("data.rows.select(r => r.p * r.q).toArray()", bindings);
@@ -1443,37 +1472,4 @@ public class TranspilerTests
     }
 
     #endregion
-
-    private static TranspileResult Transpile(string source)
-    {
-        return TranspileWithName(source, null);
-    }
-
-    private static TranspileResult TranspileWithName(string source, string? preferredName)
-    {
-        var lexer = new Lexer(source);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens, source);
-        var expression = parser.Parse();
-
-        Assert.NotNull(expression);
-        Assert.Empty(parser.Errors);
-
-        var transpiler = new CSharpTranspiler();
-        return transpiler.Transpile(expression, source, preferredName);
-    }
-
-    private static TranspileResult TranspileWithBindings(string source, Dictionary<string, ColumnBindingInfo> columnBindings)
-    {
-        var lexer = new Lexer(source);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens, source);
-        var expression = parser.Parse();
-
-        Assert.NotNull(expression);
-        Assert.Empty(parser.Errors);
-
-        var transpiler = new CSharpTranspiler();
-        return transpiler.Transpile(expression, source, null, columnBindings);
-    }
 }

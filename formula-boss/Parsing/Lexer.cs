@@ -1,34 +1,32 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace FormulaBoss.Parsing;
 
 /// <summary>
-/// Tokenizes DSL source text into a sequence of tokens.
+///     Tokenizes DSL source text into a sequence of tokens.
 /// </summary>
 public class Lexer
 {
-    private readonly string _source;
-    private int _position;
     private readonly List<Token> _tokens = [];
 
     public Lexer(string source)
     {
-        _source = source;
+        Source = source;
     }
 
     /// <summary>
-    /// Gets the source string being tokenized.
+    ///     Gets the source string being tokenized.
     /// </summary>
-    public string Source => _source;
+    public string Source { get; }
 
     /// <summary>
-    /// Gets the current position in the source string.
+    ///     Gets the current position in the source string.
     /// </summary>
-    public int Position => _position;
+    public int Position { get; private set; }
 
     /// <summary>
-    /// Scans the entire source and returns all tokens.
+    ///     Scans the entire source and returns all tokens.
     /// </summary>
     public List<Token> ScanTokens()
     {
@@ -37,7 +35,7 @@ public class Lexer
             ScanToken();
         }
 
-        _tokens.Add(new Token(TokenType.Eof, "", null, _position));
+        _tokens.Add(new Token(TokenType.Eof, "", null, Position));
         return _tokens;
     }
 
@@ -49,7 +47,7 @@ public class Lexer
             return;
         }
 
-        var start = _position;
+        var start = Position;
         var c = Advance();
 
         switch (c)
@@ -210,7 +208,7 @@ public class Lexer
         var sb = new StringBuilder();
         while (!IsAtEnd() && Peek() != '"')
         {
-            if (Peek() == '\\' && _position + 1 < _source.Length)
+            if (Peek() == '\\' && Position + 1 < Source.Length)
             {
                 Advance(); // consume backslash
                 var escaped = Advance();
@@ -237,7 +235,7 @@ public class Lexer
         }
 
         Advance(); // consume closing quote
-        var lexeme = _source[start.._position];
+        var lexeme = Source[start..Position];
         _tokens.Add(new Token(TokenType.StringLiteral, lexeme, sb.ToString(), start));
     }
 
@@ -253,6 +251,7 @@ public class Lexer
                 AddErrorToken(start, "Unterminated character literal");
                 return;
             }
+
             var escaped = Advance();
             value = escaped switch
             {
@@ -282,7 +281,7 @@ public class Lexer
         }
 
         Advance(); // consume closing quote
-        var lexeme = _source[start.._position];
+        var lexeme = Source[start..Position];
         _tokens.Add(new Token(TokenType.CharLiteral, lexeme, value, start));
     }
 
@@ -294,7 +293,7 @@ public class Lexer
         }
 
         // Look for decimal part
-        if (!IsAtEnd() && Peek() == '.' && _position + 1 < _source.Length && char.IsDigit(_source[_position + 1]))
+        if (!IsAtEnd() && Peek() == '.' && Position + 1 < Source.Length && char.IsDigit(Source[Position + 1]))
         {
             Advance(); // consume '.'
             while (!IsAtEnd() && char.IsDigit(Peek()))
@@ -303,7 +302,7 @@ public class Lexer
             }
         }
 
-        var lexeme = _source[start.._position];
+        var lexeme = Source[start..Position];
         var value = double.Parse(lexeme, CultureInfo.InvariantCulture);
         _tokens.Add(new Token(TokenType.Number, lexeme, value, start));
     }
@@ -315,7 +314,7 @@ public class Lexer
             Advance();
         }
 
-        var lexeme = _source[start.._position];
+        var lexeme = Source[start..Position];
         _tokens.Add(new Token(TokenType.Identifier, lexeme, null, start));
     }
 
@@ -327,20 +326,20 @@ public class Lexer
         }
     }
 
-    private bool IsAtEnd() => _position >= _source.Length;
+    private bool IsAtEnd() => Position >= Source.Length;
 
-    private char Peek() => _source[_position];
+    private char Peek() => Source[Position];
 
-    private char Advance() => _source[_position++];
+    private char Advance() => Source[Position++];
 
     private bool Match(char expected)
     {
-        if (IsAtEnd() || _source[_position] != expected)
+        if (IsAtEnd() || Source[Position] != expected)
         {
             return false;
         }
 
-        _position++;
+        Position++;
         return true;
     }
 
@@ -350,18 +349,16 @@ public class Lexer
 
     private void AddToken(TokenType type, int start, string? lexeme = null)
     {
-        lexeme ??= _source[start.._position];
+        lexeme ??= Source[start..Position];
         _tokens.Add(new Token(type, lexeme, null, start));
     }
 
-    private void AddErrorToken(int start, string message)
-    {
+    private void AddErrorToken(int start, string message) =>
         _tokens.Add(new Token(TokenType.Error, message, null, start));
-    }
 
     /// <summary>
-    /// Captures a brace-balanced statement block from source starting at given position.
-    /// Handles string literals, verbatim strings, char literals, and comments that may contain braces.
+    ///     Captures a brace-balanced statement block from source starting at given position.
+    ///     Handles string literals, verbatim strings, char literals, and comments that may contain braces.
     /// </summary>
     /// <param name="source">The source string to capture from.</param>
     /// <param name="startPosition">The position to start capturing from.</param>
@@ -404,6 +401,7 @@ public class Lexer
                         // Successfully captured the block
                         return (source[blockStart..pos], pos);
                     }
+
                     break;
 
                 case '"':
@@ -421,6 +419,7 @@ public class Lexer
                                 {
                                     break; // End of verbatim string
                                 }
+
                                 pos++; // Skip escaped ""
                             }
                             else
@@ -444,11 +443,13 @@ public class Lexer
                                 pos++;
                             }
                         }
+
                         if (pos < source.Length)
                         {
                             pos++; // skip closing quote
                         }
                     }
+
                     break;
 
                 case '\'':
@@ -465,10 +466,12 @@ public class Lexer
                             pos++;
                         }
                     }
+
                     if (pos < source.Length)
                     {
                         pos++; // skip closing quote
                     }
+
                     break;
 
                 case '/':
@@ -491,6 +494,7 @@ public class Lexer
                             {
                                 pos++;
                             }
+
                             if (pos + 1 < source.Length)
                             {
                                 pos += 2; // skip */
@@ -505,6 +509,7 @@ public class Lexer
                     {
                         pos++;
                     }
+
                     break;
 
                 default:

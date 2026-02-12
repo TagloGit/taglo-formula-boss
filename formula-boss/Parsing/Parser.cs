@@ -224,7 +224,7 @@ public class Parser
         if (Check(TokenType.Identifier) && CheckNext(TokenType.Arrow))
         {
             var param = Advance();
-            var arrowToken = Advance(); // consume =>
+            Advance();
 
             // Check for statement lambda: => { ... }
             if (Check(TokenType.LeftBrace) && _source != null)
