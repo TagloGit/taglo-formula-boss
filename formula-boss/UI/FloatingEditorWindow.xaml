@@ -1,0 +1,35 @@
+<Window x:Class="FormulaBoss.UI.FloatingEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Formula Boss"
+        WindowStyle="ToolWindow"
+        ShowInTaskbar="True"
+        Topmost="True"
+        ResizeMode="CanResizeWithGrip"
+        SizeToContent="Manual"
+        Width="500" Height="300"
+        MinWidth="300" MinHeight="150">
+    <DockPanel Margin="5">
+        <StackPanel DockPanel.Dock="Bottom"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,5,0,0">
+            <Button Content="Apply"
+                    Padding="15,5"
+                    Margin="0,0,5,0"
+                    Click="ApplyButton_Click" />
+            <Button Content="Cancel"
+                    Padding="15,5"
+                    Click="CancelButton_Click"
+                    IsCancel="True" />
+        </StackPanel>
+        <TextBox x:Name="FormulaTextBox"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"
+                 FontFamily="Consolas"
+                 FontSize="13"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Auto"
+                 TextWrapping="NoWrap" />
+    </DockPanel>
+</Window>

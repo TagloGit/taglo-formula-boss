@@ -2,6 +2,7 @@
 
 using ExcelDna.Integration;
 
+using FormulaBoss.Commands;
 using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 
@@ -49,6 +50,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // ^+` = Ctrl+Shift+` (^ = Ctrl, + = Shift)
             XlCall.Excel(XlCall.xlcOnKey, "^+`", "EditFormulaBossFormula");
 
+            // Register keyboard shortcut: Ctrl+Shift+E to open floating editor
+            XlCall.Excel(XlCall.xlcOnKey, "^+E", "ShowFloatingEditor");
+
+            // Initialize the floating editor command with Excel reference
+            ShowFloatingEditorCommand.Initialize(ExcelDnaUtil.Application);
+
             Debug.WriteLine("Formula Boss interception initialized");
         }
         catch (Exception ex)
@@ -69,15 +76,19 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             return;
         }
 
-        // Unregister keyboard shortcut
+        // Unregister keyboard shortcuts
         try
         {
             XlCall.Excel(XlCall.xlcOnKey, "^+`");
+            XlCall.Excel(XlCall.xlcOnKey, "^+E");
         }
         catch
         {
             // Ignore errors during cleanup
         }
+
+        // Clean up floating editor
+        ShowFloatingEditorCommand.Cleanup();
 
         _interceptor?.Dispose();
         _interceptor = null;

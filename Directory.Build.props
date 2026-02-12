@@ -25,4 +25,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Add System.IO to implicit usings (required for WPF SDK compatibility) -->
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
+
 </Project>
