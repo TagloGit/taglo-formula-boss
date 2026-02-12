@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
@@ -7,27 +7,22 @@ using ICSharpCode.AvalonEdit.Rendering;
 namespace FormulaBoss.UI;
 
 /// <summary>
-/// Highlights matching bracket pairs in the editor.
-/// Searches for matching brackets when the caret moves, and renders
-/// a background highlight on both the opening and closing bracket.
+///     Highlights matching bracket pairs in the editor.
+///     Searches for matching brackets when the caret moves, and renders
+///     a background highlight on both the opening and closing bracket.
 /// </summary>
 internal sealed class BracketHighlighter : IBackgroundRenderer
 {
-    private static readonly Dictionary<char, char> OpenToClose = new()
-    {
-        { '(', ')' }, { '[', ']' }, { '{', '}' }
-    };
+    private static readonly Dictionary<char, char> OpenToClose = new() { { '(', ')' }, { '[', ']' }, { '{', '}' } };
 
-    private static readonly Dictionary<char, char> CloseToOpen = new()
-    {
-        { ')', '(' }, { ']', '[' }, { '}', '{' }
-    };
+    private static readonly Dictionary<char, char> CloseToOpen = new() { { ')', '(' }, { ']', '[' }, { '}', '{' } };
+
+    private readonly Brush _backgroundBrush;
+    private readonly Pen _borderPen;
 
     private readonly TextEditor _editor;
-    private readonly Pen _borderPen;
-    private readonly Brush _backgroundBrush;
-    private int _openOffset = -1;
     private int _closeOffset = -1;
+    private int _openOffset = -1;
 
     public BracketHighlighter(TextEditor editor)
     {
@@ -49,7 +44,10 @@ internal sealed class BracketHighlighter : IBackgroundRenderer
 
     public void Draw(TextView textView, DrawingContext drawingContext)
     {
-        if (_openOffset < 0 || _closeOffset < 0) return;
+        if (_openOffset < 0 || _closeOffset < 0)
+        {
+            return;
+        }
 
         var builder = new BackgroundGeometryBuilder { CornerRadius = 1 };
 
@@ -59,7 +57,9 @@ internal sealed class BracketHighlighter : IBackgroundRenderer
 
         var geometry = builder.CreateGeometry();
         if (geometry != null)
+        {
             drawingContext.DrawGeometry(_backgroundBrush, _borderPen, geometry);
+        }
     }
 
     private void UpdateHighlight()
@@ -75,14 +75,20 @@ internal sealed class BracketHighlighter : IBackgroundRenderer
 
         // Check character before caret
         if (offset > 0)
+        {
             TryMatch(doc, offset - 1);
+        }
 
         // Check character at caret
         if (_openOffset < 0 && offset < doc.TextLength)
+        {
             TryMatch(doc, offset);
+        }
 
         if (oldOpen != _openOffset || oldClose != _closeOffset)
+        {
             _editor.TextArea.TextView.InvalidateLayer(Layer);
+        }
     }
 
     private void TryMatch(TextDocument doc, int offset)
@@ -120,17 +126,38 @@ internal sealed class BracketHighlighter : IBackgroundRenderer
             var ch = doc.GetCharAt(i);
 
             // Skip escaped characters
-            if (i > 0 && doc.GetCharAt(i - 1) == '\\') continue;
+            if (i > 0 && doc.GetCharAt(i - 1) == '\\')
+            {
+                continue;
+            }
 
-            if (ch == '"' && !inChar) inString = !inString;
-            else if (ch == '\'' && !inString) inChar = !inChar;
+            if (ch == '"' && !inChar)
+            {
+                inString = !inString;
+            }
+            else if (ch == '\'' && !inString)
+            {
+                inChar = !inChar;
+            }
 
-            if (inString || inChar) continue;
+            if (inString || inChar)
+            {
+                continue;
+            }
 
-            if (ch == open) depth++;
-            else if (ch == close) depth--;
+            if (ch == open)
+            {
+                depth++;
+            }
+            else if (ch == close)
+            {
+                depth--;
+            }
 
-            if (depth == 0) return i;
+            if (depth == 0)
+            {
+                return i;
+            }
         }
 
         return -1;
@@ -147,17 +174,38 @@ internal sealed class BracketHighlighter : IBackgroundRenderer
             var ch = doc.GetCharAt(i);
 
             // Skip escaped characters
-            if (i > 0 && doc.GetCharAt(i - 1) == '\\') continue;
+            if (i > 0 && doc.GetCharAt(i - 1) == '\\')
+            {
+                continue;
+            }
 
-            if (ch == '"' && !inChar) inString = !inString;
-            else if (ch == '\'' && !inString) inChar = !inChar;
+            if (ch == '"' && !inChar)
+            {
+                inString = !inString;
+            }
+            else if (ch == '\'' && !inString)
+            {
+                inChar = !inChar;
+            }
 
-            if (inString || inChar) continue;
+            if (inString || inChar)
+            {
+                continue;
+            }
 
-            if (ch == close) depth++;
-            else if (ch == open) depth--;
+            if (ch == close)
+            {
+                depth++;
+            }
+            else if (ch == open)
+            {
+                depth--;
+            }
 
-            if (depth == 0) return i;
+            if (depth == 0)
+            {
+                return i;
+            }
         }
 
         return -1;
