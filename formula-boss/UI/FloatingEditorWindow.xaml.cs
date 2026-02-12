@@ -37,6 +37,9 @@ public partial class FloatingEditorWindow
         FormulaEditor.TextArea.IndentationStrategy =
             new CSharpIndentationStrategy(FormulaEditor.Options);
 
+        // Bracket matching highlight
+        _ = new BracketHighlighter(FormulaEditor);
+
         // Editor behaviors
         FormulaEditor.TextArea.TextEntering += OnTextEntering;
         FormulaEditor.TextArea.TextEntered += OnTextEntered;
