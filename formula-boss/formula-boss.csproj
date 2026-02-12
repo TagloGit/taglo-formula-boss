@@ -3,10 +3,15 @@
   <PropertyGroup>
     <TargetFramework>net6.0-windows</TargetFramework>
     <RootNamespace>FormulaBoss</RootNamespace>
+    <UseWPF>true</UseWPF>
     <ExcelDnaPackCompressResources>false</ExcelDnaPackCompressResources>
     <ExcelDna64Bit>true</ExcelDna64Bit>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ExcelDna.AddIn" Version="1.*" />
