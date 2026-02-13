@@ -59,12 +59,9 @@ public static class ShowFloatingEditorCommand
             _app ??= ExcelDnaUtil.Application;
 
             var cell = _app.ActiveCell;
+            var currentAddress = cell.Address as string;
             var editorContent = DetectEditorContent(cell);
             var excelHwnd = new IntPtr(_app.Hwnd);
-
-            // Capture target cell at open time
-            _targetWorksheet = cell.Worksheet;
-            _targetAddress = cell.Address as string;
 
             EnsureWindowThread();
 
@@ -77,10 +74,27 @@ public static class ShowFloatingEditorCommand
 
                 if (_window.IsVisible)
                 {
-                    _window.Hide();
+                    if (currentAddress == _targetAddress)
+                    {
+                        // Same cell — toggle off
+                        _window.Hide();
+                    }
+                    else
+                    {
+                        // Different cell — update content and target
+                        _targetWorksheet = cell.Worksheet;
+                        _targetAddress = currentAddress;
+                        _window.FormulaText = editorContent;
+
+                        var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
+                        WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                    }
                 }
                 else
                 {
+                    // Capture target cell at open time
+                    _targetWorksheet = cell.Worksheet;
+                    _targetAddress = currentAddress;
                     _window.FormulaText = editorContent;
 
                     var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
