@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -14,10 +15,13 @@ public partial class AnimationOverlay
     private readonly double _baseIntervalMs;
     private int _currentFrame;
     private Storyboard? _shakeStoryboard;
+    private bool _fading;
 
     public AnimationOverlay(List<SpriteFrame> frames, double baseIntervalMs = 120)
     {
         InitializeComponent();
+
+        ShowActivated = false;
 
         _frames = frames;
         _baseIntervalMs = baseIntervalMs;
@@ -56,6 +60,42 @@ public partial class AnimationOverlay
     /// </summary>
     public bool OneShot { get; set; }
 
+    /// <summary>
+    ///     Begins fading the overlay to transparent, then closes it.
+    /// </summary>
+    public void BeginFadeOut(double durationMs = 500)
+    {
+        if (_fading)
+        {
+            return;
+        }
+
+        _fading = true;
+
+        var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(durationMs))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+        };
+        fade.Completed += (_, _) =>
+        {
+            _timer.Stop();
+            _shakeStoryboard?.Stop();
+            Close();
+        };
+        BeginAnimation(OpacityProperty, fade);
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        // Make window non-focusable so it never steals focus from Excel
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GwlExStyle);
+        NativeMethods.SetWindowLong(hwnd, NativeMethods.GwlExStyle,
+            exStyle | NativeMethods.WsExNoActivate | NativeMethods.WsExToolWindow);
+    }
+
     private void OnTick(object? sender, EventArgs e)
     {
         _currentFrame++;
@@ -66,7 +106,11 @@ public partial class AnimationOverlay
             {
                 _timer.Stop();
                 _shakeStoryboard?.Stop();
-                Close();
+                if (!_fading)
+                {
+                    Close();
+                }
+
                 return;
             }
 

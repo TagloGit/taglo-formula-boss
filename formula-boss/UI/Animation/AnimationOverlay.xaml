@@ -10,7 +10,7 @@
         SizeToContent="WidthAndHeight">
     <Border x:Name="ShakeBorder">
         <Image x:Name="SpriteImage"
-               Width="240" Height="240"
+               Width="100" Height="100"
                RenderOptions.BitmapScalingMode="NearestNeighbor"
                Stretch="Uniform" />
     </Border>
