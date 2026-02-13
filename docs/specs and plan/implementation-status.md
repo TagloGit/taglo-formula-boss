@@ -2,7 +2,7 @@
 
 This document tracks implementation progress against the [Excel UDF Add-in Specification](excel-udf-addin-spec.md).
 
-**Last updated:** 2026-02-10
+**Last updated:** 2026-02-13
 
 ---
 
@@ -33,7 +33,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Dynamic column params | ✅ Complete | Column renames survive via structured refs |
 | Statement lambdas | ✅ Complete | x => { ... } multi-statement blocks |
 | VBA transpiler | ⏳ Not started | Export feature |
-| Floating editor | ⏳ Not started | Post-MVP |
+| Floating editor | 🚧 Infrastructure | AvalonEdit, positioning, DPI, animation overlay proven |
 
 **Legend:** ✅ Complete | 🚧 Partial | ⏳ Not started
 
@@ -237,10 +237,18 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Formula rewriting | ✅ | |
 | Error display (#UDF_ERR) | ✅ | |
 | Cell comment errors | ✅ | |
-| Floating editor | ⏳ | Post-MVP |
-| Ctrl+Shift+E shortcut | ⏳ | |
+| Floating editor window | 🚧 | Infrastructure proven, not yet wired to shortcut |
+| Editor: AvalonEdit integration | ✅ | Syntax highlighting, indentation |
+| Editor: auto-brace completion | ✅ | (), [], {}, "", `` |
+| Editor: bracket matching | ✅ | Custom IBackgroundRenderer |
+| Editor: completion popup (POC) | ✅ | Filtering, Tab/Enter accept — real data TBD |
+| Editor: real-time parse errors | ⏳ | Parser infrastructure exists, UI integration TBD |
+| Editor: source reconstruction | ⏳ | Logic exists in EditFormulaCommand, needs editor integration |
+| Ctrl+Shift+` shortcut | ⏳ | Will be the single FB shortcut (replaces Ctrl+Shift+E plan) |
 | Ctrl+Shift+N (name UDF) | ⏳ | |
-| Autocomplete | ⏳ | Post-MVP |
+| Sprite animation overlay | 🚧 | Chomp animation ported, integration TBD |
+| Win32 window positioning | ✅ | DPI-aware, multi-monitor, centered on Excel |
+| STA thread / DPI awareness | ✅ | Per-monitor v2 DPI on WPF thread |
 
 ---
 

@@ -39,19 +39,17 @@ An Excel add-in that allows power users to write inline expressions using a conc
 **Scenario:** User needs to write a complex multi-step transformation and wants tooling assistance.
 
 1. User selects target cell
-2. User presses `Ctrl+Shift+E` (not in edit mode)
-3. Floating editor appears, pre-loaded with existing formula if any
-4. Editor provides:
-   - Syntax highlighting for Excel functions and DSL
-   - Autocomplete for DSL keywords and methods
-   - Real-time error indicators
-   - Signature help showing available cell properties
-5. User types formula with backtick expressions
-6. User presses Enter or clicks Apply
-7. Add-in processes, compiles, rewrites formula
+2. User presses `Ctrl+Shift+`` ` (backtick — the Formula Boss shortcut)
+3. Floating editor appears, empty for new formulas or with reconstructed source for existing FB formulas
+4. User writes formula — no `'` prefix needed, backticks work naturally as DSL delimiters
+5. Editor provides syntax highlighting, autocomplete, bracket matching, real-time error indicators
+6. User presses Ctrl+Enter or clicks Apply
+7. Editor writes quote-prefixed source to cell → normal SheetChange pipeline processes it
 8. Editor closes, result appears in cell
 
-**Total extra effort vs. native formula:** Shortcut to open editor, otherwise similar.
+**Total extra effort vs. native formula:** One shortcut to open editor.
+
+See [Floating Editor](#floating-editor) for detailed design.
 
 ---
 
@@ -77,11 +75,11 @@ An Excel add-in that allows power users to write inline expressions using a conc
 3. Add-in detects backtick expression, attempts to parse
 4. Parse/compile fails: `colr` is not a valid property
 5. Cell displays: `#UDF_ERR`
-6. Add-in task pane (or tooltip on hover) shows: `Error: 'colr' is not a recognised cell property. Did you mean 'color'?`
-7. User clicks cell, presses `Ctrl+Shift+E` to open editor
-8. Editor shows formula with `colr` underlined in red
-9. User corrects to `color`, presses Enter
-10. Formula compiles and works
+6. Cell comment shows: `Error: 'colr' is not a recognised cell property. Did you mean 'color'?`
+7. User clicks cell, presses `Ctrl+Shift+`` ` to open floating editor
+8. Editor loads the failed formula (still quote-prefixed text in cell), shows `colr` underlined in red
+9. User corrects to `color` with help from autocomplete, presses Ctrl+Enter
+10. Editor writes corrected source → pipeline processes → formula compiles and works
 
 ---
 
@@ -949,27 +947,32 @@ This provides:
 
 ### Editing Workflow
 
-1. User wants to edit an existing Formula Boss LET formula
-2. User presses `Ctrl+Shift+`` (backtick)
-3. Formula Boss:
+`Ctrl+Shift+`` ` is the single Formula Boss shortcut. It opens the floating editor, which handles both new formulas and editing existing ones.
+
+**Editing an existing FB formula:**
+
+1. User selects a cell containing a processed Formula Boss LET formula
+2. User presses `Ctrl+Shift+`` `
+3. Floating editor opens. Formula Boss:
    - Detects `_src_*` variables indicating a processed Formula Boss formula
    - Reconstructs the original formula with backtick expressions
-   - Temporarily disables Excel events to prevent immediate reprocessing
-   - Sets cell value with quote prefix to enter text/edit mode
-   - Disables text wrapping for readability
-   - Enters cell edit mode (F2)
-4. Cell shows:
+   - Loads the reconstructed source into the editor (without the `'` prefix)
+4. Editor shows:
    ```
-   '=LET(
+   =LET(
        price, tblSales[Price],
        qty, tblSales[Qty],
        tbl, tblSales,
        `tbl.reduce(0, (acc, r) => acc + r.price * r.qty)`
    )
    ```
-5. User edits the backtick expressions
-6. User presses Enter
-7. Formula Boss regenerates UDFs (reusing existing UDF names where expressions match)
+5. User edits the backtick expressions with full editor tooling
+6. User presses Ctrl+Enter or clicks Apply
+7. Editor writes quote-prefixed source to cell → SheetChange pipeline processes
+8. Formula Boss regenerates UDFs (reusing existing UDF names where expressions match)
+9. Editor closes
+
+See [Floating Editor](#floating-editor) for the full editor design.
 
 ---
 
@@ -1006,3 +1009,183 @@ The formula call passes the column reference values:
 ```
 
 Excel evaluates `tblSales[Price]` to the column's values, but Formula Boss intercepts this pattern and passes the column name string instead. (Implementation detail: may require wrapping in a helper that extracts the header name.)
+
+---
+
+## Floating Editor
+
+### Overview
+
+The floating editor is a WPF window (AvalonEdit) that provides an assisted editing experience for Formula Boss formulas. It runs on a dedicated STA thread with per-monitor DPI awareness and is positioned centered over the Excel window.
+
+The editor is **not a separate processing path** — it writes the quote-prefixed formula source to the cell on Apply, and the existing SheetChange pipeline handles parsing, compilation, and formula rewriting. This keeps a single code path for all formula processing.
+
+**Key advantages over the formula bar:**
+
+- No `'` prefix needed — the editor adds it on Apply
+- Backticks work naturally as DSL delimiters (no Excel syntax conflict)
+- Syntax highlighting for both Excel functions and DSL expressions
+- Autocomplete for DSL methods, cell properties, column names
+- Bracket matching and auto-brace completion
+- Real-time parse error indicators before Apply
+- Multi-line editing with proper indentation
+
+---
+
+### Activation
+
+`Ctrl+Shift+`` ` (backtick) is the single Formula Boss keyboard shortcut. It is context-aware:
+
+| Cell State | Editor Behaviour |
+|------------|-----------------|
+| Empty cell | Opens editor empty |
+| Cell with unprocessed FB formula (quote-prefixed text) | Opens editor with the formula text (minus `'` prefix) |
+| Cell with processed FB LET formula (`_src_` variables) | Reconstructs original source, opens editor with it |
+| Cell with processed FB basic formula (no `_src_`) | Opens editor with current cell formula as-is |
+| Cell with non-FB formula | Opens editor with current cell formula as-is |
+
+---
+
+### Editor Journeys
+
+#### Journey A: New Formula
+
+1. User selects target cell
+2. User presses `Ctrl+Shift+`` `
+3. Editor opens empty
+4. User writes formula with backtick DSL:
+   ```
+   =SUM(`data.where(v => v > 0)`)
+   ```
+5. Editor provides syntax highlighting, autocomplete, real-time error indicators
+6. User presses Ctrl+Enter or clicks Apply
+7. Editor writes `'=SUM(`data.where(v => v > 0)`)` to the cell (adds `'` prefix)
+8. SheetChange fires → existing pipeline parses, compiles, rewrites formula
+9. Editor closes
+
+#### Journey B: Edit Existing LET Formula
+
+1. User selects a cell with a processed FB LET formula
+2. User presses `Ctrl+Shift+`` `
+3. Editor reconstructs original source from `_src_` variables and opens with it
+4. User edits DSL expressions with full editor tooling
+5. Apply → writes quote-prefixed source → pipeline reprocesses
+6. Editor closes
+
+#### Journey C: Edit Existing Basic Formula
+
+1. User selects a cell with a processed FB basic formula (no `_src_`, source not preserved)
+2. User presses `Ctrl+Shift+`` `
+3. Editor opens with the current cell formula as-is (the rewritten UDF version)
+4. User can modify or start fresh
+
+**Note:** Basic formulas currently don't preserve source. Source preservation for basic formulas via auto-wrapping in LET is a potential enhancement — see [User Settings](#user-settings).
+
+#### Journey D: Error Recovery
+
+This is where the editor provides the most value — turning the "edit, Enter, read error comment, repeat" loop into a tight feedback cycle.
+
+1. User types a formula inline (the traditional way), presses Enter
+2. Pipeline fails to parse → cell gets error value and comment
+3. User presses `Ctrl+Shift+`` ` on the error cell
+4. Editor loads the failed formula (still quote-prefixed text in cell)
+5. Editor shows parse errors inline (underlines, error messages)
+6. User fixes errors with autocomplete and highlighting assistance
+7. Apply → pipeline succeeds
+8. Editor closes
+
+---
+
+### Editor Features
+
+#### Syntax Highlighting
+
+Custom highlighting definition (`.xshd`) covering:
+
+- DSL methods (`.where`, `.select`, `.reduce`, etc.)
+- DSL accessor keywords (`.cells`, `.values`, `.rows`)
+- Cell properties (`.color`, `.bold`, `.fontSize`, etc.)
+- Strings, numbers, operators
+- Lambda arrow (`=>`)
+
+#### Autocomplete
+
+Context-aware completion triggered on `.` or after typing a letter:
+
+| Context | Completion Items |
+|---------|-----------------|
+| After range/variable `.` | DSL methods and accessors (`.where`, `.cells`, `.reduce`, etc.) |
+| After cell parameter `c.` | Cell properties (`.value`, `.color`, `.bold`, etc.) |
+| After row parameter `r.` | Column names from the active table (if detectable) |
+| General typing | DSL keywords, LET-bound variable names |
+
+Completion accepts on Tab or Enter only. Spacebar and other characters close the completion window (allowing single-letter variable names without interference).
+
+#### Real-Time Parsing
+
+The existing parser is invoked on each keystroke (debounced) to provide:
+
+- Error squiggles on invalid syntax
+- Context information for autocomplete (e.g., knowing `c` is a Cell after `.cells.where(c =>`)
+- Validation of property names and method chains
+
+This reuses the same parsing infrastructure as the pipeline — not a separate parser.
+
+#### Code Editing Behaviours
+
+- Auto-brace completion: `(`, `[`, `{`, `"`, `` ` `` auto-insert closing pair
+- Skip-over: typing a closing character when cursor is before one skips instead of inserting
+- Brace de-indentation: `{` snaps to parent indent level
+- Block expansion: Enter between `{}` expands to three lines with indentation
+- Bracket matching highlight
+
+---
+
+### Range Selection Policy
+
+The editor does **not** support Excel range selection while open. Users should set up range references (in LET variables or directly) before opening the editor. This is the pragmatic approach — Excel's formula bar has deep integration with range selection that cannot be replicated in an external window.
+
+**Workflow:** Set up references first → open editor → write DSL logic → Apply.
+
+---
+
+### Editor ↔ Pipeline Integration
+
+```
+Editor (WPF thread)                    Excel thread
+       │                                     │
+       │  Apply: cell.Formula2 =             │
+       │  '=LET(..., `dsl`, ...)  ──────►    │
+       │                                     │  SheetChange fires
+       │                                     │  FormulaInterceptor detects '= prefix
+       │                                     │  FormulaPipeline processes
+       │                                     │  UDF compiled and registered
+       │                                     │  Cell formula rewritten
+       │                                     │
+```
+
+The editor writes to the cell via `ExcelAsyncUtil.QueueAsMacro()` to ensure it runs in a valid Excel macro context. The pipeline then handles everything identically to the formula bar path.
+
+---
+
+### Technical Details
+
+- **WPF on separate STA thread** — required for keyboard input when hosted in an Excel add-in
+- **Per-monitor DPI awareness** — `SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2)` on the WPF thread
+- **Window positioning** — Win32 `SetWindowPos` in physical pixels, centered on Excel window
+- **HWND created before Show** — `WindowInteropHelper.EnsureHandle()` avoids visible position jump
+- **Window style** — `Topmost`, `ToolWindow`, `ShowInTaskbar=True` for Alt+Tab visibility
+- **Error isolation** — all editor event handlers wrapped in try-catch to prevent crashing Excel
+
+---
+
+## User Settings
+
+A collection of user-configurable preferences. Settings are persisted to the user's AppData folder.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Editor shortcut | `Ctrl+Shift+`` ` | Keyboard shortcut to open the floating editor |
+| Auto-wrap basic formulas in LET | Off | When enabled, basic (non-LET) FB formulas are automatically wrapped in a LET structure to preserve the DSL source via `_src_` variables. This enables full round-trip editing of all FB formulas, at the cost of changing the cell formula shape. |
+
+*This section will grow as new configurable behaviours are identified.*
