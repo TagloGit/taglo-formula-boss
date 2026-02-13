@@ -26,6 +26,13 @@ public static class ShowFloatingEditorCommand
     private static dynamic? _targetWorksheet;
     private static string? _targetAddress;
 
+    // Cell screen position captured at open time for animation placement
+    private static int _targetCellScreenLeft;
+    private static int _targetCellScreenTop;
+
+    // Reference to current animation overlay for fade signalling
+    private static AnimationOverlay? _currentOverlay;
+
     /// <summary>
     ///     Initializes the command with the Excel application reference.
     ///     Must be called during add-in initialization.
@@ -46,6 +53,7 @@ public static class ShowFloatingEditorCommand
         _app = null;
         _targetWorksheet = null;
         _targetAddress = null;
+        _currentOverlay = null;
     }
 
     /// <summary>
@@ -63,6 +71,9 @@ public static class ShowFloatingEditorCommand
             var currentAddress = cell.Address as string;
             var editorContent = DetectEditorContent(cell);
             var excelHwnd = new IntPtr(_app.Hwnd);
+
+            // Capture cell screen position for animation placement
+            CaptureTargetCellPosition(cell);
 
             EnsureWindowThread();
 
@@ -119,10 +130,10 @@ public static class ShowFloatingEditorCommand
     {
         var formula = cell.Formula2 as string ?? cell.Formula as string ?? "";
 
-        // Empty cell
+        // Empty cell — pre-fill with = so the user can start typing immediately
         if (string.IsNullOrEmpty(formula))
         {
-            return "";
+            return "=";
         }
 
         // Unprocessed FB formula: quote-prefixed text (user typed '=... with backticks)
@@ -145,6 +156,25 @@ public static class ShowFloatingEditorCommand
 
         // Processed basic FB / non-FB formula: show formula as-is
         return formula;
+    }
+
+    /// <summary>
+    ///     Captures the target cell's screen position using Excel's PointsToScreenPixels.
+    /// </summary>
+    private static void CaptureTargetCellPosition(dynamic cell)
+    {
+        try
+        {
+            dynamic window = _app!.ActiveWindow;
+            _targetCellScreenLeft = (int)(double)window.PointsToScreenPixelsX(cell.Left);
+            _targetCellScreenTop = (int)(double)window.PointsToScreenPixelsY(cell.Top);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"CaptureTargetCellPosition error: {ex.Message}");
+            _targetCellScreenLeft = 0;
+            _targetCellScreenTop = 0;
+        }
     }
 
     private static void EnsureWindowThread()
@@ -179,8 +209,8 @@ public static class ShowFloatingEditorCommand
     private static void OnFormulaApplied(object? sender, string formula)
     {
         // Play chomp animation on the WPF thread (non-blocking, DispatcherTimer-based).
-        // The overlay is a separate Topmost window that auto-closes when frames complete.
-        PlayChompAnimation();
+        // The overlay is non-focusable so it never steals focus from Excel.
+        var overlay = PlayChompAnimation();
 
         ExcelAsyncUtil.QueueAsMacro(() =>
         {
@@ -221,28 +251,39 @@ public static class ShowFloatingEditorCommand
             {
                 Debug.WriteLine($"OnFormulaApplied error: {ex.Message}");
             }
+            finally
+            {
+                // Signal animation to fade out now that processing is complete
+                if (overlay != null)
+                {
+                    _windowDispatcher?.BeginInvoke(() => overlay.BeginFadeOut());
+                }
+            }
         });
     }
 
-    private static void PlayChompAnimation()
+    private static AnimationOverlay? PlayChompAnimation()
     {
         try
         {
             var frames = ChompAnimation.BuildFrames();
-            var overlay = new AnimationOverlay(frames) { OneShot = true };
+            var overlay = new AnimationOverlay(frames, baseIntervalMs: 70) { OneShot = true };
 
-            // Position above the editor window
-            if (_window != null)
-            {
-                overlay.Left = _window.Left + (_window.Width / 2) - 120;
-                overlay.Top = _window.Top - 200;
-            }
+            // Position centered on the target cell
+            // WPF uses DIPs; on the animation thread we already have per-monitor DPI awareness,
+            // so screen pixels from PointsToScreenPixels map 1:1 to WPF units on that monitor.
+            overlay.Left = _targetCellScreenLeft - 30;
+            overlay.Top = _targetCellScreenTop - 80;
 
             overlay.PlayOnce();
+
+            _currentOverlay = overlay;
+            return overlay;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"PlayChompAnimation error: {ex.Message}");
+            return null;
         }
     }
 }

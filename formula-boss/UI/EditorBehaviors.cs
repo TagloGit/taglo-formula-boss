@@ -11,7 +11,7 @@ internal static class EditorBehaviors
 {
     private static readonly Dictionary<char, char> BracePairs = new()
     {
-        { '(', ')' }, { '[', ']' }, { '{', '}' }, { '"', '"' }
+        { '(', ')' }, { '[', ']' }, { '{', '}' }, { '"', '"' }, { '`', '`' }
     };
 
     /// <summary>
@@ -20,7 +20,7 @@ internal static class EditorBehaviors
     /// </summary>
     public static bool TrySkipClosingChar(TextEditor editor, char ch)
     {
-        if (ch is not (')' or ']' or '}' or '"'))
+        if (ch is not (')' or ']' or '}' or '"' or '`'))
         {
             return false;
         }
