@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0f;
+    font-family: 'Press Start 2P', monospace;
+    color: #fb923c;
+    gap: 24px;
+    padding: 32px;
+  }
+
+  h1 {
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fb923c;
+    text-shadow: 0 0 20px rgba(251,146,60,0.4);
+  }
+
+  .stage {
+    position: relative;
+    background: #111118;
+    border: 2px solid #222;
+    border-radius: 8px;
+    padding: 32px;
+    box-shadow:
+      0 0 40px rgba(153,27,27,0.15),
+      inset 0 0 60px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 520px;
+    min-width: 580px;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  button {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: #1a1a2e;
+    color: #fb923c;
+    border: 2px solid #fb923c;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  button:hover {
+    background: #fb923c;
+    color: #1a1a2e;
+  }
+  button.active {
+    background: #fb923c;
+    color: #1a1a2e;
+    box-shadow: 0 0 12px rgba(251,146,60,0.5);
+  }
+
+  .frame-info {
+    font-size: 9px;
+    color: #666;
+    min-width: 180px;
+    text-align: center;
+  }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    color: #666;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: #fb923c;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .anim-label {
+    font-size: 10px;
+    color: #991b1b;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Formula Boss — Animations</h1>
+
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+</div>
+
+<div class="anim-label">SHUFFLE</div>
+
+<div class="controls">
+  <button id="btnPlay" class="active">▶ Play</button>
+  <button id="btnPause">❚❚ Pause</button>
+  <button id="btnStep">▸ Step</button>
+  <div class="frame-info" id="frameInfo">Frame 1 / 8</div>
+</div>
+
+<div class="speed-control">
+  <span>Speed</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span id="speedLabel">5</span>
+</div>
+
+<script>
+// === PALETTE ===
+const P = {
+  0:"transparent", 1:"#1a1a2e", 4:"#ffd700", 5:"#ffffff", 49:"#991b1b",
+  52:"#c2410c", 53:"#fb923c", 55:"#e8853a", 56:"#d97526", 57:"#b85e1a", 58:"#9a4e15"
+};
+
+const _ = 0, D = 1, W = 5, R = 49, O = 52, L = 53, E = 55, J = 56, K = 57;
+
+// === BASE — 20x20 ===
+const BASE = [
+  [_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_],       // 0  horns
+  [_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_],       // 1  horn base
+  [_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_],       // 2  top head
+  [_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_],       // 3  head
+  [_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_],       // 4  head
+  [_,D,E,E,D,R,W,W,R,R,R,R,W,W,R,D,E,E,D,_],       // 5  eyes white
+  [_,D,L,L,R,R,W,D,R,R,R,R,D,W,R,R,L,L,D,_],       // 6  eyes pupil
+  [_,D,L,L,R,R,R,R,R,R,R,R,R,R,R,R,L,L,D,_],       // 7  cheeks
+  [_,D,L,L,R,R,R,R,R,O,O,R,R,R,R,R,L,L,D,_],       // 8  nose
+  [_,D,L,L,R,R,R,R,R,R,R,R,R,R,R,R,L,L,D,_],       // 9  under nose
+  [_,D,J,J,D,D,D,D,D,D,D,D,D,D,D,D,J,J,D,_],       // 10 mouth top border
+  [_,D,J,J,D,W,D,W,D,W,D,W,D,W,W,D,J,J,D,_],       // 11 upper teeth
+  [_,D,J,J,D,R,R,R,O,O,O,R,R,R,R,D,J,J,D,_],       // 12 mouth interior
+  [_,D,K,K,D,D,W,D,W,D,W,D,W,D,D,D,K,K,D,_],       // 13 lower teeth
+  [_,D,K,K,K,R,R,R,R,R,R,R,R,R,R,K,K,K,D,_],       // 14 chin
+  [_,D,K,K,K,D,D,D,D,D,D,D,D,D,D,K,K,K,D,_],       // 15 chin border
+  [D,E,E,K,K,D,_,_,_,_,_,_,_,_,D,K,K,E,E,D],       // 16 fist top
+  [D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D],       // 17 fist mid
+  [D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D],       // 18 fist bottom
+  [D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D],       // 19 fist base
+];
+
+function clone(grid) { return grid.map(r => [...r]); }
+
+// The body is rows 0-15 (head+torso). The fists are rows 16-19.
+// The left fist occupies cols 0-5, the right fist cols 14-19.
+// The body center is cols 2-17 roughly.
+//
+// For the shuffle:
+// - We shift the BODY (rows 0-15) left/right by 1-2 pixels
+// - We give the fists asymmetric heights (one raised, one lowered)
+//   to create a swinging-arms waddle
+// - Eyes shift to look in the direction of movement
+//
+// To shift a row: pad with transparent on one side, trim from the other.
+// We'll use a wider canvas (24 wide) to allow room for the shift.
+
+const W_CANVAS = 24; // wider canvas for movement room
+const PAD = 2;       // 2px padding on each side in idle
+
+// Shift a 20-wide row into a 24-wide row with given offset from center
+function shiftRow(row, offset) {
+  // row is 20 wide. We place it in 24-wide with PAD+offset from left
+  const out = new Array(W_CANVAS).fill(_);
+  const startX = PAD + offset;
+  for (let i = 0; i < row.length; i++) {
+    const x = startX + i;
+    if (x >= 0 && x < W_CANVAS) out[x] = row[i];
+  }
+  return out;
+}
+
+// Build a frame by shifting body rows and constructing custom fist rows
+// bodyOffset: how many px to shift the body (-2 to +2)
+// leftFistUp: if true, left fist is raised 1 row (shorter arm)
+// rightFistUp: if true, right fist is raised 1 row
+// eyeShift: -1 (look left), 0 (center), 1 (look right)
+// squash: if true, compress body by 1 row (bounce effect)
+function buildFrame(bodyOffset, leftFistUp, rightFistUp, eyeShift, squash) {
+  const rows = [];
+
+  // Body rows 0-15
+  let bodyRows = [];
+  for (let i = 0; i <= 15; i++) {
+    bodyRows.push([...BASE[i]]);
+  }
+
+  // Apply eye shift
+  if (eyeShift === -1) {
+    // Pupils look left
+    bodyRows[5] = [_,D,E,E,D,R,W,W,R,R,R,R,W,W,R,D,E,E,D,_];
+    bodyRows[6] = [_,D,L,L,R,R,D,W,R,R,R,R,W,D,R,R,L,L,D,_]; // both pupils 1px left (swap W and D)
+  } else if (eyeShift === 1) {
+    // Pupils look right
+    bodyRows[5] = [_,D,E,E,D,R,W,W,R,R,R,R,W,W,R,D,E,E,D,_];
+    bodyRows[6] = [_,D,L,L,R,R,W,D,R,R,R,R,D,W,R,R,L,L,D,_]; // default actually — let's shift more
+    bodyRows[6] = [_,D,L,L,R,R,R,W,D,R,R,R,R,W,D,R,L,L,D,_]; // shift right clearly
+  }
+
+  // Squash: skip one of the duplicate head rows (row 3 or 4) for a bounce
+  if (squash) {
+    bodyRows.splice(4, 1); // remove row 4 (duplicate of row 3)
+    // Re-add it at the bottom to keep structure... actually let's just let
+    // the body be 1 row shorter for the squash. The fists will fill in.
+  }
+
+  // Shift all body rows
+  for (const row of bodyRows) {
+    rows.push(shiftRow(row, bodyOffset));
+  }
+
+  // Now build fist rows. Fists need to be positioned relative to the body shift.
+  // Left fist: base cols 0-6, right fist: base cols 13-19
+  // We'll construct them on the wider canvas
+
+  // Fist templates (unshifted, 20 wide)
+  const fistRows = [
+    [D,E,E,K,K,D,_,_,_,_,_,_,_,_,D,K,K,E,E,D], // top
+    [D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D], // mid
+    [D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D], // bottom
+    [D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D], // base
+  ];
+
+  // Left fist (cols 0-6 of each fist row)
+  const leftFist = fistRows.map(r => r.slice(0, 7));
+  // Right fist (cols 13-19 of each fist row)
+  const rightFist = fistRows.map(r => r.slice(13, 20));
+
+  // Determine how many rows each fist takes
+  // Normal: 4 rows. Raised: start 1 row earlier (overlap with body border)
+  // We handle this by placing left and right fists independently
+
+  // The fist area is 4 rows tall. If a fist is "up", we shift its
+  // vertical start up by 1 and remove the bottom row.
+  // If "down" (default), normal 4 rows.
+
+  const leftStart = leftFistUp ? -1 : 0;
+  const rightStart = rightFistUp ? -1 : 0;
+  const maxFistRows = 4;
+
+  // We need to figure out the fist vertical extent
+  // leftFist renders at rows: (bodyEnd + leftStart) to (bodyEnd + leftStart + 3)
+  // rightFist similarly
+  // The canvas height = max of body end and fist end
+
+  const bodyEnd = rows.length; // next row index after body
+
+  // Determine total rows needed
+  const leftFistEnd = bodyEnd + leftStart + maxFistRows;
+  const rightFistEnd = bodyEnd + rightStart + maxFistRows;
+  const totalRows = Math.max(leftFistEnd, rightFistEnd);
+
+  // Pad rows array to totalRows
+  while (rows.length < totalRows) {
+    rows.push(new Array(W_CANVAS).fill(_));
+  }
+
+  // Place left fist
+  for (let fi = 0; fi < maxFistRows; fi++) {
+    const rowIdx = bodyEnd + leftStart + fi;
+    if (rowIdx < 0 || rowIdx >= totalRows) continue;
+    const fistPixels = leftFist[fi];
+    const startX = PAD + bodyOffset;
+    for (let px = 0; px < fistPixels.length; px++) {
+      const x = startX + px;
+      if (x >= 0 && x < W_CANVAS && fistPixels[px] !== _) {
+        rows[rowIdx][x] = fistPixels[px];
+      }
+    }
+  }
+
+  // Place right fist
+  for (let fi = 0; fi < maxFistRows; fi++) {
+    const rowIdx = bodyEnd + rightStart + fi;
+    if (rowIdx < 0 || rowIdx >= totalRows) continue;
+    const fistPixels = rightFist[fi];
+    const startX = PAD + bodyOffset + 13; // right fist starts at col 13 of original
+    for (let px = 0; px < fistPixels.length; px++) {
+      const x = startX + px;
+      if (x >= 0 && x < W_CANVAS && fistPixels[px] !== _) {
+        rows[rowIdx][x] = fistPixels[px];
+      }
+    }
+  }
+
+  return rows;
+}
+
+function makeFrames() {
+  const frames = [];
+
+  // Frame 0: Idle (centered)
+  frames.push({ grid: buildFrame(0, false, false, 0, false), label: "Idle" });
+
+  // Frame 1: Lean left — shift 1px left, right fist up, eyes look left, slight squash
+  frames.push({ grid: buildFrame(-1, false, true, -1, true), label: "Lean Left" });
+
+  // Frame 2: Step left — shift 2px left, left fist up (arms swapped), eyes left
+  frames.push({ grid: buildFrame(-2, true, false, -1, false), label: "Step Left" });
+
+  // Frame 3: Return center — shift back to 0, passing through, squash for bounce
+  frames.push({ grid: buildFrame(0, false, false, 0, true), label: "Bounce" });
+
+  // Frame 4: Lean right — shift 1px right, left fist up, eyes look right, squash
+  frames.push({ grid: buildFrame(1, true, false, 1, true), label: "Lean Right" });
+
+  // Frame 5: Step right — shift 2px right, right fist up, eyes right
+  frames.push({ grid: buildFrame(2, false, true, 1, false), label: "Step Right" });
+
+  // Frame 6: Return center — bounce
+  frames.push({ grid: buildFrame(0, false, false, 0, true), label: "Bounce" });
+
+  // Frame 7: Idle
+  frames.push({ grid: buildFrame(0, false, false, 0, false), label: "Idle" });
+
+  return frames;
+}
+
+const SHUFFLE_FRAMES = makeFrames();
+
+// === RENDERING ===
+const PIXEL = 20;
+const cv = document.getElementById("c");
+const cx = cv.getContext("2d");
+
+function drawFrame(frameIdx) {
+  const frame = SHUFFLE_FRAMES[frameIdx];
+  const grid = frame.grid;
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  cv.width = cols * PIXEL;
+  cv.height = rows * PIXEL;
+
+  cx.clearRect(0, 0, cv.width, cv.height);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const c = grid[y][x];
+      if (c) {
+        cx.fillStyle = P[c];
+        cx.fillRect(x * PIXEL, y * PIXEL, PIXEL, PIXEL);
+      }
+    }
+  }
+
+  document.getElementById("frameInfo").textContent =
+    `Frame ${frameIdx + 1} / ${SHUFFLE_FRAMES.length}  —  ${frame.label}`;
+}
+
+// === PLAYBACK ===
+let currentFrame = 0;
+let playing = true;
+let intervalId = null;
+
+function getFrameDuration(idx) {
+  const baseMs = (11 - document.getElementById("speedSlider").value) * 40 + 60;
+  const label = SHUFFLE_FRAMES[idx].label;
+  if (label === "Idle") return baseMs * 2;
+  if (label === "Bounce") return baseMs * 0.7;
+  return baseMs;
+}
+
+function scheduleNext() {
+  if (!playing) return;
+  intervalId = setTimeout(() => {
+    currentFrame = (currentFrame + 1) % SHUFFLE_FRAMES.length;
+    drawFrame(currentFrame);
+    scheduleNext();
+  }, getFrameDuration(currentFrame));
+}
+
+function startPlayback() {
+  playing = true;
+  document.getElementById("btnPlay").classList.add("active");
+  document.getElementById("btnPause").classList.remove("active");
+  scheduleNext();
+}
+
+function stopPlayback() {
+  playing = false;
+  clearTimeout(intervalId);
+  document.getElementById("btnPlay").classList.remove("active");
+  document.getElementById("btnPause").classList.add("active");
+}
+
+document.getElementById("btnPlay").addEventListener("click", () => {
+  if (!playing) startPlayback();
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  stopPlayback();
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  stopPlayback();
+  currentFrame = (currentFrame + 1) % SHUFFLE_FRAMES.length;
+  drawFrame(currentFrame);
+});
+
+document.getElementById("speedSlider").addEventListener("input", (e) => {
+  document.getElementById("speedLabel").textContent = e.target.value;
+  if (playing) {
+    clearTimeout(intervalId);
+    scheduleNext();
+  }
+});
+
+// === INIT ===
+drawFrame(0);
+startPlayback();
+</script>
+</body>
+</html>
