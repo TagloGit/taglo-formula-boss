@@ -33,7 +33,7 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Dynamic column params | ✅ Complete | Column renames survive via structured refs |
 | Statement lambdas | ✅ Complete | x => { ... } multi-statement blocks |
 | VBA transpiler | ⏳ Not started | Export feature |
-| Floating editor | 🚧 Infrastructure | AvalonEdit, positioning, DPI, animation overlay proven |
+| Floating editor | ✅ Complete | Context-aware editing, error squiggles, chomp animation |
 
 **Legend:** ✅ Complete | 🚧 Partial | ⏳ Not started
 
@@ -237,16 +237,16 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Formula rewriting | ✅ | |
 | Error display (#UDF_ERR) | ✅ | |
 | Cell comment errors | ✅ | |
-| Floating editor window | 🚧 | Infrastructure proven, not yet wired to shortcut |
+| Floating editor window | ✅ | Context-aware open, toggle, Apply flow |
 | Editor: AvalonEdit integration | ✅ | Syntax highlighting, indentation |
 | Editor: auto-brace completion | ✅ | (), [], {}, "", `` |
 | Editor: bracket matching | ✅ | Custom IBackgroundRenderer |
 | Editor: completion popup (POC) | ✅ | Filtering, Tab/Enter accept — real data TBD |
-| Editor: real-time parse errors | ⏳ | Parser infrastructure exists, UI integration TBD |
-| Editor: source reconstruction | ⏳ | Logic exists in EditFormulaCommand, needs editor integration |
-| Ctrl+Shift+` shortcut | ⏳ | Will be the single FB shortcut (replaces Ctrl+Shift+E plan) |
+| Editor: real-time parse errors | ✅ | Red squiggly underlines with hover tooltips |
+| Editor: source reconstruction | ✅ | LetFormulaReconstructor integrated into floating editor |
+| Ctrl+Shift+` shortcut | ✅ | Single FB shortcut, opens floating editor |
 | Ctrl+Shift+N (name UDF) | ⏳ | |
-| Sprite animation overlay | 🚧 | Chomp animation ported, integration TBD |
+| Sprite animation overlay | ✅ | Chomp animation plays on Apply |
 | Win32 window positioning | ✅ | DPI-aware, multi-monitor, centered on Excel |
 | STA thread / DPI awareness | ✅ | Per-monitor v2 DPI on WPF thread |
 
