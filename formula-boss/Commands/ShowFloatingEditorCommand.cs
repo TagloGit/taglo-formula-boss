@@ -174,10 +174,28 @@ public static class ShowFloatingEditorCommand
                     return;
                 }
 
-                var cell = worksheet.Range[address];
-                if (!string.IsNullOrEmpty(formula))
+                if (string.IsNullOrEmpty(formula))
                 {
+                    return;
+                }
+
+                var cell = worksheet.Range[address];
+
+                if (BacktickExtractor.IsBacktickFormula(formula))
+                {
+                    // Write as quote-prefixed text to trigger the SheetChange pipeline
+                    cell.Value = "'" + formula;
+                    cell.WrapText = false;
+                }
+                else if (formula.StartsWith('='))
+                {
+                    // Regular formula — write directly via Formula2 for dynamic array support
                     cell.Formula2 = formula;
+                }
+                else
+                {
+                    // Plain text/values
+                    cell.Value = formula;
                 }
             }
             catch (Exception ex)
