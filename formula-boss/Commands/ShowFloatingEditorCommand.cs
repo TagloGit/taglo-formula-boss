@@ -6,6 +6,7 @@ using ExcelDna.Integration;
 
 using FormulaBoss.Interception;
 using FormulaBoss.UI;
+using FormulaBoss.UI.Animation;
 
 namespace FormulaBoss.Commands;
 
@@ -177,6 +178,10 @@ public static class ShowFloatingEditorCommand
 
     private static void OnFormulaApplied(object? sender, string formula)
     {
+        // Play chomp animation on the WPF thread (non-blocking, DispatcherTimer-based).
+        // The overlay is a separate Topmost window that auto-closes when frames complete.
+        PlayChompAnimation();
+
         ExcelAsyncUtil.QueueAsMacro(() =>
         {
             try
@@ -217,5 +222,27 @@ public static class ShowFloatingEditorCommand
                 Debug.WriteLine($"OnFormulaApplied error: {ex.Message}");
             }
         });
+    }
+
+    private static void PlayChompAnimation()
+    {
+        try
+        {
+            var frames = ChompAnimation.BuildFrames();
+            var overlay = new AnimationOverlay(frames) { OneShot = true };
+
+            // Position above the editor window
+            if (_window != null)
+            {
+                overlay.Left = _window.Left + (_window.Width / 2) - 120;
+                overlay.Top = _window.Top - 200;
+            }
+
+            overlay.PlayOnce();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"PlayChompAnimation error: {ex.Message}");
+        }
     }
 }
