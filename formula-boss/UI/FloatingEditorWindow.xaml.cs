@@ -41,6 +41,9 @@ public partial class FloatingEditorWindow
         // Bracket matching highlight
         _ = new BracketHighlighter(FormulaEditor);
 
+        // Real-time parse error squiggles
+        _ = new ErrorHighlighter(FormulaEditor);
+
         // Editor behaviors
         FormulaEditor.TextArea.TextEntering += OnTextEntering;
         FormulaEditor.TextArea.TextEntered += OnTextEntered;

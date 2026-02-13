@@ -6,6 +6,7 @@
 public class Parser
 {
     private readonly List<string> _errors = [];
+    private readonly List<(int Position, int Length, string Message)> _structuredErrors = [];
     private readonly string? _source;
     private readonly List<Token> _tokens;
     private int _current;
@@ -20,6 +21,11 @@ public class Parser
     ///     Gets any parsing errors that occurred.
     /// </summary>
     public IReadOnlyList<string> Errors => _errors;
+
+    /// <summary>
+    ///     Gets structured error information with position and length for UI highlighting.
+    /// </summary>
+    public IReadOnlyList<(int Position, int Length, string Message)> StructuredErrors => _structuredErrors;
 
     /// <summary>
     ///     Parses the tokens into an expression AST.
@@ -403,6 +409,9 @@ public class Parser
     private ParseException Error(string message)
     {
         _errors.Add(message);
+        var token = Current();
+        var length = Math.Max(1, token.Lexeme.Length);
+        _structuredErrors.Add((token.Position, length, message));
         return new ParseException(message);
     }
 
