@@ -10,7 +10,6 @@ namespace FormulaBoss.Commands;
 
 /// <summary>
 ///     Command handler for showing the floating formula editor.
-///     Triggered by Ctrl+Shift+E keyboard shortcut.
 /// </summary>
 public static class ShowFloatingEditorCommand
 {
