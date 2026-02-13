@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 using ExcelDna.Integration;
 
+using FormulaBoss.Commands;
 using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 
@@ -55,9 +56,9 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Start listening for worksheet changes
             _interceptor.Start();
 
-            // Register keyboard shortcut: Ctrl+Shift+` to edit Formula Boss formulas
+            // Register keyboard shortcut: Ctrl+Shift+` to open floating editor
             // ^+` = Ctrl+Shift+` (^ = Ctrl, + = Shift)
-            XlCall.Excel(XlCall.xlcOnKey, "^+`", "EditFormulaBossFormula");
+            XlCall.Excel(XlCall.xlcOnKey, "^+`", "ShowFloatingEditor");
 
             Debug.WriteLine("Formula Boss interception initialized");
         }
@@ -88,6 +89,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         {
             // Ignore errors during cleanup
         }
+
+        ShowFloatingEditorCommand.Cleanup();
 
         _interceptor?.Dispose();
         _interceptor = null;
