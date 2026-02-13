@@ -193,7 +193,7 @@ public static class ShowFloatingEditorCommand
                     return;
                 }
 
-                var cell = worksheet.Range[address];
+                var cell = worksheet!.Range[address];
 
                 if (BacktickExtractor.IsBacktickFormula(formula))
                 {
