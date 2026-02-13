@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0f;
+    font-family: 'Press Start 2P', monospace;
+    color: #fb923c;
+    gap: 24px;
+    padding: 32px;
+  }
+
+  h1 {
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fb923c;
+    text-shadow: 0 0 20px rgba(251,146,60,0.4);
+  }
+
+  .stage {
+    position: relative;
+    background: #111118;
+    border: 2px solid #222;
+    border-radius: 8px;
+    padding: 32px;
+    box-shadow:
+      0 0 40px rgba(153,27,27,0.15),
+      inset 0 0 60px rgba(0,0,0,0.5);
+  }
+
+  /* Screen shake during roar */
+  .stage.shake {
+    animation: shake 0.08s linear infinite;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-2px, 1px); }
+    50% { transform: translate(2px, -1px); }
+    75% { transform: translate(-1px, -2px); }
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  button {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: #1a1a2e;
+    color: #fb923c;
+    border: 2px solid #fb923c;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  button:hover {
+    background: #fb923c;
+    color: #1a1a2e;
+  }
+  button.active {
+    background: #fb923c;
+    color: #1a1a2e;
+    box-shadow: 0 0 12px rgba(251,146,60,0.5);
+  }
+
+  .frame-info {
+    font-size: 9px;
+    color: #666;
+    min-width: 120px;
+    text-align: center;
+  }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    color: #666;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: #fb923c;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .anim-label {
+    font-size: 10px;
+    color: #991b1b;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Formula Boss — Animations</h1>
+
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+</div>
+
+<div class="anim-label" id="animLabel">ROAR</div>
+
+<div class="controls">
+  <button id="btnPlay" class="active">▶ Play</button>
+  <button id="btnPause">❚❚ Pause</button>
+  <button id="btnStep">▸ Step</button>
+  <div class="frame-info" id="frameInfo">Frame 1 / 8</div>
+</div>
+
+<div class="speed-control">
+  <span>Speed</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span id="speedLabel">5</span>
+</div>
+
+<script>
+// === PALETTE ===
+const P = {
+  0:"transparent", 1:"#1a1a2e", 4:"#ffd700", 5:"#ffffff", 49:"#991b1b",
+  52:"#c2410c", 53:"#fb923c", 55:"#e8853a", 56:"#d97526", 57:"#b85e1a", 58:"#9a4e15"
+};
+
+// === BASE FRAME (idle) — 20 wide x 20 tall ===
+const BASE = [
+  [0,0,0,0,0,53,53,0,0,0,0,0,0,53,53,0,0,0,0,0],       // 0  horns
+  [0,0,0,0,0,52,52,1,1,1,1,1,1,52,52,0,0,0,0,0],       // 1  horn base
+  [0,0,1,1,1,1,49,49,49,49,49,49,49,49,1,1,1,1,0,0],   // 2  top head
+  [0,1,55,55,1,49,49,49,49,49,49,49,49,49,49,1,55,55,1,0], // 3  head
+  [0,1,55,55,1,49,49,49,49,49,49,49,49,49,49,1,55,55,1,0], // 4  head
+  [0,1,55,55,1,49,5,5,49,49,49,49,5,5,49,1,55,55,1,0], // 5  eyes white
+  [0,1,53,53,49,49,5,1,49,49,49,49,1,5,49,49,53,53,1,0], // 6  eyes pupil
+  [0,1,53,53,49,49,49,49,49,49,49,49,49,49,49,49,53,53,1,0], // 7  cheeks
+  [0,1,53,53,49,49,49,49,49,52,52,49,49,49,49,49,53,53,1,0], // 8  nose
+  [0,1,53,53,49,49,49,49,49,49,49,49,49,49,49,49,53,53,1,0], // 9  under nose
+  [0,1,56,56,1,1,1,1,1,1,1,1,1,1,1,1,56,56,1,0],       // 10 mouth top border
+  [0,1,56,56,1,5,1,5,1,5,1,5,1,5,5,1,56,56,1,0],       // 11 upper teeth
+  [0,1,56,56,1,49,49,49,52,52,52,49,49,49,49,1,56,56,1,0], // 12 mouth interior
+  [0,1,57,57,1,1,5,1,5,1,5,1,5,1,1,1,57,57,1,0],       // 13 lower teeth
+  [0,1,57,57,57,49,49,49,49,49,49,49,49,49,49,57,57,57,1,0], // 14 chin
+  [0,1,57,57,57,1,1,1,1,1,1,1,1,1,1,57,57,57,1,0],       // 15 chin border
+  [1,55,55,57,57,1,0,0,0,0,0,0,0,0,1,57,57,55,55,1],   // 16 fist top
+  [1,55,53,1,57,57,1,0,0,0,0,0,0,1,57,57,1,53,55,1],   // 17 fist mid
+  [1,55,53,1,57,57,1,0,0,0,0,0,0,1,57,57,1,53,55,1],   // 18 fist bottom
+  [1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1],           // 19 fist base
+];
+
+// Helper: deep clone a frame
+function clone(grid) { return grid.map(r => [...r]); }
+
+// === ROAR ANIMATION FRAMES ===
+// Strategy:
+// - Frame 0: Idle (base)
+// - Frame 1: Eyes narrow (menacing look), mouth tenses
+// - Frame 2: Mouth starts opening — teeth separate by 1 row, jaw shifts down
+// - Frame 3: Full roar — mouth wide, extra row inserted, fists raised
+// - Frame 4: Hold roar (slight variation — pupils shift)
+// - Frame 5: Mouth closing
+// - Frame 6: Return to tense
+// - Frame 7: Back to idle
+
+function makeFrames() {
+  const frames = [];
+
+  // --- FRAME 0: Idle ---
+  frames.push({ grid: clone(BASE), label: "Idle" });
+
+  // --- FRAME 1: Eyes narrow / tense ---
+  {
+    const f = clone(BASE);
+    // Narrow eyes: move pupils inward (angry look) — shift pupils down one row
+    // Row 5 (eye whites): keep
+    // Row 6 (pupils): move pupils to look down-center (angrier)
+    // Eyes become: white on top, pupil on bottom of 2x2 eye
+    // Left eye cols 6-7, right eye cols 12-13
+    // Slight brow furrow: darken row 4 pixels above eyes
+    f[4] = [0,1,55,55,1,49,49,1,49,49,49,49,1,49,49,1,55,55,1,0]; // brow furrow: dark pixel above each eye
+    frames.push({ grid: f, label: "Tense" });
+  }
+
+  // --- FRAME 2: Mouth opening — teeth start to separate ---
+  {
+    // Insert a gap row between upper teeth and mouth interior
+    // This makes the sprite 21 rows tall
+    const f = clone(BASE);
+    // Brow furrow
+    f[4] = [0,1,55,55,1,49,49,1,49,49,49,49,1,49,49,1,55,55,1,0];
+    // Insert an extra dark mouth interior row between row 11 (upper teeth) and row 12 (mouth interior)
+    const extra = [0,1,56,56,1,49,49,49,49,49,49,49,49,49,49,1,56,56,1,0]; // dark mouth gap
+    f.splice(12, 0, extra);
+    frames.push({ grid: f, label: "Opening" });
+  }
+
+  // --- FRAME 3: Full roar — mouth wide open, 2 extra rows ---
+  {
+    const f = clone(BASE);
+    // Angry brow
+    f[4] = [0,1,55,55,1,49,49,1,49,49,49,49,1,49,49,1,55,55,1,0];
+    // Wider mouth: 2 extra interior rows
+    const mouthDark1 = [0,1,56,56,1,49,49,49,49,49,49,49,49,49,49,1,56,56,1,0];
+    const mouthDark2 = [0,1,56,56,1,49,49,49,52,52,52,49,49,49,49,1,56,56,1,0]; // tongue hint
+    // Replace the single mouth interior (row 12) with 3 rows
+    f.splice(12, 1, mouthDark1, mouthDark2, mouthDark1);
+    // Also raise the fists — shift fist pixels up by modifying the gap
+    // Remove one empty row from fist area to simulate fists raised
+    // Rows 16-19 are fists. Row 16 has gaps (col 6-13 = 0). Make row 15 the new fist-top overlap
+    frames.push({ grid: f, label: "ROAR!" });
+  }
+
+  // --- FRAME 4: Hold roar — pupils shift (looking left) ---
+  {
+    const f = clone(BASE);
+    f[4] = [0,1,55,55,1,49,49,1,49,49,49,49,1,49,49,1,55,55,1,0];
+    // Shift pupils left within each eye
+    f[5] = [0,1,55,55,1,49,5,5,49,49,49,49,5,5,49,1,55,55,1,0]; // whites
+    f[6] = [0,1,53,53,49,49,1,5,49,49,49,49,5,1,49,49,53,53,1,0]; // pupils shifted: left eye pupil left, right eye pupil right (cross-eyed menace? no — both look left)
+    // Actually let's do: both pupils shift left by 1
+    f[5] = [0,1,55,55,1,49,5,5,49,49,49,49,5,5,49,1,55,55,1,0];
+    f[6] = [0,1,53,53,49,1,5,49,49,49,49,1,5,49,49,49,53,53,1,0]; // pupils 1px left
+
+    const mouthDark1 = [0,1,56,56,1,49,49,49,49,49,49,49,49,49,49,1,56,56,1,0];
+    const mouthDark2 = [0,1,56,56,1,49,49,49,52,52,52,49,49,49,49,1,56,56,1,0];
+    f.splice(12, 1, mouthDark1, mouthDark2, mouthDark1);
+    frames.push({ grid: f, label: "ROAR! (hold)" });
+  }
+
+  // --- FRAME 5: Still roaring, pupils shift right ---
+  {
+    const f = clone(BASE);
+    f[4] = [0,1,55,55,1,49,49,1,49,49,49,49,1,49,49,1,55,55,1,0];
+    // Pupils shift right
+    f[5] = [0,1,55,55,1,49,5,5,49,49,49,49,5,5,49,1,55,55,1,0];
+    f[6] = [0,1,53,53,49,49,49,5,1,49,49,49,49,5,1,49,53,53,1,0]; // pupils 1px right
+
+    const mouthDark1 = [0,1,56,56,1,49,49,49,49,49,49,49,49,49,49,1,56,56,1,0];
+    const mouthDark2 = [0,1,56,56,1,49,49,49,52,52,52,49,49,49,49,1,56,56,1,0];
+    f.splice(12, 1, mouthDark1, mouthDark2, mouthDark1);
+    frames.push({ grid: f, label: "ROAR! (hold)" });
+  }
+
+  // --- FRAME 6: Mouth closing ---
+  {
+    const f = clone(BASE);
+    f[4] = [0,1,55,55,1,49,49,1,49,49,49,49,1,49,49,1,55,55,1,0];
+    const extra = [0,1,56,56,1,49,49,49,49,49,49,49,49,49,49,1,56,56,1,0];
+    f.splice(12, 0, extra);
+    frames.push({ grid: f, label: "Closing" });
+  }
+
+  // --- FRAME 7: Back to idle ---
+  frames.push({ grid: clone(BASE), label: "Idle" });
+
+  return frames;
+}
+
+const ROAR_FRAMES = makeFrames();
+
+// === RENDERING ===
+const PIXEL = 20;
+const cv = document.getElementById("c");
+const cx = cv.getContext("2d");
+const stage = document.getElementById("stage");
+
+function drawFrame(frameIdx) {
+  const frame = ROAR_FRAMES[frameIdx];
+  const grid = frame.grid;
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  cv.width = cols * PIXEL;
+  cv.height = rows * PIXEL;
+
+  cx.clearRect(0, 0, cv.width, cv.height);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const c = grid[y][x];
+      if (c) {
+        cx.fillStyle = P[c];
+        cx.fillRect(x * PIXEL, y * PIXEL, PIXEL, PIXEL);
+      }
+    }
+  }
+
+  document.getElementById("frameInfo").textContent =
+    `Frame ${frameIdx + 1} / ${ROAR_FRAMES.length}  —  ${frame.label}`;
+
+  // Screen shake on roar frames
+  const isRoar = frameIdx >= 3 && frameIdx <= 5;
+  stage.classList.toggle("shake", isRoar);
+}
+
+// === PLAYBACK ===
+let currentFrame = 0;
+let playing = true;
+let intervalId = null;
+
+// Frame durations (ms) — some frames hold longer
+function getFrameDuration(idx) {
+  const baseMs = (11 - document.getElementById("speedSlider").value) * 40 + 60; // 100ms to 460ms range
+  // Hold roar frames longer
+  if (idx >= 3 && idx <= 5) return baseMs * 1.5;
+  // Hold idle a bit
+  if (idx === 0 || idx === 7) return baseMs * 2;
+  return baseMs;
+}
+
+function scheduleNext() {
+  if (!playing) return;
+  intervalId = setTimeout(() => {
+    currentFrame = (currentFrame + 1) % ROAR_FRAMES.length;
+    drawFrame(currentFrame);
+    scheduleNext();
+  }, getFrameDuration(currentFrame));
+}
+
+function startPlayback() {
+  playing = true;
+  document.getElementById("btnPlay").classList.add("active");
+  document.getElementById("btnPause").classList.remove("active");
+  scheduleNext();
+}
+
+function stopPlayback() {
+  playing = false;
+  clearTimeout(intervalId);
+  document.getElementById("btnPlay").classList.remove("active");
+  document.getElementById("btnPause").classList.add("active");
+  stage.classList.remove("shake");
+}
+
+document.getElementById("btnPlay").addEventListener("click", () => {
+  if (!playing) startPlayback();
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  stopPlayback();
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  stopPlayback();
+  currentFrame = (currentFrame + 1) % ROAR_FRAMES.length;
+  drawFrame(currentFrame);
+});
+
+document.getElementById("speedSlider").addEventListener("input", (e) => {
+  document.getElementById("speedLabel").textContent = e.target.value;
+  // Restart timing if playing
+  if (playing) {
+    clearTimeout(intervalId);
+    scheduleNext();
+  }
+});
+
+// === INIT ===
+drawFrame(0);
+startPlayback();
+</script>
+</body>
+</html>

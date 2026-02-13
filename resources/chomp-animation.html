@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0f;
+    font-family: 'Press Start 2P', monospace;
+    color: #fb923c;
+    gap: 24px;
+    padding: 32px;
+  }
+
+  h1 {
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fb923c;
+    text-shadow: 0 0 20px rgba(251,146,60,0.4);
+  }
+
+  .stage {
+    position: relative;
+    background: #111118;
+    border: 2px solid #222;
+    border-radius: 8px;
+    padding: 32px;
+    box-shadow:
+      0 0 40px rgba(153,27,27,0.15),
+      inset 0 0 60px rgba(0,0,0,0.5);
+    /* Fixed size to prevent layout jump during animation */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 620px;
+  }
+
+  .stage.shake {
+    animation: shake 0.06s linear infinite;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-3px, 2px); }
+    50% { transform: translate(3px, -2px); }
+    75% { transform: translate(-2px, -3px); }
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  button {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: #1a1a2e;
+    color: #fb923c;
+    border: 2px solid #fb923c;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  button:hover {
+    background: #fb923c;
+    color: #1a1a2e;
+  }
+  button.active {
+    background: #fb923c;
+    color: #1a1a2e;
+    box-shadow: 0 0 12px rgba(251,146,60,0.5);
+  }
+
+  .frame-info {
+    font-size: 9px;
+    color: #666;
+    min-width: 180px;
+    text-align: center;
+  }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    color: #666;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: #fb923c;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .anim-label {
+    font-size: 10px;
+    color: #991b1b;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Formula Boss — Animations</h1>
+
+<div class="stage" id="stage">
+  <canvas id="c"></canvas>
+</div>
+
+<div class="anim-label" id="animLabel">CHOMP</div>
+
+<div class="controls">
+  <button id="btnPlay" class="active">▶ Play</button>
+  <button id="btnPause">❚❚ Pause</button>
+  <button id="btnStep">▸ Step</button>
+  <div class="frame-info" id="frameInfo">Frame 1 / 10</div>
+</div>
+
+<div class="speed-control">
+  <span>Speed</span>
+  <input type="range" id="speedSlider" min="1" max="10" value="5">
+  <span id="speedLabel">5</span>
+</div>
+
+<script>
+// === PALETTE ===
+const P = {
+  0:"transparent", 1:"#1a1a2e", 4:"#ffd700", 5:"#ffffff", 49:"#991b1b",
+  52:"#c2410c", 53:"#fb923c", 55:"#e8853a", 56:"#d97526", 57:"#b85e1a", 58:"#9a4e15"
+};
+
+// Shorthand
+const _ = 0, D = 1, W = 5, R = 49, O = 52, L = 53, E = 55, J = 56, K = 57, G = 58;
+
+// === BASE FRAME (idle) — 20 wide x 20 tall ===
+const BASE = [
+  [_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_],       // 0  horns
+  [_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_],       // 1  horn base
+  [_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_],       // 2  top head
+  [_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_],       // 3  head
+  [_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_],       // 4  head
+  [_,D,E,E,D,R,W,W,R,R,R,R,W,W,R,D,E,E,D,_],       // 5  eyes white
+  [_,D,L,L,R,R,W,D,R,R,R,R,D,W,R,R,L,L,D,_],       // 6  eyes pupil
+  [_,D,L,L,R,R,R,R,R,R,R,R,R,R,R,R,L,L,D,_],       // 7  cheeks
+  [_,D,L,L,R,R,R,R,R,O,O,R,R,R,R,R,L,L,D,_],       // 8  nose
+  [_,D,L,L,R,R,R,R,R,R,R,R,R,R,R,R,L,L,D,_],       // 9  under nose
+  [_,D,J,J,D,D,D,D,D,D,D,D,D,D,D,D,J,J,D,_],       // 10 mouth top border
+  [_,D,J,J,D,W,D,W,D,W,D,W,D,W,W,D,J,J,D,_],       // 11 upper teeth
+  [_,D,J,J,D,R,R,R,O,O,O,R,R,R,R,D,J,J,D,_],       // 12 mouth interior
+  [_,D,K,K,D,D,W,D,W,D,W,D,W,D,D,D,K,K,D,_],       // 13 lower teeth
+  [_,D,K,K,K,R,R,R,R,R,R,R,R,R,R,K,K,K,D,_],       // 14 chin
+  [_,D,K,K,K,D,D,D,D,D,D,D,D,D,D,K,K,K,D,_],       // 15 chin border
+  [D,E,E,K,K,D,_,_,_,_,_,_,_,_,D,K,K,E,E,D],       // 16 fist top
+  [D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D],       // 17 fist mid
+  [D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D],       // 18 fist bottom
+  [D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D],       // 19 fist base
+];
+
+function clone(grid) { return grid.map(r => [...r]); }
+
+// === CHOMP ANIMATION FRAMES ===
+// The idea: the character's mouth opens HUGE — taking up most of the body —
+// then slams shut. Super exaggerated, almost all teeth.
+//
+// Frame 0: Idle
+// Frame 1: Eyes widen (anticipation), slight mouth tension
+// Frame 2: Mouth starts to open — head compresses, jaw drops
+// Frame 3: Mouth WIDE open — eyes are a tiny strip, enormous gaping maw
+// Frame 4: Maximum gape — even wider, fists raised
+// Frame 5: CHOMP! Jaws slam shut — compressed, teeth interlocked, shorter than normal
+// Frame 6: Impact hold — still compressed, shake
+// Frame 7: Releasing — back to normal height
+// Frame 8: Settling
+// Frame 9: Idle
+
+function makeFrames() {
+  const frames = [];
+
+  // --- FRAME 0: Idle ---
+  frames.push({ grid: clone(BASE), label: "Idle", shake: false });
+
+  // --- FRAME 1: Anticipation — eyes go wide, brow raises ---
+  {
+    const f = clone(BASE);
+    // Widen eyes: make pupils smaller/more centered (surprised look)
+    // Move white area: 3 wide instead of 2
+    f[5] = [_,D,E,E,D,R,W,W,W,R,R,W,W,W,R,D,E,E,D,_]; // wider whites
+    f[6] = [_,D,L,L,R,R,W,D,W,R,R,W,D,W,R,R,L,L,D,_]; // pupil centered in 3-wide eye
+    frames.push({ grid: f, label: "Anticipation", shake: false });
+  }
+
+  // --- FRAME 2: Mouth opening — head compresses, jaw drops 2 rows ---
+  {
+    // Strategy: remove some head rows above mouth, add mouth interior rows
+    // This keeps overall height reasonable while making mouth dominate
+    const f = [];
+    // Horns + horn base (rows 0-1) — keep
+    f.push([_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_]);
+    f.push([_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_]);
+    // Compressed head — merge rows 2-4 into 2 rows
+    f.push([_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_]);
+    f.push([_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_]);
+    // Wide eyes (anticipation style)
+    f.push([_,D,E,E,D,R,W,W,W,R,R,W,W,W,R,D,E,E,D,_]);
+    f.push([_,D,L,L,R,R,W,D,W,R,R,W,D,W,R,R,L,L,D,_]);
+    // Compressed cheek/nose — just 1 row
+    f.push([_,D,L,L,R,R,R,R,R,O,O,R,R,R,R,R,L,L,D,_]);
+    // Mouth border
+    f.push([_,D,J,J,D,D,D,D,D,D,D,D,D,D,D,D,J,J,D,_]);
+    // Upper teeth
+    f.push([_,D,J,J,D,W,D,W,D,W,D,W,D,W,W,D,J,J,D,_]);
+    // Mouth interior — 3 rows (opening up)
+    f.push([_,D,J,J,D,R,R,R,R,R,R,R,R,R,R,D,J,J,D,_]);
+    f.push([_,D,J,J,D,R,R,R,O,O,O,R,R,R,R,D,J,J,D,_]); // tongue
+    f.push([_,D,J,J,D,R,R,R,R,R,R,R,R,R,R,D,J,J,D,_]);
+    // Lower teeth
+    f.push([_,D,K,K,D,D,W,D,W,D,W,D,W,D,D,D,K,K,D,_]);
+    // Chin (compressed)
+    f.push([_,D,K,K,K,R,R,R,R,R,R,R,R,R,R,K,K,K,D,_]);
+    f.push([_,D,K,K,K,D,D,D,D,D,D,D,D,D,D,K,K,K,D,_]);
+    // Fists
+    f.push([D,E,E,K,K,D,_,_,_,_,_,_,_,_,D,K,K,E,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D]);
+    frames.push({ grid: f, label: "Opening", shake: false });
+  }
+
+  // --- FRAME 3: WIDE OPEN — enormous mouth, eyes are tiny strip ---
+  {
+    const f = [];
+    // Horns
+    f.push([_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_]);
+    f.push([_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_]);
+    // Minimal head — just 1 row
+    f.push([_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_]);
+    // Tiny eyes — compressed into 1 row, pupils visible
+    f.push([_,D,L,L,D,R,W,D,R,R,R,R,D,W,R,D,L,L,D,_]);
+    // Nose squished into mouth border
+    f.push([_,D,L,L,D,D,D,D,D,D,D,D,D,D,D,D,L,L,D,_]);
+    // Upper teeth — BIG, 2 rows of teeth
+    f.push([_,D,J,J,W,D,W,D,W,D,W,D,W,D,W,D,J,J,D,_]); // teeth row 1
+    f.push([_,D,J,J,D,W,D,W,D,W,D,W,D,W,D,W,J,J,D,_]); // teeth row 2 (offset)
+    // Massive mouth interior — 6 rows!
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,O,O,O,O,R,R,R,R,J,J,D,_]); // big tongue
+    f.push([_,D,J,J,R,R,R,O,O,O,O,O,O,R,R,R,J,J,D,_]); // tongue wider
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    // Lower teeth — BIG, 2 rows
+    f.push([_,D,K,K,D,W,D,W,D,W,D,W,D,W,D,W,K,K,D,_]); // teeth row 1
+    f.push([_,D,K,K,W,D,W,D,W,D,W,D,W,D,W,D,K,K,D,_]); // teeth row 2 (offset)
+    // Minimal chin
+    f.push([_,D,K,K,D,D,D,D,D,D,D,D,D,D,D,D,K,K,D,_]);
+    f.push([_,D,K,K,K,R,R,R,R,R,R,R,R,R,R,K,K,K,D,_]);
+    // Fists raised — directly attached
+    f.push([D,E,E,K,K,D,D,D,D,D,D,D,D,D,D,K,K,E,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D]);
+    frames.push({ grid: f, label: "Wide Open", shake: false });
+  }
+
+  // --- FRAME 4: MAXIMUM GAPE — even more exaggerated ---
+  {
+    const f = [];
+    // Horns
+    f.push([_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_]);
+    f.push([_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_]);
+    // Ultra-minimal head
+    f.push([_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_]);
+    // Eyes barely visible — panicked tiny dots
+    f.push([_,D,L,L,D,R,R,D,R,R,R,R,D,R,R,D,L,L,D,_]);
+    // Straight into upper teeth — no nose visible
+    f.push([_,D,J,J,D,D,D,D,D,D,D,D,D,D,D,D,J,J,D,_]);
+    // Upper teeth — massive 2 rows
+    f.push([_,D,J,J,W,D,W,D,W,D,W,D,W,D,W,D,J,J,D,_]);
+    f.push([_,D,J,J,D,W,D,W,D,W,D,W,D,W,D,W,J,J,D,_]);
+    // Enormous mouth interior — 8 rows!
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,O,O,O,O,O,O,R,R,R,J,J,D,_]); // tongue
+    f.push([_,D,J,J,R,R,O,O,O,O,O,O,O,O,R,R,J,J,D,_]); // bigger tongue
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    f.push([_,D,J,J,R,R,R,R,R,R,R,R,R,R,R,R,J,J,D,_]);
+    // Lower teeth — massive 2 rows
+    f.push([_,D,K,K,D,W,D,W,D,W,D,W,D,W,D,W,K,K,D,_]);
+    f.push([_,D,K,K,W,D,W,D,W,D,W,D,W,D,W,D,K,K,D,_]);
+    // Tiny chin
+    f.push([_,D,K,K,D,D,D,D,D,D,D,D,D,D,D,D,K,K,D,_]);
+    // Fists — raised tight
+    f.push([D,E,E,K,K,D,D,D,D,D,D,D,D,D,D,K,K,E,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D]);
+    frames.push({ grid: f, label: "MAX GAPE", shake: false });
+  }
+
+  // --- FRAME 5: CHOMP! Jaws slamming shut — teeth interlocked, VERY compressed ---
+  {
+    const f = [];
+    // Horns
+    f.push([_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_]);
+    f.push([_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_]);
+    // Head returns but compressed
+    f.push([_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_]);
+    f.push([_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_]);
+    // Eyes scrunched — angry/satisfied
+    f.push([_,D,E,E,D,R,R,D,R,R,R,R,D,R,R,D,E,E,D,_]); // tiny slit eyes
+    // Nose compressed
+    f.push([_,D,L,L,R,R,R,R,R,O,O,R,R,R,R,R,L,L,D,_]);
+    // Mouth CLAMPED — teeth interlocked, no interior visible
+    f.push([_,D,J,J,D,D,D,D,D,D,D,D,D,D,D,D,J,J,D,_]);
+    f.push([_,D,J,J,W,W,W,W,W,W,W,W,W,W,W,W,J,J,D,_]); // teeth SMASHED together — solid white line
+    f.push([_,D,K,K,D,D,D,D,D,D,D,D,D,D,D,D,K,K,D,_]);
+    // Chin
+    f.push([_,D,K,K,K,R,R,R,R,R,R,R,R,R,R,K,K,K,D,_]);
+    f.push([_,D,K,K,K,D,D,D,D,D,D,D,D,D,D,K,K,K,D,_]);
+    // Fists — slammed down (back to normal position)
+    f.push([D,E,E,K,K,D,_,_,_,_,_,_,_,_,D,K,K,E,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D]);
+    frames.push({ grid: f, label: "CHOMP!", shake: true });
+  }
+
+  // --- FRAME 6: Impact hold — still clenched, slight variation ---
+  {
+    const f = [];
+    f.push([_,_,_,_,_,L,L,_,_,_,_,_,_,L,L,_,_,_,_,_]);
+    f.push([_,_,_,_,_,O,O,D,D,D,D,D,D,O,O,_,_,_,_,_]);
+    f.push([_,_,D,D,D,D,R,R,R,R,R,R,R,R,D,D,D,D,_,_]);
+    f.push([_,D,E,E,D,R,R,R,R,R,R,R,R,R,R,D,E,E,D,_]);
+    // Satisfied squint
+    f.push([_,D,E,E,D,R,R,D,D,R,R,D,D,R,R,D,E,E,D,_]); // satisfied/smug eyes
+    f.push([_,D,L,L,R,R,R,R,R,O,O,R,R,R,R,R,L,L,D,_]);
+    // Mouth still clamped — maybe slight gap showing teeth pattern
+    f.push([_,D,J,J,D,D,D,D,D,D,D,D,D,D,D,D,J,J,D,_]);
+    f.push([_,D,J,J,W,D,W,D,W,D,W,D,W,D,W,D,J,J,D,_]); // interlocked teeth pattern
+    f.push([_,D,K,K,D,D,D,D,D,D,D,D,D,D,D,D,K,K,D,_]);
+    // Chin + body
+    f.push([_,D,K,K,K,R,R,R,R,R,R,R,R,R,R,K,K,K,D,_]);
+    f.push([_,D,K,K,K,D,D,D,D,D,D,D,D,D,D,K,K,K,D,_]);
+    f.push([D,E,E,K,K,D,_,_,_,_,_,_,_,_,D,K,K,E,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,E,L,D,K,K,D,_,_,_,_,_,_,D,K,K,D,L,E,D]);
+    f.push([D,D,D,D,D,D,D,_,_,_,_,_,_,D,D,D,D,D,D,D]);
+    frames.push({ grid: f, label: "CRUNCH!", shake: true });
+  }
+
+  // --- FRAME 7: Releasing — mouth relaxes, eyes normal ---
+  {
+    const f = clone(BASE);
+    // Slightly compressed — remove one head row
+    // Just use base but with satisfied eyes
+    f[5] = [_,D,E,E,D,R,W,W,R,R,R,R,W,W,R,D,E,E,D,_];
+    f[6] = [_,D,L,L,R,R,D,W,R,R,R,R,W,D,R,R,L,L,D,_]; // pupils looking down smugly
+    frames.push({ grid: f, label: "Satisfied", shake: false });
+  }
+
+  // --- FRAME 8: Settling ---
+  {
+    const f = clone(BASE);
+    // Normal eyes, slight smirk — widen mouth interior slightly
+    frames.push({ grid: f, label: "Settling", shake: false });
+  }
+
+  // --- FRAME 9: Idle ---
+  frames.push({ grid: clone(BASE), label: "Idle", shake: false });
+
+  return frames;
+}
+
+const CHOMP_FRAMES = makeFrames();
+
+// === RENDERING ===
+const PIXEL = 18;
+const cv = document.getElementById("c");
+const cx = cv.getContext("2d");
+const stage = document.getElementById("stage");
+
+function drawFrame(frameIdx) {
+  const frame = CHOMP_FRAMES[frameIdx];
+  const grid = frame.grid;
+  const rows = grid.length;
+  const cols = grid[0].length;
+
+  cv.width = cols * PIXEL;
+  cv.height = rows * PIXEL;
+
+  cx.clearRect(0, 0, cv.width, cv.height);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const c = grid[y][x];
+      if (c) {
+        cx.fillStyle = P[c];
+        cx.fillRect(x * PIXEL, y * PIXEL, PIXEL, PIXEL);
+      }
+    }
+  }
+
+  document.getElementById("frameInfo").textContent =
+    `Frame ${frameIdx + 1} / ${CHOMP_FRAMES.length}  —  ${frame.label}`;
+
+  stage.classList.toggle("shake", !!frame.shake);
+}
+
+// === PLAYBACK ===
+let currentFrame = 0;
+let playing = true;
+let intervalId = null;
+
+function getFrameDuration(idx) {
+  const baseMs = (11 - document.getElementById("speedSlider").value) * 40 + 60;
+  const label = CHOMP_FRAMES[idx].label;
+  // Idle frames hold longer
+  if (label === "Idle") return baseMs * 2.5;
+  // Anticipation — brief pause
+  if (label === "Anticipation") return baseMs * 1.5;
+  // Max gape — hold briefly before snap
+  if (label === "MAX GAPE") return baseMs * 1.8;
+  // CHOMP — very fast transition (snap shut!)
+  if (label === "CHOMP!" || label === "Wide Open") return baseMs * 0.5;
+  // Impact hold
+  if (label === "CRUNCH!") return baseMs * 1.5;
+  // Satisfied
+  if (label === "Satisfied") return baseMs * 1.8;
+  return baseMs;
+}
+
+function scheduleNext() {
+  if (!playing) return;
+  intervalId = setTimeout(() => {
+    currentFrame = (currentFrame + 1) % CHOMP_FRAMES.length;
+    drawFrame(currentFrame);
+    scheduleNext();
+  }, getFrameDuration(currentFrame));
+}
+
+function startPlayback() {
+  playing = true;
+  document.getElementById("btnPlay").classList.add("active");
+  document.getElementById("btnPause").classList.remove("active");
+  scheduleNext();
+}
+
+function stopPlayback() {
+  playing = false;
+  clearTimeout(intervalId);
+  document.getElementById("btnPlay").classList.remove("active");
+  document.getElementById("btnPause").classList.add("active");
+  stage.classList.remove("shake");
+}
+
+document.getElementById("btnPlay").addEventListener("click", () => {
+  if (!playing) startPlayback();
+});
+
+document.getElementById("btnPause").addEventListener("click", () => {
+  stopPlayback();
+});
+
+document.getElementById("btnStep").addEventListener("click", () => {
+  stopPlayback();
+  currentFrame = (currentFrame + 1) % CHOMP_FRAMES.length;
+  drawFrame(currentFrame);
+});
+
+document.getElementById("speedSlider").addEventListener("input", (e) => {
+  document.getElementById("speedLabel").textContent = e.target.value;
+  if (playing) {
+    clearTimeout(intervalId);
+    scheduleNext();
+  }
+});
+
+// === INIT ===
+drawFrame(0);
+startPlayback();
+</script>
+</body>
+</html>
