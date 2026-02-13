@@ -1,15 +1,17 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
 using ExcelDna.Integration;
 
+using FormulaBoss.Interception;
 using FormulaBoss.UI;
 
 namespace FormulaBoss.Commands;
 
 /// <summary>
 ///     Command handler for showing the floating formula editor.
+///     Triggered by Ctrl+Shift+` keyboard shortcut.
 /// </summary>
 public static class ShowFloatingEditorCommand
 {
@@ -17,6 +19,11 @@ public static class ShowFloatingEditorCommand
     private static Dispatcher? _windowDispatcher;
     private static Thread? _windowThread;
     private static dynamic? _app;
+
+    // Target cell captured at open time so Apply writes to the correct cell
+    // even if the user clicks elsewhere while the editor is open
+    private static dynamic? _targetWorksheet;
+    private static string? _targetAddress;
 
     /// <summary>
     ///     Initializes the command with the Excel application reference.
@@ -30,65 +37,37 @@ public static class ShowFloatingEditorCommand
     /// </summary>
     public static void Cleanup()
     {
-        if (_windowDispatcher != null)
-        {
-            _windowDispatcher.InvokeShutdown();
-            _windowDispatcher = null;
-        }
+        _windowDispatcher?.InvokeShutdown();
+        _windowDispatcher = null;
 
         _windowThread = null;
         _window = null;
         _app = null;
+        _targetWorksheet = null;
+        _targetAddress = null;
     }
 
     /// <summary>
-    ///     Toggles the floating formula editor visibility.
-    ///     If hidden, shows it near the active cell.
-    ///     If visible, hides it.
+    ///     Opens the floating formula editor with context-aware content based on cell state.
+    ///     If editor is already visible, hides it (toggle).
     /// </summary>
-    [ExcelCommand(MenuName = "Formula Boss", MenuText = "Open Editor")]
+    [ExcelCommand]
     public static void ShowFloatingEditor()
     {
         try
         {
             _app ??= ExcelDnaUtil.Application;
 
-            // Get cell info and Excel HWND while we're on the Excel thread
             var cell = _app.ActiveCell;
-            var formula = cell.Formula2 as string ?? cell.Formula as string ?? "";
+            var editorContent = DetectEditorContent(cell);
             var excelHwnd = new IntPtr(_app.Hwnd);
 
-            // Create window thread if needed
-            if (_windowThread == null || !_windowThread.IsAlive)
-            {
-                var readyEvent = new ManualResetEventSlim(false);
+            // Capture target cell at open time
+            _targetWorksheet = cell.Worksheet;
+            _targetAddress = cell.Address as string;
 
-                _windowThread = new Thread(() =>
-                {
-                    // Set per-monitor v2 DPI awareness for this thread so the
-                    // window renders correctly on any monitor regardless of
-                    // the host process (Excel) DPI awareness mode.
-                    NativeMethods.SetThreadDpiAwarenessContext(
-                        NativeMethods.DpiAwarenessContextPerMonitorAwareV2);
+            EnsureWindowThread();
 
-                    _window = new FloatingEditorWindow();
-                    _window.FormulaApplied += OnFormulaApplied;
-                    _windowDispatcher = Dispatcher.CurrentDispatcher;
-                    readyEvent.Set();
-
-                    // Run the WPF message loop
-                    Dispatcher.Run();
-                });
-
-                _windowThread.SetApartmentState(ApartmentState.STA);
-                _windowThread.IsBackground = true;
-                _windowThread.Start();
-
-                // Wait for window to be created
-                readyEvent.Wait();
-            }
-
-            // Dispatch to window thread
             _windowDispatcher?.Invoke(() =>
             {
                 if (_window == null)
@@ -102,9 +81,8 @@ public static class ShowFloatingEditorCommand
                 }
                 else
                 {
-                    _window.FormulaText = formula;
+                    _window.FormulaText = editorContent;
 
-                    // Ensure HWND exists without showing, then position, then show
                     var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
 
@@ -119,19 +97,84 @@ public static class ShowFloatingEditorCommand
         }
     }
 
+    /// <summary>
+    ///     Detects the appropriate editor content based on the cell's current state.
+    /// </summary>
+    private static string DetectEditorContent(dynamic cell)
+    {
+        var formula = cell.Formula2 as string ?? cell.Formula as string ?? "";
+
+        // Empty cell
+        if (string.IsNullOrEmpty(formula))
+        {
+            return "";
+        }
+
+        // Unprocessed FB formula: quote-prefixed text (user typed '=... with backticks)
+        var prefix = cell.PrefixCharacter as string;
+        if (prefix == "'")
+        {
+            return cell.Value2 as string ?? "";
+        }
+
+        // Processed FB LET formula: contains _src_ variables from pipeline
+        if (LetFormulaReconstructor.IsProcessedFormulaBossLet(formula))
+        {
+            if (LetFormulaReconstructor.TryReconstruct(formula, out var editableFormula) &&
+                editableFormula != null)
+            {
+                // TryReconstruct adds a leading ' for text storage — strip it for the editor
+                return editableFormula.StartsWith('\'') ? editableFormula[1..] : editableFormula;
+            }
+        }
+
+        // Processed basic FB / non-FB formula: show formula as-is
+        return formula;
+    }
+
+    private static void EnsureWindowThread()
+    {
+        if (_windowThread != null && _windowThread.IsAlive)
+        {
+            return;
+        }
+
+        var readyEvent = new ManualResetEventSlim(false);
+
+        _windowThread = new Thread(() =>
+        {
+            NativeMethods.SetThreadDpiAwarenessContext(
+                NativeMethods.DpiAwarenessContextPerMonitorAwareV2);
+
+            _window = new FloatingEditorWindow();
+            _window.FormulaApplied += OnFormulaApplied;
+            _windowDispatcher = Dispatcher.CurrentDispatcher;
+            readyEvent.Set();
+
+            Dispatcher.Run();
+        });
+
+        _windowThread.SetApartmentState(ApartmentState.STA);
+        _windowThread.IsBackground = true;
+        _windowThread.Start();
+
+        readyEvent.Wait();
+    }
+
     private static void OnFormulaApplied(object? sender, string formula)
     {
-        // This runs on the WPF thread, need to dispatch to Excel thread
         ExcelAsyncUtil.QueueAsMacro(() =>
         {
             try
             {
-                if (_app == null)
+                var worksheet = _targetWorksheet;
+                var address = _targetAddress;
+                if (_app == null || worksheet == null || address == null)
                 {
                     return;
                 }
 
-                var cell = _app.ActiveCell;
+                var cell = worksheet.Range[address];
                 if (!string.IsNullOrEmpty(formula))
                 {
                     cell.Formula2 = formula;
