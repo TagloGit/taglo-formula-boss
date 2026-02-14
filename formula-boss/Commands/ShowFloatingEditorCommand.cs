@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
@@ -30,9 +30,6 @@ public static class ShowFloatingEditorCommand
     private static int _targetCellScreenLeft;
     private static int _targetCellScreenTop;
 
-    // Reference to current animation overlay for fade signalling
-    private static AnimationOverlay? _currentOverlay;
-
     /// <summary>
     ///     Initializes the command with the Excel application reference.
     ///     Must be called during add-in initialization.
@@ -53,7 +50,6 @@ public static class ShowFloatingEditorCommand
         _app = null;
         _targetWorksheet = null;
         _targetAddress = null;
-        _currentOverlay = null;
     }
 
     /// <summary>
@@ -165,7 +161,7 @@ public static class ShowFloatingEditorCommand
     {
         try
         {
-            dynamic window = _app!.ActiveWindow;
+            var window = _app!.ActiveWindow;
             _targetCellScreenLeft = (int)(double)window.PointsToScreenPixelsX(cell.Left);
             _targetCellScreenTop = (int)(double)window.PointsToScreenPixelsY(cell.Top);
         }
@@ -267,7 +263,7 @@ public static class ShowFloatingEditorCommand
         try
         {
             var frames = ChompAnimation.BuildFrames();
-            var overlay = new AnimationOverlay(frames, baseIntervalMs: 70) { OneShot = true };
+            var overlay = new AnimationOverlay(frames, 70) { OneShot = true };
 
             // Position centered on the target cell
             // WPF uses DIPs; on the animation thread we already have per-monitor DPI awareness,
@@ -277,7 +273,6 @@ public static class ShowFloatingEditorCommand
 
             overlay.PlayOnce();
 
-            _currentOverlay = overlay;
             return overlay;
         }
         catch (Exception ex)
