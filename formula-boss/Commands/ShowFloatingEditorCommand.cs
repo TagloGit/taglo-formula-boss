@@ -252,7 +252,7 @@ public static class ShowFloatingEditorCommand
                 // Signal animation to fade out now that processing is complete
                 if (overlay != null)
                 {
-                    _windowDispatcher?.BeginInvoke(() => overlay.BeginFadeOut());
+                    _windowDispatcher?.BeginInvoke(() => overlay.BeginFadeOut(2000));
                 }
             }
         });
@@ -263,13 +263,14 @@ public static class ShowFloatingEditorCommand
         try
         {
             var frames = ChompAnimation.BuildFrames();
-            var overlay = new AnimationOverlay(frames, 70) { OneShot = true };
-
-            // Position centered on the target cell
-            // WPF uses DIPs; on the animation thread we already have per-monitor DPI awareness,
-            // so screen pixels from PointsToScreenPixels map 1:1 to WPF units on that monitor.
-            overlay.Left = _targetCellScreenLeft - 30;
-            overlay.Top = _targetCellScreenTop - 80;
+            var overlay = new AnimationOverlay(frames, 150)
+            {
+                OneShot = true, // Position centered on the target cell
+                // WPF uses DIPs; on the animation thread we already have per-monitor DPI awareness,
+                // so screen pixels from PointsToScreenPixels map 1:1 to WPF units on that monitor.
+                Left = _targetCellScreenLeft - 30,
+                Top = _targetCellScreenTop - 80
+            };
 
             overlay.PlayOnce();
 
