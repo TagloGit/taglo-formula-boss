@@ -34,7 +34,8 @@ public static class ChompAnimation
         var frames = new List<SpriteFrame>
         {
             // Frame 0: Idle
-            new(Clone(Base), "Idle", false, 2.5), // Frame 1: Anticipation - eyes widen
+            new(Clone(Base), "Idle",
+                false), // Frame 1: Anticipation - eyes widen - use 2.5 durationMultiplier for extra impact
             BuildAnticipation(), // Frame 2: Mouth opening
             BuildOpening(), // Frame 3: Wide open
             BuildWideOpen(),

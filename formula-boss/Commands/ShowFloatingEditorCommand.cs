@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -183,7 +183,7 @@ public static class ShowFloatingEditorCommand
     }
 
     /// <summary>
-    ///     Captures the target cell's screen position using Excel's PointsToScreenPixels.
+    ///     Captures the target cell's screen position in physical pixels.
     /// </summary>
     private static void CaptureTargetCellPosition(dynamic cell)
     {
@@ -191,12 +191,15 @@ public static class ShowFloatingEditorCommand
         try
         {
             window = _app!.ActiveWindow;
-            _targetCellScreenLeft = (int)(double)window.PointsToScreenPixelsX(cell.Left);
-            _targetCellScreenTop = (int)(double)window.PointsToScreenPixelsY(cell.Top);
+            double cellLeft = cell.Left;
+            double cellTop = cell.Top;
+            var pos = ((int X, int Y))CellPositioner.GetCellScreenPosition(window, cellLeft, cellTop);
+            _targetCellScreenLeft = pos.X;
+            _targetCellScreenTop = pos.Y;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"CaptureTargetCellPosition error: {ex.Message}");
+            Debug.WriteLine($"CaptureTargetCellPosition error: {ex}");
             _targetCellScreenLeft = 0;
             _targetCellScreenTop = 0;
         }
@@ -299,14 +302,13 @@ public static class ShowFloatingEditorCommand
         try
         {
             var frames = ChompAnimation.BuildFrames();
-            var overlay = new AnimationOverlay(frames, 150)
-            {
-                OneShot = true, // Position centered on the target cell
-                // WPF uses DIPs; on the animation thread we already have per-monitor DPI awareness,
-                // so screen pixels from PointsToScreenPixels map 1:1 to WPF units on that monitor.
-                Left = _targetCellScreenLeft - 30,
-                Top = _targetCellScreenTop - 80
-            };
+            var overlay = new AnimationOverlay(frames, 150) { OneShot = true };
+
+            // Position the native window BEFORE Show() so the first rendered frame
+            // is already at the correct location. EnsureHandle() creates the HWND
+            // without making the window visible.
+            var hwnd = new WindowInteropHelper(overlay).EnsureHandle();
+            CellPositioner.PlaceWindow(hwnd, _targetCellScreenLeft, _targetCellScreenTop);
 
             overlay.PlayOnce();
 
@@ -356,5 +358,4 @@ public static class ShowFloatingEditorCommand
             }
         }
     }
-
 }
