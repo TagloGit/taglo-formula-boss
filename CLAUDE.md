@@ -120,6 +120,20 @@ cell.Formula2 = "=MyUDF(A1:A5)";
 
 The `Formula` property is legacy and Excel will add an `@` prefix to prevent spilling. `Formula2` is the dynamic array-aware property introduced in Excel 365.
 
+## COM Object Lifecycle and Excel Shutdown
+
+**Every COM object obtained from Excel interop must be explicitly released via `Marshal.ReleaseComObject()`.** Unreleased COM references can prevent Excel from shutting down cleanly, leaving zombie processes.
+
+**Rules:**
+- Release transient COM objects (`ActiveCell`, `ActiveWindow`, `Range`, `Worksheet`) in `finally` blocks after use
+- Release stored COM references before overwriting them with new values
+- Capture COM objects on the Excel thread, not inside WPF dispatcher lambdas (avoids cross-apartment proxy issues)
+- On shutdown, release all stored COM references BEFORE shutting down background threads
+
+**ExcelDNA shutdown:** `AutoClose` is NOT called when Excel shuts down — only when the add-in is explicitly removed. Use `ExcelComAddIn.OnBeginShutdown` to detect Excel closing (see `AddIn.ShutdownMonitor`). Reference: https://excel-dna.net/docs/guides-advanced/detecting-excel-shutdown-and-autoclose/
+
+**WPF thread cleanup:** `Dispatcher.InvokeShutdown()` is async — always `Thread.Join()` afterward to ensure the thread exits before continuing cleanup.
+
 ## LINQ on object Collections
 
 When working with Excel range values (which are `object[,]`), LINQ aggregations like `.Sum()` don't work directly. Cast values explicitly:
