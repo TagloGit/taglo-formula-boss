@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
@@ -37,18 +38,28 @@ public static class ShowFloatingEditorCommand
     public static void Initialize(dynamic app) => _app = app;
 
     /// <summary>
-    ///     Cleans up the floating editor window.
-    ///     Should be called during add-in shutdown.
+    ///     Cleans up the floating editor window and releases all COM references.
+    ///     Must be called during add-in shutdown.
     /// </summary>
     public static void Cleanup()
     {
-        _windowDispatcher?.InvokeShutdown();
-        _windowDispatcher = null;
+        // 1. Release stored COM references BEFORE shutting down threads
+        ReleaseTargetWorksheet();
 
+        // 2. Shut down the WPF dispatcher
+        _windowDispatcher?.InvokeShutdown();
+
+        // 3. Wait for the WPF thread to actually finish (InvokeShutdown is async)
+        if (_windowThread is { IsAlive: true })
+        {
+            _windowThread.Join(TimeSpan.FromSeconds(2));
+        }
+
+        // 4. Null out all references
+        _windowDispatcher = null;
         _windowThread = null;
         _window = null;
         _app = null;
-        _targetWorksheet = null;
         _targetAddress = null;
     }
 
@@ -59,14 +70,21 @@ public static class ShowFloatingEditorCommand
     [ExcelCommand]
     public static void ShowFloatingEditor()
     {
+        dynamic? cell = null;
+        dynamic? worksheet = null;
+
         try
         {
             _app ??= ExcelDnaUtil.Application;
 
-            var cell = _app.ActiveCell;
+            cell = _app.ActiveCell;
             var currentAddress = cell.Address as string;
             var editorContent = DetectEditorContent(cell);
             var excelHwnd = new IntPtr(_app.Hwnd);
+
+            // Capture worksheet on the Excel thread (not inside the WPF dispatcher)
+            // to avoid cross-apartment COM proxy complications
+            worksheet = cell.Worksheet;
 
             // Capture cell screen position for animation placement
             CaptureTargetCellPosition(cell);
@@ -90,7 +108,9 @@ public static class ShowFloatingEditorCommand
                     else
                     {
                         // Different cell — update content and target
-                        _targetWorksheet = cell.Worksheet;
+                        ReleaseTargetWorksheet();
+                        _targetWorksheet = worksheet;
+                        worksheet = null; // Ownership transferred
                         _targetAddress = currentAddress;
                         _window.FormulaText = editorContent;
 
@@ -101,7 +121,9 @@ public static class ShowFloatingEditorCommand
                 else
                 {
                     // Capture target cell at open time
-                    _targetWorksheet = cell.Worksheet;
+                    ReleaseTargetWorksheet();
+                    _targetWorksheet = worksheet;
+                    worksheet = null; // Ownership transferred
                     _targetAddress = currentAddress;
                     _window.FormulaText = editorContent;
 
@@ -116,6 +138,12 @@ public static class ShowFloatingEditorCommand
         catch (Exception ex)
         {
             Debug.WriteLine($"ShowFloatingEditor error: {ex.Message}");
+        }
+        finally
+        {
+            // Release transient COM objects that weren't transferred to _targetWorksheet
+            ReleaseCom(worksheet);
+            ReleaseCom(cell);
         }
     }
 
@@ -159,9 +187,10 @@ public static class ShowFloatingEditorCommand
     /// </summary>
     private static void CaptureTargetCellPosition(dynamic cell)
     {
+        dynamic? window = null;
         try
         {
-            var window = _app!.ActiveWindow;
+            window = _app!.ActiveWindow;
             _targetCellScreenLeft = (int)(double)window.PointsToScreenPixelsX(cell.Left);
             _targetCellScreenTop = (int)(double)window.PointsToScreenPixelsY(cell.Top);
         }
@@ -170,6 +199,10 @@ public static class ShowFloatingEditorCommand
             Debug.WriteLine($"CaptureTargetCellPosition error: {ex.Message}");
             _targetCellScreenLeft = 0;
             _targetCellScreenTop = 0;
+        }
+        finally
+        {
+            ReleaseCom(window);
         }
     }
 
@@ -210,6 +243,7 @@ public static class ShowFloatingEditorCommand
 
         ExcelAsyncUtil.QueueAsMacro(() =>
         {
+            dynamic? cell = null;
             try
             {
                 var worksheet = _targetWorksheet;
@@ -224,7 +258,7 @@ public static class ShowFloatingEditorCommand
                     return;
                 }
 
-                var cell = worksheet!.Range[address];
+                cell = worksheet!.Range[address];
 
                 if (BacktickExtractor.IsBacktickFormula(formula))
                 {
@@ -249,6 +283,8 @@ public static class ShowFloatingEditorCommand
             }
             finally
             {
+                ReleaseCom(cell);
+
                 // Signal animation to fade out now that processing is complete
                 if (overlay != null)
                 {
@@ -282,4 +318,43 @@ public static class ShowFloatingEditorCommand
             return null;
         }
     }
+
+    /// <summary>
+    ///     Releases the stored target worksheet COM reference.
+    /// </summary>
+    private static void ReleaseTargetWorksheet()
+    {
+        if (_targetWorksheet != null)
+        {
+            try
+            {
+                Marshal.ReleaseComObject(_targetWorksheet);
+            }
+            catch
+            {
+                // Ignore — object may already be released or invalid
+            }
+
+            _targetWorksheet = null;
+        }
+    }
+
+    /// <summary>
+    ///     Safely releases a COM object if non-null.
+    /// </summary>
+    private static void ReleaseCom(object? comObject)
+    {
+        if (comObject != null)
+        {
+            try
+            {
+                Marshal.ReleaseComObject(comObject);
+            }
+            catch
+            {
+                // Ignore — object may not be a COM object or already released
+            }
+        }
+    }
+
 }
