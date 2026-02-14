@@ -27,9 +27,10 @@ public static class ShowFloatingEditorCommand
     private static dynamic? _targetWorksheet;
     private static string? _targetAddress;
 
-    // Cell screen position captured at open time for animation placement
+    // Cell screen position captured at open time for animation placement (physical pixels)
     private static int _targetCellScreenLeft;
     private static int _targetCellScreenTop;
+    private static double _targetMonitorScale = 1.0;
 
     /// <summary>
     ///     Initializes the command with the Excel application reference.
@@ -193,9 +194,10 @@ public static class ShowFloatingEditorCommand
             window = _app!.ActiveWindow;
             double cellLeft = cell.Left;
             double cellTop = cell.Top;
-            var pos = ((int X, int Y))CellPositioner.GetCellScreenPosition(window, cellLeft, cellTop);
+            var pos = ((int X, int Y, double Scale))CellPositioner.GetCellScreenPosition(window, cellLeft, cellTop);
             _targetCellScreenLeft = pos.X;
             _targetCellScreenTop = pos.Y;
+            _targetMonitorScale = pos.Scale;
         }
         catch (Exception ex)
         {
@@ -291,7 +293,7 @@ public static class ShowFloatingEditorCommand
                 // Signal animation to fade out now that processing is complete
                 if (overlay != null)
                 {
-                    _windowDispatcher?.BeginInvoke(() => overlay.BeginFadeOut(2000));
+                    _windowDispatcher?.BeginInvoke(() => overlay.BeginFadeOut(1500));
                 }
             }
         });
@@ -302,13 +304,19 @@ public static class ShowFloatingEditorCommand
         try
         {
             var frames = ChompAnimation.BuildFrames();
-            var overlay = new AnimationOverlay(frames, 150) { OneShot = true };
+            var overlay = new AnimationOverlay(frames, 100) { OneShot = true };
 
             // Position the native window BEFORE Show() so the first rendered frame
             // is already at the correct location. EnsureHandle() creates the HWND
             // without making the window visible.
+            // Offset in logical pixels (at 96 DPI), scaled to physical pixels for the monitor
+            var offsetX = (int)(-20 * _targetMonitorScale);
+            var offsetY = (int)(-40 * _targetMonitorScale);
+
             var hwnd = new WindowInteropHelper(overlay).EnsureHandle();
-            CellPositioner.PlaceWindow(hwnd, _targetCellScreenLeft, _targetCellScreenTop);
+            CellPositioner.PlaceWindow(hwnd,
+                _targetCellScreenLeft + offsetX,
+                _targetCellScreenTop + offsetY);
 
             overlay.PlayOnce();
 
