@@ -14,14 +14,19 @@ namespace FormulaBoss.UI;
 public static class CellPositioner
 {
     /// <summary>
-    ///     Gets the physical pixel screen position of a cell's top-left corner.
+    ///     Gets the physical pixel screen position of a cell's top-left corner,
+    ///     plus the monitor's DPI scale factor for scaling offsets.
     ///     Must be called on the Excel thread (needs COM access to ActiveWindow).
     /// </summary>
     /// <param name="excelWindow">The ActiveWindow COM object (provides PointsToScreenPixels and Zoom).</param>
     /// <param name="cellLeftPts">Cell.Left in points.</param>
     /// <param name="cellTopPts">Cell.Top in points.</param>
-    /// <returns>Physical pixel coordinates suitable for SetWindowPos from a PER_MONITOR_AWARE_V2 thread.</returns>
-    public static (int X, int Y) GetCellScreenPosition(dynamic excelWindow, double cellLeftPts, double cellTopPts)
+    /// <returns>
+    ///     Physical pixel coordinates suitable for SetWindowPos from a PER_MONITOR_AWARE_V2 thread,
+    ///     and the monitor's DPI scale factor (e.g. 1.0 at 96 DPI, 1.5 at 144 DPI).
+    /// </returns>
+    public static (int X, int Y, double Scale) GetCellScreenPosition(
+        dynamic excelWindow, double cellLeftPts, double cellTopPts)
     {
         var zoom = (int)excelWindow.Zoom;
 
@@ -45,10 +50,11 @@ public static class CellPositioner
             NativeMethods.SetThreadDpiAwarenessContext(prevCtx);
         }
 
+        var scale = dpiX / 96.0;
         var x = originX + (int)(cellLeftPts * (dpiX / 72.0) * (zoom / 100.0));
         var y = originY + (int)(cellTopPts * (dpiY / 72.0) * (zoom / 100.0));
 
-        return (x, y);
+        return (x, y, scale);
     }
 
     /// <summary>
