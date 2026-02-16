@@ -64,6 +64,14 @@ public record WorkbookMetadata(
                 try
                 {
                     name = names.Item(i);
+
+                    // Skip hidden names (Excel internal definitions)
+                    bool visible = name.Visible;
+                    if (!visible)
+                    {
+                        continue;
+                    }
+
                     var nameStr = name.Name as string;
                     if (!string.IsNullOrEmpty(nameStr))
                     {
