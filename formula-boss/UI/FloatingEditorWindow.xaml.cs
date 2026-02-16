@@ -1,7 +1,9 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 
@@ -186,11 +188,19 @@ public partial class FloatingEditorWindow
         _completionWindow = new CompletionWindow(FormulaEditor.TextArea)
         {
             MinWidth = 250,
-            CloseWhenCaretAtBeginning = true
+            MaxWidth = 600,
+            CloseWhenCaretAtBeginning = true,
+            SizeToContent = SizeToContent.WidthAndHeight
         };
 
         // Enable filtering mode (default only highlights best match, doesn't hide non-matches)
         _completionWindow.CompletionList.IsFiltering = true;
+
+        // Style the completion list
+        var listBox = _completionWindow.CompletionList.ListBox;
+        ScrollViewer.SetHorizontalScrollBarVisibility(listBox, ScrollBarVisibility.Disabled);
+        listBox.Resources[SystemColors.HighlightBrushKey] = new SolidColorBrush(Color.FromRgb(180, 205, 235));
+        listBox.Resources[SystemColors.HighlightTextBrushKey] = Brushes.Black;
 
         if (wordLength > 0)
         {
