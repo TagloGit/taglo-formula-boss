@@ -63,6 +63,10 @@ Detailed specifications and implementation plan are in `docs/specs and plan/`:
 5. **Don't generate `[ExcelFunction]` attributes** - register UDFs manually via `ExcelIntegration.RegisterDelegates`
 6. **Keep ExcelDna.Integration.dll unpacked** - add `<Reference Path="ExcelDna.Integration.dll" Pack="false" />` in .dna file
 
+**The identity mismatch is transitive.** Generated code also cannot load host assembly types that have ExcelDNA types in their fields, method signatures, or method bodies. Calling `hostAsm.GetType("FormulaBoss.SomeClass")` will throw `TypeLoadException` if `SomeClass` references any ExcelDNA type, because .NET tries to resolve those dependencies in the caller's assembly context.
+
+**Reflection-based XlCall.Excel does not work for C API functions.** Calling `XlCall.Excel(xlfReftext, ...)` via `MethodInfo.Invoke` returns `Object[,]` (range values) instead of the expected address string. Only direct (statically compiled) calls to `XlCall.Excel` work correctly for C API functions like xlfReftext.
+
 **Code patterns to avoid in generated code:**
 ```csharp
 // BAD - will cause assembly identity mismatch
@@ -74,6 +78,22 @@ using ExcelDna.Integration;
 if (rangeRef?.GetType()?.Name == "ExcelReference")
 var getValueMethod = rangeRef.GetType().GetMethod("GetValue");
 ```
+
+## Delegate Bridge Pattern
+
+When generated code needs to call ExcelDNA C API functions (like `xlfReftext`), use a delegate bridge:
+
+1. **Define a `Func<>` field** on a host class with NO ExcelDNA dependencies (e.g. `RuntimeHelpers.ResolveRangeDelegate`)
+2. **Initialize it from `AddIn.AutoOpen`** with a lambda that calls `XlCall.Excel(...)` directly
+3. **Generated code invokes the delegate** by finding the field via reflection on the host assembly
+
+The lambda is JIT-compiled in the host context (where ExcelDNA resolves), but the field type (`Func<object, object>`) has no ExcelDNA dependency, so the host class can be loaded from generated code. See `RuntimeHelpers.ResolveRangeDelegate` and `AddIn.AutoOpen` for the implementation.
+
+**Critical rule:** `RuntimeHelpers` (and any class loaded from generated code) must NEVER have `using ExcelDna.Integration` or reference any ExcelDNA type — not even in private method bodies. Any such reference causes `TypeLoadException` when the type is loaded from the Roslyn-compiled assembly's context.
+
+## Object Model UDFs and IsMacroType
+
+UDFs that access cell formatting (color, bold, etc.) via the `.cells` accessor require `IsMacroType = true` in their `ExcelFunctionAttribute`. This is because `xlfReftext` (needed for sheet-qualified range addresses) is a C API function that only works from macro-type UDFs. The `RequiresObjectModel` flag on `TranspileResult` controls this — it flows through `FormulaPipeline` into `DynamicCompiler.CompileAndRegister`.
 
 ## UDF Registration Context
 

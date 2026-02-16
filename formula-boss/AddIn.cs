@@ -58,6 +58,16 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // which is the ExcelDNA-recommended way to detect Excel closing.
             ExcelComAddInHelper.LoadComAddIn(new ShutdownMonitor());
 
+            // Initialize the range resolver delegate for cross-sheet object model access.
+            // Must be done here (host assembly context) so the lambda can call XlCall directly.
+            RuntimeHelpers.ResolveRangeDelegate = rangeRef =>
+            {
+                var address = (string)XlCall.Excel(XlCall.xlfReftext, rangeRef, true);
+                Debug.WriteLine($"ResolveRangeDelegate: {address}");
+                dynamic app = ExcelDnaUtil.Application;
+                return app.Range[address];
+            };
+
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);

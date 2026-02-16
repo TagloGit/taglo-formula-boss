@@ -421,15 +421,14 @@ public class TranspilerTests
     }
 
     [Fact]
-    public void Transpiler_ObjectModel_UsesInlineReflection()
+    public void Transpiler_ObjectModel_UsesRuntimeHelpers()
     {
         var result = Transpile("data.cells.toArray()");
 
-        // Object model path uses inline reflection for ExcelReference → Range conversion
-        Assert.Contains("ExcelDnaUtil", result.SourceCode);
-        // Uses property-based address building instead of XlCall
-        Assert.Contains("RowFirst", result.SourceCode);
-        Assert.Contains("ColumnFirst", result.SourceCode);
+        // Object model path finds RuntimeHelpers via reflection on the host assembly
+        // and invokes GetRangeFromReference to get a sheet-qualified COM Range
+        Assert.Contains("GetRangeFromReference", result.SourceCode);
+        Assert.Contains("formula-boss", result.SourceCode);
         Assert.Contains("dynamic range", result.SourceCode);
     }
 

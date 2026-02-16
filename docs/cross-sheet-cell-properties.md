@@ -56,3 +56,21 @@ A diagnostic function `FB_DiagRef` was used to test each step of range resolutio
 2. Range resolution must produce a sheet-qualified address
 3. The solution must work from Roslyn-generated code despite ExcelDNA assembly identity constraints
 4. COM Range objects from cross-sheet references must correctly expose formatting properties
+
+## Resolution
+
+Fixed via the **delegate bridge pattern**. Three constraints interact:
+
+1. **Generated code can't reference ExcelDNA types** (assembly identity mismatch — documented in CLAUDE.md)
+2. **Generated code can't load host types that reference ExcelDNA** (transitive `TypeLoadException` — even `using ExcelDna.Integration` in a method body makes the whole class unloadable)
+3. **`XlCall.Excel(xlfReftext)` only works via direct (statically compiled) calls** — reflection-based invocation returns `Object[,]` instead of the address string
+
+The solution uses a `Func<object, object>` delegate stored on `RuntimeHelpers` (which has zero ExcelDNA dependencies). `AddIn.AutoOpen` initializes this delegate with a lambda that calls `XlCall.Excel(xlfReftext, rangeRef, true)` directly. The lambda is JIT-compiled in the host context where ExcelDNA types resolve. Generated code finds `RuntimeHelpers` via `AppDomain.GetAssemblies()` reflection and invokes `GetRangeFromReference`, which calls the delegate.
+
+### Files changed
+
+- `formula-boss/AddIn.cs` — initializes `RuntimeHelpers.ResolveRangeDelegate` with direct `XlCall.Excel(xlfReftext)` call
+- `formula-boss/RuntimeHelpers.cs` — `GetRangeFromReference` delegates to the bridge; no ExcelDNA types anywhere
+- `formula-boss/Transpilation/CSharpTranspiler.cs` — generated code calls `RuntimeHelpers` via reflection instead of inline address building
+- `formula-boss/Compilation/DynamicCompiler.cs` — `IsMacroType = true` for object model UDFs
+- `formula-boss/Interception/FormulaPipeline.cs` — passes `RequiresObjectModel` through to compiler
