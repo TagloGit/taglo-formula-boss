@@ -64,7 +64,11 @@ public partial class FloatingEditorWindow
         Activated += (_, _) =>
         {
             FormulaEditor.Focus();
-            FormulaEditor.SelectAll();
+            var text = FormulaEditor.Text.TrimEnd();
+            if (text is "" or "=")
+                FormulaEditor.CaretOffset = FormulaEditor.Text.Length;
+            else
+                FormulaEditor.SelectAll();
         };
     }
 
