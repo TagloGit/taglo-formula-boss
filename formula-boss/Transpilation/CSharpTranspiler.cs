@@ -1677,51 +1677,18 @@ public class CSharpTranspiler
             sb.AppendLine();
         }
 
-        sb.AppendLine("            // Get Range via reflection to avoid assembly identity issues");
-        sb.AppendLine(
-            "            // Object model features (.cells, .color, etc.) require a range reference - they cannot");
-        sb.AppendLine(
-            "            // work with array output from a previous UDF because cell formatting is not preserved.");
-        sb.AppendLine("            if (rangeRef?.GetType()?.Name != \"ExcelReference\")");
-        sb.AppendLine(
-            "                return \"ERROR: Cell properties require a range reference, not \" + (rangeRef?.GetType()?.Name ?? \"null\") + \". Use a cell range like A1:B10.\";");
-        sb.AppendLine();
-        sb.AppendLine("            var excelDnaAssembly = rangeRef.GetType().Assembly;");
-        sb.AppendLine(
-            "            var excelDnaUtilType = excelDnaAssembly.GetType(\"ExcelDna.Integration.ExcelDnaUtil\");");
-        sb.AppendLine(
-            "            var appProperty = excelDnaUtilType?.GetProperty(\"Application\", BindingFlags.Public | BindingFlags.Static);");
-        sb.AppendLine("            dynamic app = appProperty?.GetValue(null);");
-        sb.AppendLine("            if (app == null) return \"ERROR: Could not get Excel Application\";");
-        sb.AppendLine();
-        sb.AppendLine("            // Get range address using ExcelReference's own methods instead of XlCall");
-        sb.AppendLine("            var sheetIdProp = rangeRef.GetType().GetProperty(\"SheetId\");");
-        sb.AppendLine("            var rowFirstProp = rangeRef.GetType().GetProperty(\"RowFirst\");");
-        sb.AppendLine("            var rowLastProp = rangeRef.GetType().GetProperty(\"RowLast\");");
-        sb.AppendLine("            var colFirstProp = rangeRef.GetType().GetProperty(\"ColumnFirst\");");
-        sb.AppendLine("            var colLastProp = rangeRef.GetType().GetProperty(\"ColumnLast\");");
-        sb.AppendLine();
-        sb.AppendLine("            var rowFirst = (int)rowFirstProp.GetValue(rangeRef) + 1;");
-        sb.AppendLine("            var rowLast = (int)rowLastProp.GetValue(rangeRef) + 1;");
-        sb.AppendLine("            var colFirst = (int)colFirstProp.GetValue(rangeRef) + 1;");
-        sb.AppendLine("            var colLast = (int)colLastProp.GetValue(rangeRef) + 1;");
-        sb.AppendLine();
-        sb.AppendLine("            // Convert column numbers to letters");
-        sb.AppendLine("            Func<int, string> colToLetter = (col) => {");
-        sb.AppendLine("                string result = \"\";");
-        sb.AppendLine(
-            "                while (col > 0) { col--; result = (char)('A' + col % 26) + result; col /= 26; }");
-        sb.AppendLine("                return result;");
-        sb.AppendLine("            };");
-        sb.AppendLine();
-        sb.AppendLine("            string address;");
-        sb.AppendLine("            if (rowFirst == rowLast && colFirst == colLast)");
-        sb.AppendLine("                address = colToLetter(colFirst) + rowFirst;");
-        sb.AppendLine("            else");
-        sb.AppendLine(
-            "                address = colToLetter(colFirst) + rowFirst + \":\" + colToLetter(colLast) + rowLast;");
-        sb.AppendLine();
-        sb.AppendLine("            dynamic range = app.Range[address];");
+        sb.AppendLine("            // Convert ExcelReference to COM Range via host assembly RuntimeHelpers");
+        sb.AppendLine("            // Must use reflection due to assembly identity mismatch (same as ExcelDNA)");
+        sb.AppendLine("            var hostAsm = AppDomain.CurrentDomain.GetAssemblies()");
+        sb.AppendLine("                .FirstOrDefault(a => a.GetName().Name == \"formula-boss\");");
+        sb.AppendLine("            if (hostAsm == null) return \"ERROR: host assembly not found\";");
+        sb.AppendLine("            var helperType = hostAsm.GetType(\"FormulaBoss.RuntimeHelpers\");");
+        sb.AppendLine("            if (helperType == null) return \"ERROR: RuntimeHelpers type not found\";");
+        sb.AppendLine("            var getRangeMethod = helperType.GetMethod(\"GetRangeFromReference\");");
+        sb.AppendLine("            if (getRangeMethod == null) return \"ERROR: GetRangeFromReference method not found\";");
+        sb.AppendLine("            var rangeResult = getRangeMethod.Invoke(null, new object[] { rangeRef });");
+        sb.AppendLine("            if (rangeResult is string errorMsg) return errorMsg;");
+        sb.AppendLine("            dynamic range = rangeResult;");
         // Call _Core with column name parameters
         sb.Append("            return ").Append(methodName).Append("_Core(range");
         foreach (var binding in usedColumnBindings)

@@ -132,7 +132,7 @@ public class FormulaPipeline
         Debug.WriteLine("=== End Generated Code ===");
 
         // Step 4: Compile and Register
-        var compileErrors = _compiler.CompileAndRegister(transpileResult.SourceCode);
+        var compileErrors = _compiler.CompileAndRegister(transpileResult.SourceCode, transpileResult.RequiresObjectModel);
 
         if (compileErrors.Count > 0)
         {

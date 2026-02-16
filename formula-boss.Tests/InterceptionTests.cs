@@ -272,7 +272,7 @@ public class InterceptionTests
     {
         public int CompileCount { get; private set; }
 
-        public override List<string> CompileAndRegister(string source)
+        public override List<string> CompileAndRegister(string source, bool isMacroType = false)
         {
             CompileCount++;
             // Return empty list (success) without actually compiling

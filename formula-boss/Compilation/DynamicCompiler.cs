@@ -28,7 +28,7 @@ public class DynamicCompiler
     ///     Compiles C# source code and registers all UDFs in it.
     ///     Returns a list of compilation errors, or empty list on success.
     /// </summary>
-    public virtual List<string> CompileAndRegister(string source)
+    public virtual List<string> CompileAndRegister(string source, bool isMacroType = false)
     {
         var (assembly, errors) = CompileSourceWithErrors(source);
 
@@ -37,7 +37,7 @@ public class DynamicCompiler
             return errors;
         }
 
-        RegisterFunctionsFromAssembly(assembly);
+        RegisterFunctionsFromAssembly(assembly, isMacroType);
         return [];
     }
 
@@ -301,7 +301,7 @@ public class DynamicCompiler
     /// <summary>
     ///     Registers all public static methods from the compiled assembly as Excel UDFs.
     /// </summary>
-    private void RegisterFunctionsFromAssembly(Assembly assembly)
+    private void RegisterFunctionsFromAssembly(Assembly assembly, bool isMacroType)
     {
         foreach (var type in assembly.GetExportedTypes())
         {
@@ -318,7 +318,7 @@ public class DynamicCompiler
 
                 try
                 {
-                    RegisterMethod(method);
+                    RegisterMethod(method, isMacroType);
                     _registeredUdfs.Add(method.Name);
                     Debug.WriteLine($"Registered dynamic UDF: {method.Name}");
                 }
@@ -357,10 +357,14 @@ public class DynamicCompiler
     /// <summary>
     ///     Registers a single method as an Excel UDF.
     /// </summary>
-    private static void RegisterMethod(MethodInfo method)
+    private static void RegisterMethod(MethodInfo method, bool isMacroType = false)
     {
         // Create function attribute - all dynamically compiled UDFs use the method name
-        var funcAttr = new ExcelFunctionAttribute { Name = method.Name, Description = $"Dynamic UDF: {method.Name}" };
+        // IsMacroType = true is required for object model UDFs so that xlfReftext works
+        var funcAttr = new ExcelFunctionAttribute
+        {
+            Name = method.Name, Description = $"Dynamic UDF: {method.Name}", IsMacroType = isMacroType
+        };
 
         var parameters = method.GetParameters();
         var argAttrs = new List<object>();
