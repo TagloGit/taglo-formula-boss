@@ -82,6 +82,7 @@ public static class ShowFloatingEditorCommand
             var currentAddress = cell.Address as string;
             var editorContent = DetectEditorContent(cell);
             var excelHwnd = new IntPtr(_app.Hwnd);
+            var metadata = WorkbookMetadata.CaptureFromExcel(_app);
 
             // Capture worksheet on the Excel thread (not inside the WPF dispatcher)
             // to avoid cross-apartment COM proxy complications
@@ -113,6 +114,7 @@ public static class ShowFloatingEditorCommand
                         _targetWorksheet = worksheet;
                         worksheet = null; // Ownership transferred
                         _targetAddress = currentAddress;
+                        _window.Metadata = metadata;
                         _window.FormulaText = editorContent;
 
                         var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
@@ -126,6 +128,7 @@ public static class ShowFloatingEditorCommand
                     _targetWorksheet = worksheet;
                     worksheet = null; // Ownership transferred
                     _targetAddress = currentAddress;
+                    _window.Metadata = metadata;
                     _window.FormulaText = editorContent;
 
                     var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
