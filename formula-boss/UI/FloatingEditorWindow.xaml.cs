@@ -228,7 +228,8 @@ public partial class FloatingEditorWindow
             }
 
             if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None
-                                   && EditorBehaviors.TryExpandBraceBlock(FormulaEditor))
+                                   && (EditorBehaviors.TryExpandBraceBlock(FormulaEditor)
+                                       || EditorBehaviors.TryExpandBeforeClosingParen(FormulaEditor)))
             {
                 e.Handled = true;
                 return;

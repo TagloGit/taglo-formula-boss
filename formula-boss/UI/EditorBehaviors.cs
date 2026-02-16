@@ -110,6 +110,50 @@ internal static class EditorBehaviors
         return true;
     }
 
+    /// <summary>
+    ///     When Enter is pressed immediately before a closing paren/bracket,
+    ///     move the closer to the next line with matching indentation and place
+    ///     the caret on a new indented line between. Returns true if handled.
+    /// </summary>
+    public static bool TryExpandBeforeClosingParen(TextEditor editor)
+    {
+        var offset = editor.CaretOffset;
+        var doc = editor.Document;
+
+        if (offset >= doc.TextLength)
+            return false;
+
+        var nextChar = doc.GetCharAt(offset);
+        if (nextChar is not (')' or ']'))
+            return false;
+
+        var openChar = nextChar == ')' ? '(' : '[';
+        var openerLine = FindMatchingOpen(doc, offset, openChar, nextChar);
+        var openerLineText = doc.GetText(doc.GetLineByNumber(openerLine));
+        var baseIndent = openerLineText[..^openerLineText.TrimStart().Length];
+        var indent = baseIndent + new string(' ', editor.Options.IndentationSize);
+
+        var insertion = "\r\n" + indent;
+        doc.Insert(offset, insertion);
+        editor.CaretOffset = offset + insertion.Length;
+        return true;
+    }
+
+    private static int FindMatchingOpen(TextDocument doc, int closeOffset, char open, char close)
+    {
+        var depth = 1;
+        for (var i = closeOffset - 1; i >= 0; i--)
+        {
+            var ch = doc.GetCharAt(i);
+            if (ch == close) depth++;
+            else if (ch == open) depth--;
+            if (depth == 0)
+                return doc.GetLineByOffset(i).LineNumber;
+        }
+
+        return 1;
+    }
+
     private static string GetPreviousLineIndent(TextDocument doc, int lineNumber)
     {
         for (var i = lineNumber - 1; i >= 1; i--)
