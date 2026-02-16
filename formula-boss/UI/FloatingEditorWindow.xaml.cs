@@ -19,6 +19,12 @@ public partial class FloatingEditorWindow
     private CompletionWindow? _completionWindow;
     private bool _sizeChanged;
 
+    /// <summary>
+    ///     Workbook metadata (table names, named ranges, column headers) captured on
+    ///     the Excel thread when the editor opens. Used for context-aware completions.
+    /// </summary>
+    public WorkbookMetadata? Metadata { get; set; }
+
     public FloatingEditorWindow()
     {
         _settings = EditorSettings.Load();
@@ -154,7 +160,8 @@ public partial class FloatingEditorWindow
         }
 
         var textUpToCaret = FormulaEditor.Document.GetText(0, FormulaEditor.CaretOffset);
-        var items = CompletionProvider.GetCompletions(textUpToCaret);
+        var fullText = FormulaEditor.Text;
+        var items = CompletionProvider.GetCompletions(textUpToCaret, fullText, Metadata);
         if (items.Count == 0)
         {
             return;
@@ -206,6 +213,16 @@ public partial class FloatingEditorWindow
     {
         try
         {
+            // Ctrl+Space: manually trigger completion
+            if (e is { Key: Key.Space, KeyboardDevice.Modifiers: ModifierKeys.Control })
+            {
+                e.Handled = true;
+                _completionWindow?.Close();
+                _completionWindow = null;
+                ShowCompletion();
+                return;
+            }
+
             if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None
                                    && EditorBehaviors.TryExpandBraceBlock(FormulaEditor))
             {
