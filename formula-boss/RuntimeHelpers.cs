@@ -1,48 +1,55 @@
 ﻿using System.Collections;
 using System.Diagnostics;
-using System.Reflection;
 
 namespace FormulaBoss;
 
 /// <summary>
 ///     Runtime helper methods called by generated UDF code.
-///     Uses reflection to avoid assembly identity issues between the ExcelDNA
-///     assembly loaded by the .xll and the one referenced at compile time.
+///     Uses reflection for ExcelDNA API access to avoid TypeLoadException when
+///     this type is loaded from Roslyn-compiled code's assembly context.
 /// </summary>
 public static class RuntimeHelpers
 {
     /// <summary>
-    ///     Converts an ExcelReference to an Excel Range COM object.
-    ///     Use this for object model access (cell colors, formatting, etc.).
+    ///     Delegate that resolves an ExcelReference to a COM Range object.
+    ///     Initialized by <c>AddIn.AutoOpen</c> during add-in startup with a lambda that calls
+    ///     XlCall.Excel(xlfReftext) directly. This uses the "delegate bridge" pattern to work around
+    ///     assembly identity constraints:
+    ///     <list type="bullet">
+    ///         <item>The lambda is JIT-compiled in the host context where ExcelDNA types resolve correctly</item>
+    ///         <item>
+    ///             This field's type (Func) has no ExcelDNA dependency, so RuntimeHelpers can be loaded
+    ///             from Roslyn-compiled code without TypeLoadException
+    ///         </item>
+    ///         <item>xlfReftext returns a sheet-qualified address, fixing cross-sheet range resolution</item>
+    ///     </list>
+    ///     See CLAUDE.md "Delegate Bridge Pattern" for full explanation.
     /// </summary>
-    public static dynamic GetRangeFromReference(object? rangeRef)
-    {
-        Debug.WriteLine($"GetRangeFromReference called with: {rangeRef?.GetType().FullName ?? "null"}");
+    public static Func<object, object>? ResolveRangeDelegate { get; set; }
 
-        if (rangeRef?.GetType().Name != "ExcelReference")
+    /// <summary>
+    ///     Converts an ExcelReference to an Excel Range COM object.
+    ///     Delegates to <see cref="ResolveRangeDelegate" /> which must be set during add-in startup.
+    ///     Requires the calling UDF to be registered with IsMacroType = true.
+    /// </summary>
+    public static object GetRangeFromReference(object? rangeRef)
+    {
+        if (rangeRef == null)
         {
-            throw new ArgumentException($"Expected ExcelReference, got {rangeRef?.GetType().Name ?? "null"}");
+            return "ERROR: rangeRef is null";
         }
 
-        // Get the ExcelDNA assembly from the rangeRef's type (the actually-loaded assembly)
-        var excelDnaAssembly = rangeRef.GetType().Assembly;
+        if (rangeRef.GetType().Name != "ExcelReference")
+        {
+            return $"ERROR: Expected ExcelReference, got {rangeRef.GetType().Name}";
+        }
 
-        // Get ExcelDnaUtil.Application via reflection
-        var excelDnaUtilType = excelDnaAssembly.GetType("ExcelDna.Integration.ExcelDnaUtil");
-        var appProperty = excelDnaUtilType?.GetProperty("Application", BindingFlags.Public | BindingFlags.Static);
-        dynamic app = appProperty?.GetValue(null)
-                      ?? throw new InvalidOperationException("Could not get Excel Application");
+        if (ResolveRangeDelegate == null)
+        {
+            return "ERROR: ResolveRangeDelegate not initialized - add-in startup may have failed";
+        }
 
-        // Get the address using XlCall.Excel(xlfReftext, ref, true) via reflection
-        var xlCallType = excelDnaAssembly.GetType("ExcelDna.Integration.XlCall");
-        var excelMethod = xlCallType?.GetMethod("Excel", [typeof(int), typeof(object[])]);
-        const int xlfReftext = 336; // XlCall.xlfReftext constant
-
-        var address = excelMethod?.Invoke(null, [xlfReftext, new[] { rangeRef, true }]) as string
-                      ?? throw new InvalidOperationException("Could not get range address");
-
-        Debug.WriteLine($"Range address: {address}");
-        return app.Range[address];
+        return ResolveRangeDelegate(rangeRef);
     }
 
     /// <summary>
