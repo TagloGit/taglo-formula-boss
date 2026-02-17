@@ -2,7 +2,7 @@
 
 This document tracks implementation progress against the [Excel UDF Add-in Specification](excel-udf-addin-spec.md).
 
-**Last updated:** 2026-02-13
+**Last updated:** 2026-02-17
 
 ---
 
@@ -239,9 +239,9 @@ This document tracks implementation progress against the [Excel UDF Add-in Speci
 | Cell comment errors | ✅ | |
 | Floating editor window | ✅ | Context-aware open, toggle, Apply flow |
 | Editor: AvalonEdit integration | ✅ | Syntax highlighting, indentation |
-| Editor: auto-brace completion | ✅ | (), [], {}, "", `` |
+| Editor: auto-brace completion | ✅ | (), [], {}, "", ``, auto-indent for LET |
 | Editor: bracket matching | ✅ | Custom IBackgroundRenderer |
-| Editor: completion popup (POC) | ✅ | Filtering, Tab/Enter accept — real data TBD |
+| Editor: context-aware intellisense | ✅ | DSL methods, cell properties, column names, descriptions |
 | Editor: real-time parse errors | ✅ | Red squiggly underlines with hover tooltips |
 | Editor: source reconstruction | ✅ | LetFormulaReconstructor integrated into floating editor |
 | Ctrl+Shift+` shortcut | ✅ | Single FB shortcut, opens floating editor |
@@ -310,6 +310,6 @@ Based on spec and competitive Excel use cases:
 - Negative index: 2 unit tests, 2 integration tests
 - LET column bindings: 3 unit tests, 8 parser tests
 
-**Gaps:**
-- No tests for statement lambdas (not implemented)
+**Known limitations:**
+- Cross-sheet cell properties: object model access (.cells) only works when formula is on the same sheet as the referenced range
 - No full E2E tests for Excel Table detection (requires Excel COM)
