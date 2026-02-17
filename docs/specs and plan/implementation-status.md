@@ -311,5 +311,4 @@ Based on spec and competitive Excel use cases:
 - LET column bindings: 3 unit tests, 8 parser tests
 
 **Known limitations:**
-- Cross-sheet cell properties: object model access (.cells) only works when formula is on the same sheet as the referenced range
 - No full E2E tests for Excel Table detection (requires Excel COM)
