@@ -19,6 +19,7 @@ public partial class FloatingEditorWindow
     private readonly DispatcherTimer _saveTimer;
     private readonly EditorSettings _settings;
     private CompletionWindow? _completionWindow;
+    private bool _bracketContext;
     private bool _sizeChanged;
 
     public FloatingEditorWindow()
@@ -110,7 +111,9 @@ public partial class FloatingEditorWindow
 
             // Close completion on non-identifier chars (space, operators, etc.)
             // Tab and Enter acceptance is handled natively by CompletionWindow
-            if (_completionWindow != null && !char.IsLetterOrDigit(e.Text[0]))
+            // In bracket context, allow spaces for column names like "Total Amount"
+            if (_completionWindow != null && !char.IsLetterOrDigit(e.Text[0])
+                                          && !(e.Text[0] == ' ' && _bracketContext))
             {
                 _completionWindow.Close();
             }
@@ -143,8 +146,8 @@ public partial class FloatingEditorWindow
 
             EditorBehaviors.AutoInsertClosingChar(FormulaEditor, ch);
 
-            // Trigger completion on '.' or any letter
-            if (ch == '.' || char.IsLetter(ch))
+            // Trigger completion on '.', '[', or any letter
+            if (ch == '.' || ch == '[' || char.IsLetter(ch))
             {
                 ShowCompletion();
             }
@@ -171,13 +174,14 @@ public partial class FloatingEditorWindow
 
         var textUpToCaret = FormulaEditor.Document.GetText(0, FormulaEditor.CaretOffset);
         var fullText = FormulaEditor.Text;
-        var items = CompletionProvider.GetCompletions(textUpToCaret, fullText, Metadata);
+        var items = CompletionProvider.GetCompletions(textUpToCaret, fullText, Metadata, out var isBracketContext);
         if (items.Count == 0)
         {
             return;
         }
 
-        var wordLength = CompletionProvider.GetWordLength(textUpToCaret);
+        _bracketContext = isBracketContext;
+        var wordLength = CompletionProvider.GetWordLength(textUpToCaret, isBracketContext);
 
         // Pre-filter: don't show if the typed prefix doesn't match any item
         if (wordLength > 0)
@@ -224,7 +228,11 @@ public partial class FloatingEditorWindow
         }
 
         _completionWindow.Show();
-        _completionWindow.Closed += (_, _) => _completionWindow = null;
+        _completionWindow.Closed += (_, _) =>
+        {
+            _completionWindow = null;
+            _bracketContext = false;
+        };
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)

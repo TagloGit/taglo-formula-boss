@@ -56,6 +56,54 @@ public class CompletionData : ICompletionData
     public double Priority { get; init; }
     public ImageSource? Image => null;
 
-    public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs) =>
+    public virtual void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs) =>
         textArea.Document.Replace(completionSegment, Text);
+}
+
+/// <summary>
+///     Completion item for row column names with context-aware insertion.
+///     After a dot: rewrites to bracket syntax if the name contains spaces.
+///     After a bracket: appends closing bracket.
+/// </summary>
+internal sealed class ColumnCompletionData : CompletionData
+{
+    private readonly bool _isBracketContext;
+
+    public ColumnCompletionData(string text, string? description, bool isBracketContext)
+        : base(text, description)
+    {
+        _isBracketContext = isBracketContext;
+    }
+
+    public override void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
+    {
+        var doc = textArea.Document;
+        var hasSpace = Text.Contains(' ');
+
+        if (_isBracketContext)
+        {
+            // Inside r[ — insert column name + ]
+            doc.Replace(completionSegment, Text + "]");
+        }
+        else if (hasSpace)
+        {
+            // After r. — rewrite the dot to bracket syntax: r[Column Name]
+            // The dot is the character immediately before the completion segment
+            var dotOffset = completionSegment.Offset - 1;
+            if (dotOffset >= 0 && doc.GetCharAt(dotOffset) == '.')
+            {
+                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[" + Text + "]");
+            }
+            else
+            {
+                // Fallback: just insert as bracket syntax
+                doc.Replace(completionSegment, "[" + Text + "]");
+            }
+        }
+        else
+        {
+            // No space, dot context — normal insertion
+            doc.Replace(completionSegment, Text);
+        }
+    }
 }

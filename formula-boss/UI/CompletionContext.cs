@@ -40,7 +40,7 @@ public enum DslType
 /// <summary>
 ///     Result of context resolution for intellisense.
 /// </summary>
-public record CompletionContext(DslType Type, string? PartialWord, bool InsideDsl = true);
+public record CompletionContext(DslType Type, string? PartialWord, bool InsideDsl = true, bool IsBracketContext = false);
 
 /// <summary>
 ///     Resolves the DSL type context at the caret position using a token-based backward walk.
@@ -189,6 +189,33 @@ public static class ContextResolver
             // Caret is after "expr.partialWo"
             partialWord = last.Lexeme;
             dotIndex = tokens.Count - 2;
+        }
+        else if (last.Type == TokenType.LeftBracket &&
+                 tokens.Count >= 2 && tokens[^2].Type == TokenType.Identifier)
+        {
+            // Caret is right after "param[" — check if param is a row lambda parameter
+            var paramName = tokens[^2].Lexeme;
+            var lambdaType = ResolveLambdaParamType(tokens, tokens.Count - 2, paramName);
+            if (lambdaType == DslType.Row)
+            {
+                return new CompletionContext(DslType.Row, null, insideDsl, IsBracketContext: true);
+            }
+
+            return new CompletionContext(DslType.TopLevel, null, insideDsl);
+        }
+        else if (last.Type == TokenType.Identifier &&
+                 tokens.Count >= 3 && tokens[^2].Type == TokenType.LeftBracket &&
+                 tokens[^3].Type == TokenType.Identifier)
+        {
+            // Caret is after "param[partialWo" — check if it's a row bracket context
+            var paramName = tokens[^3].Lexeme;
+            var lambdaType = ResolveLambdaParamType(tokens, tokens.Count - 3, paramName);
+            if (lambdaType == DslType.Row)
+            {
+                return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, IsBracketContext: true);
+            }
+
+            return new CompletionContext(DslType.TopLevel, GetTrailingWord(tokens), insideDsl);
         }
         else
         {
