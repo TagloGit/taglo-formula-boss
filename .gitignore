@@ -428,4 +428,6 @@ appsettings.Local.json
 # Secrets
 *.secrets.json
 secrets/
-/.claude
+# Claude Code — track skills/agents, ignore local settings
+.claude/settings.local.json
+.claude/settings.local.*.json

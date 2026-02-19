@@ -40,9 +40,30 @@ The user monitors warnings using ReSharper in Visual Studio. After significant c
 
 ## Specifications
 
-Detailed specifications and implementation plan are in `docs/specs and plan/`:
-- `excel-udf-addin-spec.md` - Full DSL specification, user journeys, error handling
-- `excel-udf-addin-implementation-plan.md` - Technical stack rationale, 14 implementation phases, risk register
+Detailed specifications and implementation plans:
+- `specs/0001-excel-udf-addin.md` - Full DSL specification, user journeys, error handling
+- `plans/0001-excel-udf-addin.md` - Technical stack rationale, 14 implementation phases, risk register
+
+## Workflow and Skills
+
+This repo follows the [Taglo Claude Code workflow](https://github.com/TagloGit/taglo-pm/blob/main/docs/claude-code-workflow.md).
+
+### GitHub Issues
+- Labels: `status: backlog`, `status: in-progress`, `status: in-review`, `status: done`, `blocked: tim`
+- Type labels: `bug`, `enhancement`, `documentation`, `refactor`, `process`
+- PRs must include `Closes #N`
+
+### Available Skills and Agents
+- `/developer <issue>` — Execute implementation work
+- `/qa <pr-or-issue>` — Test coverage review
+- `/planner <topic>` — Spec and plan creation (global skill)
+- `/pm` — Cross-repo status (global skill)
+- `/backlog-admin` — Quick issue creation (global skill)
+- Reviewer subagent — PR review (`.claude/agents/reviewer.md`)
+
+### Specs and Plans
+- Specs: `specs/NNNN-short-title.md`
+- Plans: `plans/NNNN-short-title.md`
 
 ## ExcelDNA Assembly Identity Issues
 
