@@ -64,9 +64,17 @@ internal static class CompletionProvider
     ///     Returns completion items appropriate for the current cursor context.
     /// </summary>
     public static IReadOnlyList<CompletionData> GetCompletions(
-        string textUpToCaret, string fullText, WorkbookMetadata? metadata)
+        string textUpToCaret, string fullText, WorkbookMetadata? metadata) =>
+        GetCompletions(textUpToCaret, fullText, metadata, out _);
+
+    /// <summary>
+    ///     Returns completion items and whether the context is a bracket accessor (r[).
+    /// </summary>
+    public static IReadOnlyList<CompletionData> GetCompletions(
+        string textUpToCaret, string fullText, WorkbookMetadata? metadata, out bool isBracketContext)
     {
         var ctx = ContextResolver.Resolve(textUpToCaret, metadata);
+        isBracketContext = ctx.IsBracketContext;
 
         // Outside DSL backticks — don't show DSL-specific completions
         if (!ctx.InsideDsl && !IsEntireFormulaBacktick(fullText))
@@ -81,7 +89,7 @@ internal static class CompletionProvider
             DslType.Range => BuildRangeCompletions(),
             DslType.Pipeline => MethodItems,
             DslType.Cell => CellPropertyItems,
-            DslType.Row => BuildRowCompletions(metadata),
+            DslType.Row => BuildRowCompletions(metadata, ctx.IsBracketContext),
             DslType.Interior => BuildTypeProperties("Interior"),
             DslType.Font => BuildTypeProperties("Font"),
             DslType.Scalar => Array.Empty<CompletionData>(),
@@ -93,16 +101,30 @@ internal static class CompletionProvider
 
     /// <summary>
     ///     Gets the length of the current partial word being typed (for replacement range).
+    ///     In bracket context, includes spaces so the entire bracket content is replaced.
     /// </summary>
-    public static int GetWordLength(string textUpToCaret)
+    public static int GetWordLength(string textUpToCaret, bool isBracketContext = false)
     {
-        var i = textUpToCaret.Length - 1;
-        while (i >= 0 && char.IsLetterOrDigit(textUpToCaret[i]))
+        if (isBracketContext)
         {
-            i--;
+            // Walk back to the opening bracket, including spaces
+            var i = textUpToCaret.Length - 1;
+            while (i >= 0 && textUpToCaret[i] != '[')
+            {
+                i--;
+            }
+
+            // i is now at '[' or -1; word starts after '['
+            return i >= 0 ? textUpToCaret.Length - 1 - i : 0;
         }
 
-        return textUpToCaret.Length - 1 - i;
+        var j = textUpToCaret.Length - 1;
+        while (j >= 0 && char.IsLetterOrDigit(textUpToCaret[j]))
+        {
+            j--;
+        }
+
+        return textUpToCaret.Length - 1 - j;
     }
 
     /// <summary>
@@ -128,7 +150,7 @@ internal static class CompletionProvider
         return items;
     }
 
-    private static IReadOnlyList<CompletionData> BuildRowCompletions(WorkbookMetadata? metadata)
+    private static IReadOnlyList<CompletionData> BuildRowCompletions(WorkbookMetadata? metadata, bool isBracketContext)
     {
         var items = new List<CompletionData>();
 
@@ -142,7 +164,7 @@ internal static class CompletionProvider
                 {
                     if (seen.Add(col))
                     {
-                        items.Add(new CompletionData(col, "Column name") { Priority = 1 });
+                        items.Add(new ColumnCompletionData(col, "Column name", isBracketContext) { Priority = 1 });
                     }
                 }
             }
