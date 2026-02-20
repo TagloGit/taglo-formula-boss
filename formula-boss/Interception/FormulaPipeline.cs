@@ -232,6 +232,12 @@ public class FormulaPipeline
             str = "_" + str;
         }
 
+        // Must match CSharpTranspiler.SanitizeUdfName reserved name handling
+        if (CSharpTranspiler.IsReservedExcelName(str))
+        {
+            str = "_" + str;
+        }
+
         return str;
     }
 

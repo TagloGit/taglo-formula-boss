@@ -191,6 +191,20 @@ public class TranspilerTests
         Assert.StartsWith("__udf_", result.MethodName);
     }
 
+    [Theory]
+    [InlineData("result", "_RESULT")]
+    [InlineData("RESULT", "_RESULT")]
+    [InlineData("sum", "_SUM")]
+    [InlineData("filter", "_FILTER")]
+    [InlineData("index", "_INDEX")]
+    [InlineData("let", "_LET")]
+    public void Transpiler_PrefixesReservedExcelNames(string preferredName, string expectedName)
+    {
+        var result = TranspileWithName("data.values.toArray()", preferredName);
+
+        Assert.Equal(expectedName, result.MethodName);
+    }
+
     #endregion
 
     #region Code Generation - Literals
