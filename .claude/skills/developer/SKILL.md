@@ -18,7 +18,10 @@ Execute approved implementation plans for the Formula Boss Excel add-in.
    ```bash
    gh issue edit <number> -R TagloGit/taglo-formula-boss --remove-label "status: backlog" --add-label "status: in-progress"
    ```
-5. Create a branch: `git checkout -b issue-<number>-short-description`
+5. Create a branch from main:
+   ```bash
+   git checkout main && git pull && git checkout -b issue-<number>-short-description
+   ```
 
 ### Working
 - Make small, well-described commits
