@@ -48,9 +48,6 @@ Detailed specifications and implementation plans:
 
 This repo follows the [Taglo Claude Code workflow](https://github.com/TagloGit/taglo-pm/blob/main/docs/claude-code-workflow.md).
 
-### GitHub Issues
-- See global `~/.claude/CLAUDE.md` for full label schema, status transitions, and issue conventions.
-
 ### Available Skills and Agents
 - `/developer <issue>` — Execute implementation work
 - `/qa <pr-or-issue>` — Test coverage review
