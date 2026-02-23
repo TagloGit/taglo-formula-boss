@@ -123,7 +123,8 @@ See [Floating Editor](#floating-editor) for detailed design.
 5. Result appears immediately
 
 **Column reference syntax:**
-- `r[Column Name]` — brackets, spaces allowed in column name
+- `r["Column Name"]` — bracket syntax with quotes for column names containing spaces/special characters
+- `r[ColumnName]` — bracket syntax without quotes for single-word column names
 - `r.ColumnName` — dot notation for single-word column names
 
 ---
@@ -349,7 +350,8 @@ When iterating with `.rows`, `.reduce`, `.scan`, or related methods, the lambda 
 
 | Syntax | Mode | Description |
 |--------|------|-------------|
-| `r[Column Name]` | Named | Bracket syntax, supports spaces in column names |
+| `r["Column Name"]` | Named | Bracket syntax with quotes, supports spaces and special characters |
+| `r[ColumnName]` | Named | Bracket syntax without quotes for single-word column names |
 | `r.ColumnName` | Named | Dot notation for single-word column names |
 | `r[0]`, `r[1]` | Index | Zero-based positional access |
 | `r[-1]` | Index | Negative index for last column |
