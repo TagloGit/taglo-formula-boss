@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.*" />
     <PackageReference Include="ExcelDna.Integration" Version="1.*">
       <PrivateAssets>none</PrivateAssets>
     </PackageReference>

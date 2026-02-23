@@ -8,6 +8,7 @@ public class EditorSettings
 
     public double Width { get; set; } = 500;
     public double Height { get; set; } = 300;
+    public int IndentSize { get; set; } = 2;
 
     private static string SettingsDirectory =>
         Path.Combine(
