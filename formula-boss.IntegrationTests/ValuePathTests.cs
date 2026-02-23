@@ -864,4 +864,176 @@ public class ValuePathTests
     }
 
     #endregion
+
+    #region Empty Input Edge Cases (#29)
+
+    private static readonly object[,] EmptyValues = new object[0, 1];
+
+    [Fact]
+    public void Empty_Reduce_ReturnsSeed()
+    {
+        var values = new object[,] { { "Amount" } }; // header only, no data rows
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.reduce(42, (acc, r) => acc + r[Amount])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(42.0, Convert.ToDouble(result));
+    }
+
+    [Fact]
+    public void Empty_Scan_ReturnsEmptyArray()
+    {
+        var values = new object[,] { { "Amount" } }; // header only
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.scan(0, (sum, r) => sum + r[Amount]).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        // Empty scan should return empty string (NormalizeResult on empty enumerable)
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Empty_Where_ReturnsEmptyArray()
+    {
+        var compilation = TestHelpers.CompileExpression("data.values.where(v => v > 0).toArray()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
+
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Empty_Sum_ReturnsZero()
+    {
+        var compilation = TestHelpers.CompileExpression("data.values.sum()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(0.0, Convert.ToDouble(result));
+    }
+
+    [Fact]
+    public void Empty_Avg_ReturnsDefault()
+    {
+        var compilation = TestHelpers.CompileExpression("data.values.avg()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
+
+        _output.WriteLine($"Result: {result}");
+        // Empty avg should return some form of error or 0 — assert it doesn't crash
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void Empty_Min_ReturnsDefault()
+    {
+        var compilation = TestHelpers.CompileExpression("data.values.min()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void Empty_Max_ReturnsDefault()
+    {
+        var compilation = TestHelpers.CompileExpression("data.values.max()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void Empty_Count_ReturnsZero()
+    {
+        var compilation = TestHelpers.CompileExpression("data.values.count()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void Empty_Find_ReturnsEmpty()
+    {
+        var values = new object[,] { { "Name", "Price" } }; // header only
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.find(r => r[Price] > 0)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Empty_Some_ReturnsFalse()
+    {
+        var values = new object[,] { { "Name", "Price" } }; // header only
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.some(r => r[Price] > 0)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Empty_Every_ReturnsTrue()
+    {
+        var values = new object[,] { { "Name", "Price" } }; // header only
+        var compilation = TestHelpers.CompileExpression(
+            "data.withHeaders().rows.every(r => r[Price] > 0)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        _output.WriteLine($"Result: {result}");
+        Assert.Equal(true, result); // vacuous truth
+    }
+
+    #endregion
 }
