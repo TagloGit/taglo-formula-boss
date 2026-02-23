@@ -1165,6 +1165,100 @@ public class TranspilerTests
 
     #endregion
 
+    #region Code Generation - Missing Cell Properties (#27)
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCellRgb()
+    {
+        var result = Transpile("data.cells.select(c => c.rgb).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("Interior.Color", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCellItalic()
+    {
+        var result = Transpile("data.cells.select(c => c.italic).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("Font.Italic", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCellFontSize()
+    {
+        var result = Transpile("data.cells.select(c => c.fontSize).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("Font.Size", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCellFormat()
+    {
+        var result = Transpile("data.cells.select(c => c.format).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("NumberFormat", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCellFormula()
+    {
+        var result = Transpile("data.cells.select(c => c.formula).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains(".Formula", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForCellAddress()
+    {
+        var result = Transpile("data.cells.select(c => c.address).toArray()");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains(".Address", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Distinct Method (#27)
+
+    [Fact]
+    public void Transpiler_GeneratesCode_ForDistinct()
+    {
+        var result = Transpile("data.values.distinct().toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains(".Distinct()", result.SourceCode);
+    }
+
+    #endregion
+
+    #region Implicit Accessors (#27)
+
+    [Fact]
+    public void Transpiler_ImplicitValues_WhereWithoutValuesAccessor()
+    {
+        var result = Transpile("data.where(v => v > 0).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__values__.Where(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_ImplicitToArray_AutoConvertsToArray()
+    {
+        var result = Transpile("data.values.where(v => v > 0)");
+
+        Assert.False(result.RequiresObjectModel);
+        // Without explicit .toArray(), the result should still be wrapped for Excel output
+        Assert.NotNull(result.SourceCode);
+    }
+
+    #endregion
+
     #region Invalid Property Suggestions
 
     [Fact]
