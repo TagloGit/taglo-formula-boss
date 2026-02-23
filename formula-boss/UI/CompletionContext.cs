@@ -429,7 +429,8 @@ public static class ContextResolver
     }
 
     /// <summary>
-    ///     Like <see cref="ResolveLambdaParamType" /> but also resolves the source table name.
+    ///     Determines whether a lambda parameter is in a Cell or Row context
+    ///     by scanning backward for the enclosing method call, and also resolves the source table name.
     /// </summary>
     private static (DslType? Type, string? TableName) ResolveLambdaParamTypeWithTable(
         List<Token> tokens, int dotIndex, string paramName)

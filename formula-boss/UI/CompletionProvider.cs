@@ -1,3 +1,5 @@
+﻿using System.Text;
+
 using FormulaBoss.Interception;
 using FormulaBoss.Transpilation;
 
@@ -89,7 +91,8 @@ internal static class CompletionProvider
             DslType.Range => BuildRangeCompletions(),
             DslType.Pipeline => MethodItems,
             DslType.Cell => CellPropertyItems,
-            DslType.Row => BuildRowCompletions(metadata, ctx.IsBracketContext, ResolveTableName(ctx.TableName, fullText, metadata)),
+            DslType.Row => BuildRowCompletions(metadata, ctx.IsBracketContext,
+                ResolveTableName(ctx.TableName, fullText, metadata)),
             DslType.Interior => BuildTypeProperties("Interior"),
             DslType.Font => BuildTypeProperties("Font"),
             DslType.Scalar => Array.Empty<CompletionData>(),
@@ -200,8 +203,8 @@ internal static class CompletionProvider
             {
                 if (!string.IsNullOrWhiteSpace(binding.VariableName))
                 {
-                    var value = binding.Value?.Trim();
-                    if (value != null && value.Length > 0 &&
+                    var value = binding.Value.Trim();
+                    if (value.Length > 0 &&
                         value.All(c => char.IsLetterOrDigit(c) || c == '_'))
                     {
                         result[binding.VariableName] = value;
@@ -214,14 +217,20 @@ internal static class CompletionProvider
 
         // Fallback: tolerant extraction
         var letIdx = fullText.IndexOf("LET(", StringComparison.OrdinalIgnoreCase);
-        if (letIdx < 0) return result;
+        if (letIdx < 0)
+        {
+            return result;
+        }
 
         var bodyStart = letIdx + 4;
         var args = SplitArgumentsTolerant(fullText, bodyStart);
 
         for (var i = 0; i + 1 < args.Count; i += 2)
         {
-            if (args.Count % 2 == 1 && i == args.Count - 1) break;
+            if (args.Count % 2 == 1 && i == args.Count - 1)
+            {
+                break;
+            }
 
             var name = args[i].Trim();
             var value = args[i + 1].Trim();
@@ -426,7 +435,7 @@ internal static class CompletionProvider
     private static List<string> SplitArgumentsTolerant(string text, int startPos)
     {
         var args = new List<string>();
-        var current = new System.Text.StringBuilder();
+        var current = new StringBuilder();
         var depth = 0;
         var inString = false;
         var inBacktick = false;
