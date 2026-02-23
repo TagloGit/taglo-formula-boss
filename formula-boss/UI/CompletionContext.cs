@@ -40,7 +40,12 @@ public enum DslType
 /// <summary>
 ///     Result of context resolution for intellisense.
 /// </summary>
-public record CompletionContext(DslType Type, string? PartialWord, bool InsideDsl = true, bool IsBracketContext = false, string? TableName = null);
+public record CompletionContext(
+    DslType Type,
+    string? PartialWord,
+    bool InsideDsl = true,
+    bool IsBracketContext = false,
+    string? TableName = null);
 
 /// <summary>
 ///     Resolves the DSL type context at the caret position using a token-based backward walk.
@@ -198,7 +203,7 @@ public static class ContextResolver
             var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, tokens.Count - 2, paramName);
             if (lambdaType == DslType.Row)
             {
-                return new CompletionContext(DslType.Row, null, insideDsl, IsBracketContext: true, TableName: tableName);
+                return new CompletionContext(DslType.Row, null, insideDsl, true, tableName);
             }
 
             return new CompletionContext(DslType.TopLevel, null, insideDsl);
@@ -212,7 +217,7 @@ public static class ContextResolver
             var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, tokens.Count - 3, paramName);
             if (lambdaType == DslType.Row)
             {
-                return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, IsBracketContext: true, TableName: tableName);
+                return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, true, tableName);
             }
 
             return new CompletionContext(DslType.TopLevel, GetTrailingWord(tokens), insideDsl);
@@ -246,11 +251,6 @@ public static class ContextResolver
         return count % 2 == 1;
     }
 
-    /// <summary>
-    ///     Resolves the type of the expression chain ending at the given dot token index.
-    /// </summary>
-    private static DslType ResolveChainType(List<Token> tokens, int dotIndex, WorkbookMetadata? metadata) =>
-        ResolveChainTypeWithTable(tokens, dotIndex, metadata).Type;
 
     private static (DslType Type, string? TableName) ResolveChainTypeWithTable(
         List<Token> tokens, int dotIndex, WorkbookMetadata? metadata)
@@ -429,15 +429,7 @@ public static class ContextResolver
     }
 
     /// <summary>
-    ///     Determines whether a lambda parameter is in a Cell or Row context
-    ///     by scanning backward for the enclosing method call.
-    ///     Verifies that paramName actually appears as a lambda parameter in the enclosing call.
-    /// </summary>
-    private static DslType? ResolveLambdaParamType(List<Token> tokens, int dotIndex, string paramName) =>
-        ResolveLambdaParamTypeWithTable(tokens, dotIndex, paramName).Type;
-
-    /// <summary>
-    ///     Like <see cref="ResolveLambdaParamType"/> but also resolves the source table name.
+    ///     Like <see cref="ResolveLambdaParamType" /> but also resolves the source table name.
     /// </summary>
     private static (DslType? Type, string? TableName) ResolveLambdaParamTypeWithTable(
         List<Token> tokens, int dotIndex, string paramName)
@@ -533,12 +525,7 @@ public static class ContextResolver
         return false;
     }
 
-    /// <summary>
-    ///     Walks backward from a method's dot position to find whether the pipeline
-    ///     operates on cells or rows (by finding the accessor).
-    /// </summary>
-    private static DslType? FindPipelineElementType(List<Token> tokens, int dotPos) =>
-        FindPipelineElementTypeWithTable(tokens, dotPos).Type;
+
 
     private static (DslType? Type, string? TableName) FindPipelineElementTypeWithTable(
         List<Token> tokens, int dotPos)
@@ -623,7 +610,11 @@ public static class ContextResolver
                 if (pos >= 0 && tokens[pos].Type == TokenType.RightParen)
                 {
                     pos = SkipBalancedParens(tokens, pos);
-                    if (pos < 0) break;
+                    if (pos < 0)
+                    {
+                        break;
+                    }
+
                     if (tokens[pos].Type == TokenType.Identifier)
                     {
                         // This is a method name — continue walking left
@@ -639,7 +630,7 @@ public static class ContextResolver
                     // Could be a table name or another chain member — keep walking
                     // but remember this as a candidate
                     var candidate = tokens[pos].Lexeme;
-                    if (pos == 0 || (pos >= 1 && tokens[pos - 1].Type != TokenType.Dot))
+                    if (pos == 0 || tokens[pos - 1].Type != TokenType.Dot)
                     {
                         return candidate;
                     }
@@ -647,13 +638,9 @@ public static class ContextResolver
                     pos--;
                     continue;
                 }
+            }
 
-                break;
-            }
-            else
-            {
-                break;
-            }
+            break;
         }
 
         return null;
