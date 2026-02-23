@@ -89,7 +89,7 @@ internal static class CompletionProvider
             DslType.Range => BuildRangeCompletions(),
             DslType.Pipeline => MethodItems,
             DslType.Cell => CellPropertyItems,
-            DslType.Row => BuildRowCompletions(metadata, ctx.IsBracketContext),
+            DslType.Row => BuildRowCompletions(metadata, ctx.IsBracketContext, ResolveTableName(ctx.TableName, fullText, metadata)),
             DslType.Interior => BuildTypeProperties("Interior"),
             DslType.Font => BuildTypeProperties("Font"),
             DslType.Scalar => Array.Empty<CompletionData>(),
@@ -150,21 +150,119 @@ internal static class CompletionProvider
         return items;
     }
 
-    private static IReadOnlyList<CompletionData> BuildRowCompletions(WorkbookMetadata? metadata, bool isBracketContext)
+    /// <summary>
+    ///     Resolves a table name, following LET binding aliases if needed.
+    ///     For example, if tableName is "t" and the formula has LET(t, Table1, ...),
+    ///     returns "Table1".
+    /// </summary>
+    private static string? ResolveTableName(string? tableName, string fullText, WorkbookMetadata? metadata)
+    {
+        if (tableName == null || metadata == null)
+        {
+            return tableName;
+        }
+
+        // If the name directly matches a table, use it
+        if (metadata.TableColumns.ContainsKey(tableName))
+        {
+            return tableName;
+        }
+
+        // Try to resolve as a LET binding
+        var bindings = ExtractLetBindings(fullText);
+        // Follow the chain (a LET var could alias another LET var)
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var current = tableName;
+        while (current != null && visited.Add(current))
+        {
+            if (metadata.TableColumns.ContainsKey(current))
+            {
+                return current;
+            }
+
+            bindings.TryGetValue(current, out current);
+        }
+
+        return tableName; // Couldn't resolve — return as-is (fallback to all columns)
+    }
+
+    /// <summary>
+    ///     Extracts LET binding name→value pairs from the formula.
+    ///     Values are trimmed identifiers only (not complex expressions).
+    /// </summary>
+    private static Dictionary<string, string> ExtractLetBindings(string fullText)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (LetFormulaParser.TryParse(fullText, out var structure) && structure != null)
+        {
+            foreach (var binding in structure.Bindings)
+            {
+                if (!string.IsNullOrWhiteSpace(binding.VariableName))
+                {
+                    var value = binding.Value?.Trim();
+                    if (value != null && value.Length > 0 &&
+                        value.All(c => char.IsLetterOrDigit(c) || c == '_'))
+                    {
+                        result[binding.VariableName] = value;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Fallback: tolerant extraction
+        var letIdx = fullText.IndexOf("LET(", StringComparison.OrdinalIgnoreCase);
+        if (letIdx < 0) return result;
+
+        var bodyStart = letIdx + 4;
+        var args = SplitArgumentsTolerant(fullText, bodyStart);
+
+        for (var i = 0; i + 1 < args.Count; i += 2)
+        {
+            if (args.Count % 2 == 1 && i == args.Count - 1) break;
+
+            var name = args[i].Trim();
+            var value = args[i + 1].Trim();
+            if (name.Length > 0 && char.IsLetter(name[0]) && name.All(c => char.IsLetterOrDigit(c) || c == '_') &&
+                value.Length > 0 && value.All(c => char.IsLetterOrDigit(c) || c == '_'))
+            {
+                result[name] = value;
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<CompletionData> BuildRowCompletions(
+        WorkbookMetadata? metadata, bool isBracketContext, string? tableName)
     {
         var items = new List<CompletionData>();
 
         if (metadata != null)
         {
-            // Add all known column names across all tables (user can filter by typing)
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var cols in metadata.TableColumns.Values)
+            // If we know the table, show only that table's columns
+            if (tableName != null &&
+                metadata.TableColumns.TryGetValue(tableName, out var tableSpecificCols))
             {
-                foreach (var col in cols)
+                foreach (var col in tableSpecificCols)
                 {
-                    if (seen.Add(col))
+                    items.Add(new ColumnCompletionData(col, "Column name", isBracketContext) { Priority = 1 });
+                }
+            }
+            else
+            {
+                // Fallback: show all columns across all tables (deduplicated)
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var cols in metadata.TableColumns.Values)
+                {
+                    foreach (var col in cols)
                     {
-                        items.Add(new ColumnCompletionData(col, "Column name", isBracketContext) { Priority = 1 });
+                        if (seen.Add(col))
+                        {
+                            items.Add(new ColumnCompletionData(col, "Column name", isBracketContext) { Priority = 1 });
+                        }
                     }
                 }
             }
