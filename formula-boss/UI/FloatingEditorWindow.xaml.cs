@@ -36,7 +36,7 @@ public partial class FloatingEditorWindow
         LoadSyntaxHighlighting();
 
         // Enable auto-indentation
-        FormulaEditor.Options.IndentationSize = 4;
+        FormulaEditor.Options.IndentationSize = _settings.IndentSize;
         FormulaEditor.Options.ConvertTabsToSpaces = true;
         FormulaEditor.TextArea.IndentationStrategy =
             new CSharpIndentationStrategy(FormulaEditor.Options);
