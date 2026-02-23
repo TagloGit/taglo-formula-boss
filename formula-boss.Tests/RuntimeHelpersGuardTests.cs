@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Reflection;
 
 using Xunit;
 
@@ -36,20 +36,20 @@ public class RuntimeHelpersGuardTests
         var type = typeof(RuntimeHelpers);
 
         // Check fields
-        foreach (var field in type.GetFields(System.Reflection.BindingFlags.Public |
-                                             System.Reflection.BindingFlags.NonPublic |
-                                             System.Reflection.BindingFlags.Static |
-                                             System.Reflection.BindingFlags.Instance))
+        foreach (var field in type.GetFields(BindingFlags.Public |
+                                             BindingFlags.NonPublic |
+                                             BindingFlags.Static |
+                                             BindingFlags.Instance))
         {
             Assert.DoesNotContain("ExcelDna", field.FieldType.FullName ?? "");
         }
 
         // Check method parameters and return types
-        foreach (var method in type.GetMethods(System.Reflection.BindingFlags.Public |
-                                               System.Reflection.BindingFlags.NonPublic |
-                                               System.Reflection.BindingFlags.Static |
-                                               System.Reflection.BindingFlags.Instance |
-                                               System.Reflection.BindingFlags.DeclaredOnly))
+        foreach (var method in type.GetMethods(BindingFlags.Public |
+                                               BindingFlags.NonPublic |
+                                               BindingFlags.Static |
+                                               BindingFlags.Instance |
+                                               BindingFlags.DeclaredOnly))
         {
             Assert.DoesNotContain("ExcelDna", method.ReturnType.FullName ?? "");
             foreach (var param in method.GetParameters())
@@ -59,10 +59,10 @@ public class RuntimeHelpersGuardTests
         }
 
         // Check properties
-        foreach (var prop in type.GetProperties(System.Reflection.BindingFlags.Public |
-                                                System.Reflection.BindingFlags.NonPublic |
-                                                System.Reflection.BindingFlags.Static |
-                                                System.Reflection.BindingFlags.Instance))
+        foreach (var prop in type.GetProperties(BindingFlags.Public |
+                                                BindingFlags.NonPublic |
+                                                BindingFlags.Static |
+                                                BindingFlags.Instance))
         {
             Assert.DoesNotContain("ExcelDna", prop.PropertyType.FullName ?? "");
         }

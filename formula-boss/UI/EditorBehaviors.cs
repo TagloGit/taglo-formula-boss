@@ -11,7 +11,11 @@ internal static class EditorBehaviors
 {
     private static readonly Dictionary<char, char> BracePairs = new()
     {
-        { '(', ')' }, { '[', ']' }, { '{', '}' }, { '"', '"' }, { '`', '`' }
+        { '(', ')' },
+        { '[', ']' },
+        { '{', '}' },
+        { '"', '"' },
+        { '`', '`' }
     };
 
     /// <summary>
@@ -121,11 +125,15 @@ internal static class EditorBehaviors
         var doc = editor.Document;
 
         if (offset >= doc.TextLength)
+        {
             return false;
+        }
 
         var nextChar = doc.GetCharAt(offset);
         if (nextChar is not (')' or ']'))
+        {
             return false;
+        }
 
         var openChar = nextChar == ')' ? '(' : '[';
         var openerLine = FindMatchingOpen(doc, offset, openChar, nextChar);
@@ -145,10 +153,19 @@ internal static class EditorBehaviors
         for (var i = closeOffset - 1; i >= 0; i--)
         {
             var ch = doc.GetCharAt(i);
-            if (ch == close) depth++;
-            else if (ch == open) depth--;
+            if (ch == close)
+            {
+                depth++;
+            }
+            else if (ch == open)
+            {
+                depth--;
+            }
+
             if (depth == 0)
+            {
                 return doc.GetLineByOffset(i).LineNumber;
+            }
         }
 
         return 1;
