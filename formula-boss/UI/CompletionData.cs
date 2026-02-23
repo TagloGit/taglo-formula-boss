@@ -82,22 +82,23 @@ internal sealed class ColumnCompletionData : CompletionData
 
         if (_isBracketContext)
         {
-            // Inside r[ — insert column name + ]
-            doc.Replace(completionSegment, Text + "]");
+            // Inside r[ — insert column name + ], with quotes if it contains spaces
+            var insert = hasSpace ? $"\"{Text}\"]" : Text + "]";
+            doc.Replace(completionSegment, insert);
         }
         else if (hasSpace)
         {
-            // After r. — rewrite the dot to bracket syntax: r[Column Name]
+            // After r. — rewrite the dot to bracket syntax: r["Column Name"]
             // The dot is the character immediately before the completion segment
             var dotOffset = completionSegment.Offset - 1;
             if (dotOffset >= 0 && doc.GetCharAt(dotOffset) == '.')
             {
-                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[" + Text + "]");
+                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[\"" + Text + "\"]");
             }
             else
             {
-                // Fallback: just insert as bracket syntax
-                doc.Replace(completionSegment, "[" + Text + "]");
+                // Fallback: just insert as quoted bracket syntax
+                doc.Replace(completionSegment, "[\"" + Text + "\"]");
             }
         }
         else
