@@ -1930,6 +1930,17 @@ public class CSharpTranspiler
         sb.AppendLine("                var list = enumerable.Cast<object>().ToList();");
         sb.AppendLine("                if (list.Count == 0) return string.Empty;");
         sb.AppendLine();
+
+        // Unwrap TypedRow objects to their underlying value arrays
+        if (needsTypedRows && typedRowClassName != null)
+        {
+            sb.AppendLine($"                // Unwrap TypedRow objects to value arrays");
+            sb.AppendLine($"                if (list[0] is {typedRowClassName})");
+            sb.AppendLine(
+                $"                    list = list.Cast<{typedRowClassName}>().Select(tr => (object)tr.__values__).ToList();");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("                // Check if items are arrays (from .rows or .cols)");
         sb.AppendLine("                if (list[0] is object[] firstArray)");
         sb.AppendLine("                {");

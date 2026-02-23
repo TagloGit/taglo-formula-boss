@@ -1580,6 +1580,17 @@ public class TranspilerTests
     }
 
     [Fact]
+    public void Transpiler_TypedRow_UnwrapInNormalization_WhenTypedRowsUsed()
+    {
+        // When typed rows are used, normalization should unwrap TypedRow to __values__
+        var result = Transpile("data.rows.where(r => r.Price > 10)");
+
+        Assert.True(result.RequiresObjectModel);
+        Assert.Contains("private class TypedRow_", result.SourceCode);
+        Assert.Contains("tr.__values__", result.SourceCode);
+    }
+
+    [Fact]
     public void Transpiler_TranspilesRowsRows_ToRawRows_WhenTypedRowsUsed()
     {
         // When typed rows are used, data.rows.rows gives raw object[][] fallback
