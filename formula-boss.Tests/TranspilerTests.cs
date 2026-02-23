@@ -981,6 +981,73 @@ public class TranspilerTests
 
     #endregion
 
+    #region Bracket String Literal Column Access
+
+    [Fact]
+    public void Transpiler_BracketStringLiteral_GeneratesHeaderLookup()
+    {
+        var result = Transpile("data.rows.where(r => r[\"Price\"] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Price\")", result.SourceCode);
+        Assert.Contains("__headers__", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_BracketStringLiteral_SpacedColumnName()
+    {
+        var result = Transpile("data.rows.where(r => r[\"Unit Price\"] > 10).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Unit Price\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_BracketStringLiteral_SpecialCharsInColumnName()
+    {
+        var result = Transpile("data.rows.select(r => r[\"Population (2025)\"]).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Population (2025)\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_BracketStringLiteral_InStatementLambda()
+    {
+        var result = Transpile("data.rows.where(r => { return r[\"Total\"] > 100; }).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Total\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_BracketStringLiteral_SpacedColumnInStatementLambda()
+    {
+        var result = Transpile("data.rows.where(r => { return r[\"Unit Price\"] > 10; }).toArray()");
+
+        Assert.False(result.RequiresObjectModel);
+        Assert.Contains("__GetCol__(\"Unit Price\")", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_BracketStringLiteral_CastsToDoubleForComparison()
+    {
+        var result = Transpile("data.rows.where(r => r[\"Price\"] > 10).toArray()");
+
+        Assert.Contains("Convert.ToDouble(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Transpiler_MixedDotAndBracketSyntax()
+    {
+        // Dot syntax triggers object model; bracket string literal should coexist
+        var result = Transpile("data.rows.where(r => r.Status == \"Active\").select(r => r[\"Total\"]).toArray()");
+
+        Assert.True(result.RequiresObjectModel); // Dot notation triggers object model
+    }
+
+    #endregion
+
     #region Row Predicate Methods (find, some, every)
 
     [Fact]
