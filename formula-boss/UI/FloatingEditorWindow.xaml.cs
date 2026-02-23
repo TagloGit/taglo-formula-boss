@@ -21,12 +21,6 @@ public partial class FloatingEditorWindow
     private CompletionWindow? _completionWindow;
     private bool _sizeChanged;
 
-    /// <summary>
-    ///     Workbook metadata (table names, named ranges, column headers) captured on
-    ///     the Excel thread when the editor opens. Used for context-aware completions.
-    /// </summary>
-    public WorkbookMetadata? Metadata { get; set; }
-
     public FloatingEditorWindow()
     {
         _settings = EditorSettings.Load();
@@ -68,11 +62,21 @@ public partial class FloatingEditorWindow
             FormulaEditor.Focus();
             var text = FormulaEditor.Text.TrimEnd();
             if (text is "" or "=")
+            {
                 FormulaEditor.CaretOffset = FormulaEditor.Text.Length;
+            }
             else
+            {
                 FormulaEditor.SelectAll();
+            }
         };
     }
+
+    /// <summary>
+    ///     Workbook metadata (table names, named ranges, column headers) captured on
+    ///     the Excel thread when the editor opens. Used for context-aware completions.
+    /// </summary>
+    public WorkbookMetadata? Metadata { get; set; }
 
     public string FormulaText
     {
