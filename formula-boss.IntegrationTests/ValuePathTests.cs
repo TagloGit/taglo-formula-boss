@@ -522,6 +522,35 @@ public class ValuePathTests
     }
 
     [Fact]
+    public void Rows_Where_WithoutToArray_ReturnsFilteredRows()
+    {
+        // Arrange: .where() without .toArray() should still return 2D array output
+        var values = new object[,]
+        {
+            { "Name", "Price" }, { "Apple", 10.0 }, { "Banana", 25.0 }, { "Cherry", 5.0 }, { "Date", 30.0 }
+        };
+
+        var compilation = TestHelpers.CompileExpression("data.withHeaders().rows.where(r => r[Price] > 20)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Act
+        var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, values);
+
+        // Assert - should return Banana (25) and Date (30) as 2D array
+        _output.WriteLine($"Result: {FormatResult(result)}");
+        Assert.NotNull(result);
+        Assert.IsType<object[,]>(result);
+        var arr = (object[,])result;
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal("Banana", arr[0, 0]);
+        Assert.Equal(25.0, arr[0, 1]);
+        Assert.Equal("Date", arr[1, 0]);
+        Assert.Equal(30.0, arr[1, 1]);
+    }
+
+    [Fact]
     public void Rows_WithHeaders_StringComparison_ChainedWithReduce()
     {
         // Arrange: Filter by category, then sum prices
