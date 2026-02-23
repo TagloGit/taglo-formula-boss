@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Using Include="System.IO" />
+    <InternalsVisibleTo Include="formula-boss.Tests" />
   </ItemGroup>
 
   <ItemGroup>
