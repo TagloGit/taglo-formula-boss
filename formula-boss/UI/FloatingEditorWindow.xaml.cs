@@ -1,8 +1,6 @@
 ﻿using System.ComponentModel;
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
@@ -18,8 +16,8 @@ public partial class FloatingEditorWindow
 {
     private readonly DispatcherTimer _saveTimer;
     private readonly EditorSettings _settings;
+    private readonly EditorBehaviorHandler _behaviorHandler;
     private CompletionWindow? _completionWindow;
-    private bool _bracketContext;
     private bool _sizeChanged;
 
     public FloatingEditorWindow()
@@ -47,10 +45,25 @@ public partial class FloatingEditorWindow
         // Real-time parse error squiggles
         _ = new ErrorHighlighter(FormulaEditor);
 
-        // Editor behaviors
-        FormulaEditor.TextArea.TextEntering += OnTextEntering;
-        FormulaEditor.TextArea.TextEntered += OnTextEntered;
-        FormulaEditor.PreviewKeyDown += OnPreviewKeyDown;
+        // Editor behaviors (subscribes to TextEntering/TextEntered/PreviewKeyDown internally)
+        _behaviorHandler = new EditorBehaviorHandler(FormulaEditor)
+        {
+            CompletionRequested = _ => ShowCompletion(),
+            CompletionCloseRequested = _ => _completionWindow?.Close(),
+            ForceCompletionRequested = () =>
+            {
+                _completionWindow?.Close();
+                _completionWindow = null;
+                ShowCompletion();
+            },
+            FormulaApplyRequested = text =>
+            {
+                FormulaApplied?.Invoke(this, text);
+                Hide();
+            },
+            IsCompletionListEmpty = () =>
+                _completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0
+        };
 
         // Track size changes with debounced save
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -100,70 +113,6 @@ public partial class FloatingEditorWindow
         FormulaEditor.SyntaxHighlighting = HighlightingLoader.Load(reader, HighlightingManager.Instance);
     }
 
-    private void OnTextEntering(object sender, TextCompositionEventArgs e)
-    {
-        try
-        {
-            if (e.Text.Length != 1)
-            {
-                return;
-            }
-
-            // Close completion on non-identifier chars (space, operators, etc.)
-            // Tab and Enter acceptance is handled natively by CompletionWindow
-            // In bracket context, allow spaces for column names like "Total Amount"
-            if (_completionWindow != null && !char.IsLetterOrDigit(e.Text[0])
-                                          && !(e.Text[0] == ' ' && _bracketContext))
-            {
-                _completionWindow.Close();
-            }
-
-            if (!e.Handled && EditorBehaviors.TrySkipClosingChar(FormulaEditor, e.Text[0]))
-            {
-                e.Handled = true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"OnTextEntering error: {ex.Message}");
-        }
-    }
-
-    private void OnTextEntered(object sender, TextCompositionEventArgs e)
-    {
-        try
-        {
-            if (e.Text.Length != 1)
-            {
-                return;
-            }
-
-            var ch = e.Text[0];
-            if (ch == '{')
-            {
-                EditorBehaviors.DeIndentOpenBrace(FormulaEditor);
-            }
-
-            EditorBehaviors.AutoInsertClosingChar(FormulaEditor, ch);
-
-            // Trigger completion on '.', '[', or any letter
-            if (ch == '.' || ch == '[' || char.IsLetter(ch))
-            {
-                ShowCompletion();
-            }
-
-            // Close completion window if filtering has removed all visible items
-            if (_completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0)
-            {
-                _completionWindow.Close();
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"OnTextEntered error: {ex.Message}");
-        }
-    }
-
     private void ShowCompletion()
     {
         // Don't open a second window
@@ -180,7 +129,7 @@ public partial class FloatingEditorWindow
             return;
         }
 
-        _bracketContext = isBracketContext;
+        _behaviorHandler.IsBracketContext = isBracketContext;
         var wordLength = CompletionProvider.GetWordLength(textUpToCaret, isBracketContext);
 
         // Pre-filter: don't show if the typed prefix doesn't match any item
@@ -231,43 +180,8 @@ public partial class FloatingEditorWindow
         _completionWindow.Closed += (_, _) =>
         {
             _completionWindow = null;
-            _bracketContext = false;
+            _behaviorHandler.IsBracketContext = false;
         };
-    }
-
-    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        try
-        {
-            // Ctrl+Space: manually trigger completion
-            if (e is { Key: Key.Space, KeyboardDevice.Modifiers: ModifierKeys.Control })
-            {
-                e.Handled = true;
-                _completionWindow?.Close();
-                _completionWindow = null;
-                ShowCompletion();
-                return;
-            }
-
-            if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None
-                                   && (EditorBehaviors.TryExpandBraceBlock(FormulaEditor)
-                                       || EditorBehaviors.TryExpandBeforeClosingParen(FormulaEditor)))
-            {
-                e.Handled = true;
-                return;
-            }
-
-            if (e is { Key: Key.Enter, KeyboardDevice.Modifiers: ModifierKeys.Control })
-            {
-                e.Handled = true;
-                FormulaApplied?.Invoke(this, FormulaText);
-                Hide();
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"OnPreviewKeyDown error: {ex.Message}");
-        }
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
