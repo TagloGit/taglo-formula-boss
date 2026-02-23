@@ -161,9 +161,9 @@ public class CSharpTranspiler
                 foreach (var param in stmtLambda.Parameters)
                 {
                     // Look for patterns like "r.PropertyName" in the block
-                    var pattern = $@"\b{Regex.Escape(param)}\.(\w+)";
-                    var matches = Regex.Matches(stmtLambda.StatementBlock, pattern);
-                    foreach (Match match in matches)
+                    var dotPattern = $@"\b{Regex.Escape(param)}\.(\w+)";
+                    var dotMatches = Regex.Matches(stmtLambda.StatementBlock, dotPattern);
+                    foreach (Match match in dotMatches)
                     {
                         var propertyName = match.Groups[1].Value;
                         // "cells" is a special property for cell access
@@ -182,6 +182,13 @@ public class CSharpTranspiler
                             _typedRowColumns.Add(propertyName);
                         }
                     }
+
+                    // Look for bracket column access: r["Column Name"] in the block
+                    var bracketPattern = $@"\b{Regex.Escape(param)}\[""([^""]+)""\]";
+                    if (Regex.IsMatch(stmtLambda.StatementBlock, bracketPattern))
+                    {
+                        _needsHeaderContext = true;
+                    }
                 }
 
                 break;
@@ -191,10 +198,14 @@ public class CSharpTranspiler
                 break;
 
             case IndexAccess indexAccess:
-                // Detect named column access: r[Price] where index is an identifier (not a number)
+                // Detect named column access: r[Price] or r["Column Name"]
                 // This signals we need header context for column name resolution
                 if (indexAccess.Index is IdentifierExpr indexIdent
                     && !indexIdent.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
+                {
+                    _needsHeaderContext = true;
+                }
+                else if (indexAccess.Index is StringLiteral)
                 {
                     _needsHeaderContext = true;
                 }
@@ -1208,7 +1219,20 @@ public class CSharpTranspiler
 
         // Generate the statement lambda syntax with explicit types
         var paramsStr = string.Join(", ", paramTypes);
-        return $"({paramsStr}) => {stmtLambda.StatementBlock}";
+
+        // Rewrite bracket column access r["col"] -> r[__GetCol__("col")] in statement blocks
+        var block = stmtLambda.StatementBlock;
+        foreach (var param in stmtLambda.Parameters)
+        {
+            if (_rowParameters.Contains(param))
+            {
+                var bracketPattern = $@"\b{Regex.Escape(param)}\[""([^""]+)""\]";
+                block = Regex.Replace(block, bracketPattern, m =>
+                    $"{param}[__GetCol__(\"{m.Groups[1].Value}\")]");
+            }
+        }
+
+        return $"({paramsStr}) => {block}";
     }
 
     private bool IsLambdaParameter(Expression expression) =>
@@ -1241,8 +1265,10 @@ public class CSharpTranspiler
     {
         return expression switch
         {
-            // r[Price] where r is a row parameter and Price is an identifier (named column)
+            // r[Price] or r["Column Name"] where r is a row parameter
             IndexAccess { Target: IdentifierExpr target, Index: IdentifierExpr } when
+                _rowParameters.Contains(target.Name) => true,
+            IndexAccess { Target: IdentifierExpr target, Index: StringLiteral } when
                 _rowParameters.Contains(target.Name) => true,
             // r.Price where r is a row parameter
             MemberAccess { Target: IdentifierExpr target } when !_requiresObjectModel &&
@@ -1255,25 +1281,29 @@ public class CSharpTranspiler
     {
         var target = TranspileExpression(indexAccess.Target);
 
-        // Check if this is named column access on a row parameter: r[Price]
-        // If target is a row parameter and index is an identifier, generate header lookup
+        // Check if this is named column access on a row parameter: r[Price] or r["Column Name"]
+        // If target is a row parameter and index is an identifier or string literal, generate header lookup
         if (indexAccess.Target is IdentifierExpr targetIdent
-            && _rowParameters.Contains(targetIdent.Name)
-            && indexAccess.Index is IdentifierExpr indexIdent
-            && !indexIdent.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
+            && _rowParameters.Contains(targetIdent.Name))
         {
-            // Set flag to generate header dictionary in the method
-            _needsHeaderContext = true;
+            if (indexAccess.Index is IdentifierExpr indexIdent
+                && !indexIdent.Name.Equals("null", StringComparison.OrdinalIgnoreCase))
+            {
+                // r[Price] — identifier-based column access
+                _needsHeaderContext = true;
+                var columnRef = ResolveColumnBinding(indexIdent.Name);
+                var isVariableRef = columnRef != null && columnRef.EndsWith("_colname_");
+                var columnName = columnRef ?? indexIdent.Name;
+                var colArg = isVariableRef ? columnName : $"\"{columnName}\"";
+                return $"{target}[__GetCol__({colArg})]";
+            }
 
-            // Check if identifier is a LET-bound column variable (r[price] where price = tblSales[Price])
-            // In that case, resolve to either a variable reference or the column name
-            var columnRef = ResolveColumnBinding(indexIdent.Name);
-            var isVariableRef = columnRef != null && columnRef.EndsWith("_colname_");
-            var columnName = columnRef ?? indexIdent.Name;
-
-            // Named column access: r[Price] -> r[__GetCol__("Price")] or r[__GetCol__(_price_colname_)]
-            var colArg = isVariableRef ? columnName : $"\"{columnName}\"";
-            return $"{target}[__GetCol__({colArg})]";
+            if (indexAccess.Index is StringLiteral strLiteral)
+            {
+                // r["Column Name"] — string literal column access (supports spaces/special chars)
+                _needsHeaderContext = true;
+                return $"{target}[__GetCol__(\"{strLiteral.Value}\")]";
+            }
         }
 
         // Handle negative index on row parameter: r[-1] accesses last column
