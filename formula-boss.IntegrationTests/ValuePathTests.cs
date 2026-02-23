@@ -931,8 +931,10 @@ public class ValuePathTests
     }
 
     [Fact]
-    public void Empty_Avg_ReturnsDefault()
+    public void Empty_Avg_ReturnsError()
     {
+        // LINQ Average() throws InvalidOperationException on empty sequences;
+        // the generated try/catch returns an error string
         var compilation = TestHelpers.CompileExpression("data.values.avg()");
 
         _output.WriteLine(compilation.GetDiagnostics());
@@ -941,13 +943,15 @@ public class ValuePathTests
         var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
 
         _output.WriteLine($"Result: {result}");
-        // Empty avg should return some form of error or 0 — assert it doesn't crash
-        Assert.NotNull(result);
+        Assert.IsType<string>(result);
+        Assert.StartsWith("ERROR:", (string)result);
     }
 
     [Fact]
-    public void Empty_Min_ReturnsDefault()
+    public void Empty_Min_ReturnsError()
     {
+        // LINQ Min() throws InvalidOperationException on empty sequences;
+        // the generated try/catch returns an error string
         var compilation = TestHelpers.CompileExpression("data.values.min()");
 
         _output.WriteLine(compilation.GetDiagnostics());
@@ -956,12 +960,15 @@ public class ValuePathTests
         var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
 
         _output.WriteLine($"Result: {result}");
-        Assert.NotNull(result);
+        Assert.IsType<string>(result);
+        Assert.StartsWith("ERROR:", (string)result);
     }
 
     [Fact]
-    public void Empty_Max_ReturnsDefault()
+    public void Empty_Max_ReturnsError()
     {
+        // LINQ Max() throws InvalidOperationException on empty sequences;
+        // the generated try/catch returns an error string
         var compilation = TestHelpers.CompileExpression("data.values.max()");
 
         _output.WriteLine(compilation.GetDiagnostics());
@@ -970,7 +977,8 @@ public class ValuePathTests
         var result = TestHelpers.ExecuteWithValues(compilation.CoreMethod!, EmptyValues);
 
         _output.WriteLine($"Result: {result}");
-        Assert.NotNull(result);
+        Assert.IsType<string>(result);
+        Assert.StartsWith("ERROR:", (string)result);
     }
 
     [Fact]

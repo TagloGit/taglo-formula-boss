@@ -1248,13 +1248,17 @@ public class TranspilerTests
     }
 
     [Fact]
-    public void Transpiler_ImplicitToArray_AutoConvertsToArray()
+    public void Transpiler_ImplicitToArray_ResultNormalizationHandlesEnumerable()
     {
-        var result = Transpile("data.values.where(v => v > 0)");
+        // Without explicit .toArray(), the generated method body still normalizes
+        // IEnumerable results to object[,] via inline result normalization
+        var withoutToArray = Transpile("data.values.where(v => v > 0)");
+        var withToArray = Transpile("data.values.where(v => v > 0).toArray()");
 
-        Assert.False(result.RequiresObjectModel);
-        // Without explicit .toArray(), the result should still be wrapped for Excel output
-        Assert.NotNull(result.SourceCode);
+        Assert.False(withoutToArray.RequiresObjectModel);
+        // Both should contain IEnumerable normalization logic
+        Assert.Contains("IEnumerable", withoutToArray.SourceCode);
+        Assert.Contains("IEnumerable", withToArray.SourceCode);
     }
 
     #endregion
