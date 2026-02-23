@@ -40,7 +40,12 @@ public enum DslType
 /// <summary>
 ///     Result of context resolution for intellisense.
 /// </summary>
-public record CompletionContext(DslType Type, string? PartialWord, bool InsideDsl = true, bool IsBracketContext = false);
+public record CompletionContext(
+    DslType Type,
+    string? PartialWord,
+    bool InsideDsl = true,
+    bool IsBracketContext = false,
+    string? TableName = null);
 
 /// <summary>
 ///     Resolves the DSL type context at the caret position using a token-based backward walk.
@@ -195,10 +200,10 @@ public static class ContextResolver
         {
             // Caret is right after "param[" — check if param is a row lambda parameter
             var paramName = tokens[^2].Lexeme;
-            var lambdaType = ResolveLambdaParamType(tokens, tokens.Count - 2, paramName);
+            var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, tokens.Count - 2, paramName);
             if (lambdaType == DslType.Row)
             {
-                return new CompletionContext(DslType.Row, null, insideDsl, IsBracketContext: true);
+                return new CompletionContext(DslType.Row, null, insideDsl, true, tableName);
             }
 
             return new CompletionContext(DslType.TopLevel, null, insideDsl);
@@ -209,10 +214,10 @@ public static class ContextResolver
         {
             // Caret is after "param[partialWo" — check if it's a row bracket context
             var paramName = tokens[^3].Lexeme;
-            var lambdaType = ResolveLambdaParamType(tokens, tokens.Count - 3, paramName);
+            var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, tokens.Count - 3, paramName);
             if (lambdaType == DslType.Row)
             {
-                return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, IsBracketContext: true);
+                return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, true, tableName);
             }
 
             return new CompletionContext(DslType.TopLevel, GetTrailingWord(tokens), insideDsl);
@@ -224,8 +229,8 @@ public static class ContextResolver
         }
 
         // Walk the chain backward from the dot to find the expression root
-        var chainType = ResolveChainType(tokens, dotIndex, metadata);
-        return new CompletionContext(chainType, partialWord, insideDsl);
+        var (chainType, chainTableName) = ResolveChainTypeWithTable(tokens, dotIndex, metadata);
+        return new CompletionContext(chainType, partialWord, insideDsl, TableName: chainTableName);
     }
 
     /// <summary>
@@ -246,10 +251,9 @@ public static class ContextResolver
         return count % 2 == 1;
     }
 
-    /// <summary>
-    ///     Resolves the type of the expression chain ending at the given dot token index.
-    /// </summary>
-    private static DslType ResolveChainType(List<Token> tokens, int dotIndex, WorkbookMetadata? metadata)
+
+    private static (DslType Type, string? TableName) ResolveChainTypeWithTable(
+        List<Token> tokens, int dotIndex, WorkbookMetadata? metadata)
     {
         // Collect the chain: walk left from dotIndex collecting Identifier, Dot, and method calls
         // Chain is built right-to-left, then reversed
@@ -326,7 +330,7 @@ public static class ContextResolver
             // Check the token directly left of the dot
             if (hasRangePrefix)
             {
-                return DslType.Range;
+                return (DslType.Range, null);
             }
 
             var leftIdx = dotIndex - 1;
@@ -340,11 +344,11 @@ public static class ContextResolver
                     IsCellReference(tokens[leftIdx - 2].Lexeme) &&
                     IsCellReference(tokens[leftIdx].Lexeme))
                 {
-                    return DslType.Range;
+                    return (DslType.Range, null);
                 }
             }
 
-            return DslType.Unknown;
+            return (DslType.Unknown, null);
         }
 
         // Resolve the root identifier
@@ -358,24 +362,27 @@ public static class ContextResolver
                 // Root is the range name itself, walk from index 1
                 if (chain.Count == 1)
                 {
-                    return DslType.Range;
+                    return (DslType.Range, null);
                 }
 
-                return WalkChain(ApplyMember(DslType.Range, chain[1]), chain, 2);
+                var type = WalkChain(ApplyMember(DslType.Range, chain[1]), chain, 2);
+                return (type, type == DslType.Row ? root : null);
             }
 
-            return WalkChain(ApplyMember(DslType.Range, chain[0]), chain, 1);
+            var prefixType = WalkChain(ApplyMember(DslType.Range, chain[0]), chain, 1);
+            return (prefixType, null); // Range prefix (A1:B10) — no table name
         }
 
         // Check if root is a lambda parameter
-        var lambdaType = ResolveLambdaParamType(tokens, dotIndex, root);
+        var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, dotIndex, root);
         if (lambdaType != null)
         {
-            return WalkChain(lambdaType.Value, chain, 1);
+            var type = WalkChain(lambdaType.Value, chain, 1);
+            return (type, type == DslType.Row ? tableName : null);
         }
 
         // Unknown root — try to infer from the chain
-        return WalkChain(DslType.Unknown, chain, 1);
+        return (WalkChain(DslType.Unknown, chain, 1), null);
     }
 
     private static DslType WalkChain(DslType type, List<ChainSegment> chain, int startIndex)
@@ -423,10 +430,10 @@ public static class ContextResolver
 
     /// <summary>
     ///     Determines whether a lambda parameter is in a Cell or Row context
-    ///     by scanning backward for the enclosing method call.
-    ///     Verifies that paramName actually appears as a lambda parameter in the enclosing call.
+    ///     by scanning backward for the enclosing method call, and also resolves the source table name.
     /// </summary>
-    private static DslType? ResolveLambdaParamType(List<Token> tokens, int dotIndex, string paramName)
+    private static (DslType? Type, string? TableName) ResolveLambdaParamTypeWithTable(
+        List<Token> tokens, int dotIndex, string paramName)
     {
         // Scan backward from dotIndex looking for an unmatched `(` that belongs to a
         // method call, then check if paramName is declared as a lambda parameter there.
@@ -463,19 +470,19 @@ public static class ContextResolver
 
                         if (CellContextMethods.Contains(methodName))
                         {
-                            return DslType.Cell;
+                            return (DslType.Cell, FindChainRootTable(tokens, i - 2));
                         }
 
                         if (RowContextMethods.Contains(methodName))
                         {
-                            return DslType.Row;
+                            return (DslType.Row, FindChainRootTable(tokens, i - 2));
                         }
 
                         // For passthrough methods (where, select, etc.), continue scanning
                         // backward to find the accessor that determines cell vs row
                         if (PassthroughMethods.Contains(methodName))
                         {
-                            return FindPipelineElementType(tokens, i - 2);
+                            return FindPipelineElementTypeWithTable(tokens, i - 2);
                         }
                     }
 
@@ -485,7 +492,7 @@ public static class ContextResolver
             }
         }
 
-        return null;
+        return (null, null);
     }
 
     /// <summary>
@@ -519,11 +526,10 @@ public static class ContextResolver
         return false;
     }
 
-    /// <summary>
-    ///     Walks backward from a method's dot position to find whether the pipeline
-    ///     operates on cells or rows (by finding the accessor).
-    /// </summary>
-    private static DslType? FindPipelineElementType(List<Token> tokens, int dotPos)
+
+
+    private static (DslType? Type, string? TableName) FindPipelineElementTypeWithTable(
+        List<Token> tokens, int dotPos)
     {
         // From the dot before the method, continue walking left through the chain
         // looking for the accessor (.cells or .rows)
@@ -544,12 +550,12 @@ public static class ContextResolver
                     var name = tokens[pos].Lexeme;
                     if (CellContextMethods.Contains(name))
                     {
-                        return DslType.Cell;
+                        return (DslType.Cell, FindChainRootTable(tokens, pos));
                     }
 
                     if (RowContextMethods.Contains(name))
                     {
-                        return DslType.Row;
+                        return (DslType.Row, FindChainRootTable(tokens, pos));
                     }
 
                     pos--;
@@ -564,12 +570,12 @@ public static class ContextResolver
                 var name = tokens[pos].Lexeme;
                 if (CellContextMethods.Contains(name))
                 {
-                    return DslType.Cell;
+                    return (DslType.Cell, FindChainRootTable(tokens, pos));
                 }
 
                 if (RowContextMethods.Contains(name))
                 {
-                    return DslType.Row;
+                    return (DslType.Row, FindChainRootTable(tokens, pos));
                 }
 
                 pos--;
@@ -582,6 +588,60 @@ public static class ContextResolver
             {
                 break;
             }
+        }
+
+        return (null, null);
+    }
+
+    /// <summary>
+    ///     From a position inside a chain (at an accessor like .rows or .cells),
+    ///     walks backward past the dot to find the root identifier (table name).
+    /// </summary>
+    private static string? FindChainRootTable(List<Token> tokens, int accessorPos)
+    {
+        // accessorPos points to "rows" or "cells"; walk left past the dot to find the identifier
+        var pos = accessorPos - 1;
+
+        // Skip over intermediate chain segments (e.g., .withHeaders().rows)
+        while (pos >= 0)
+        {
+            if (tokens[pos].Type == TokenType.Dot)
+            {
+                pos--;
+                if (pos >= 0 && tokens[pos].Type == TokenType.RightParen)
+                {
+                    pos = SkipBalancedParens(tokens, pos);
+                    if (pos < 0)
+                    {
+                        break;
+                    }
+
+                    if (tokens[pos].Type == TokenType.Identifier)
+                    {
+                        // This is a method name — continue walking left
+                        pos--;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                if (pos >= 0 && tokens[pos].Type == TokenType.Identifier)
+                {
+                    // Could be a table name or another chain member — keep walking
+                    // but remember this as a candidate
+                    var candidate = tokens[pos].Lexeme;
+                    if (pos == 0 || tokens[pos - 1].Type != TokenType.Dot)
+                    {
+                        return candidate;
+                    }
+
+                    pos--;
+                    continue;
+                }
+            }
+
+            break;
         }
 
         return null;
