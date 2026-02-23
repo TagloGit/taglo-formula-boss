@@ -49,9 +49,7 @@ Detailed specifications and implementation plans:
 This repo follows the [Taglo Claude Code workflow](https://github.com/TagloGit/taglo-pm/blob/main/docs/claude-code-workflow.md).
 
 ### GitHub Issues
-- Labels: `status: backlog`, `status: in-progress`, `status: in-review`, `status: done`, `blocked: tim`
-- Type labels: `bug`, `enhancement`, `documentation`, `refactor`, `process`
-- PRs must include `Closes #N`
+- See global `~/.claude/CLAUDE.md` for full label schema, status transitions, and issue conventions.
 
 ### Available Skills and Agents
 - `/developer <issue>` — Execute implementation work
