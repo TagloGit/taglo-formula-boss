@@ -250,6 +250,23 @@ public class EditorBehaviorHandlerTests
         });
 
         [Fact]
+        public void Shift_home_twice_extends_selection_to_column_zero() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, text.Length);
+            // First Shift+Home: select from end to first non-ws (col 4)
+            handler.SmartHome(true);
+            Assert.Equal(4, editor.CaretOffset);
+            Assert.Equal(4, editor.SelectionStart);
+            Assert.Equal(5, editor.SelectionLength);
+            // Second Shift+Home: extend selection to col 0, anchor stays at end
+            handler.SmartHome(true);
+            Assert.Equal(0, editor.CaretOffset);
+            Assert.Equal(0, editor.SelectionStart);
+            Assert.Equal(9, editor.SelectionLength);
+        });
+
+        [Fact]
         public void Works_on_line_with_no_indent() => RunOnSta(() =>
         {
             var text = "hello";
@@ -276,7 +293,7 @@ public class EditorBehaviorHandlerTests
         public void Removes_to_zero_when_within_first_indent() => RunOnSta(() =>
         {
             var text = "  x";
-            var (editor, handler) = CreateEditor(text, 2, 4);
+            var (editor, handler) = CreateEditor(text, 2, indentSize: 4);
             Assert.True(handler.TrySmartBackspace());
             Assert.Equal("x", editor.Text);
             Assert.Equal(0, editor.CaretOffset);
