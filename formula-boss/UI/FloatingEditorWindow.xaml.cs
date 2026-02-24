@@ -8,7 +8,7 @@ using System.Xml;
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
-using ICSharpCode.AvalonEdit.Indentation.CSharp;
+
 
 namespace FormulaBoss.UI;
 
@@ -36,9 +36,6 @@ public partial class FloatingEditorWindow
         // Enable auto-indentation
         FormulaEditor.Options.IndentationSize = _settings.IndentSize;
         FormulaEditor.Options.ConvertTabsToSpaces = true;
-        FormulaEditor.TextArea.IndentationStrategy =
-            new CSharpIndentationStrategy(FormulaEditor.Options);
-
         // Bracket matching highlight
         _ = new BracketHighlighter(FormulaEditor);
 

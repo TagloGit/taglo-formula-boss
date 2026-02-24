@@ -23,13 +23,17 @@ internal class EditorBehaviorHandler
 
     private readonly TextEditor _editor;
 
+    private int _lastCaretLine;
+
     public EditorBehaviorHandler(TextEditor editor)
     {
         _editor = editor;
+        _lastCaretLine = editor.TextArea.Caret.Line;
 
         _editor.TextArea.TextEntering += OnTextEntering;
         _editor.TextArea.TextEntered += OnTextEntered;
         _editor.PreviewKeyDown += OnPreviewKeyDown;
+        _editor.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
     }
 
     /// <summary>
@@ -147,9 +151,9 @@ internal class EditorBehaviorHandler
                 return;
             }
 
-            if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None
-                                   && (TryExpandBraceBlock() || TryExpandBeforeClosingParen()))
+            if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None)
             {
+                HandleEnter();
                 e.Handled = true;
                 return;
             }
@@ -362,11 +366,31 @@ internal class EditorBehaviorHandler
         var line = doc.GetLineByOffset(offset);
         var lineText = doc.GetText(line);
         var baseIndent = lineText[..^lineText.TrimStart().Length];
-        var innerIndent = baseIndent + new string(' ', _editor.Options.IndentationSize);
+        var indentUnit = new string(' ', _editor.Options.IndentationSize);
 
-        var insertion = "\r\n" + innerIndent + "\r\n" + baseIndent;
+        // Check if preceded by => — if so, move braces down with combined expansion
+        var textBeforeBrace = doc.GetText(line.Offset, offset - 1 - line.Offset).TrimEnd();
+        if (textBeforeBrace.EndsWith("=>"))
+        {
+            var braceIndent = baseIndent + indentUnit;
+            var innerIndent = braceIndent + indentUnit;
+            var afterClose = doc.GetText(offset + 1, line.EndOffset - offset - 1);
+
+            // Replace from after => (trimmed) through end of line
+            var trimmedBeforeLen = line.Offset + textBeforeBrace.Length;
+            var replaceStart = trimmedBeforeLen;
+            var replaceLen = line.EndOffset - replaceStart;
+
+            var expansion = "\r\n" + braceIndent + "{\r\n" + innerIndent + "\r\n" + braceIndent + "}" + afterClose;
+            doc.Replace(replaceStart, replaceLen, expansion);
+            _editor.CaretOffset = replaceStart + "\r\n".Length + braceIndent.Length + "{\r\n".Length + innerIndent.Length;
+            return true;
+        }
+
+        var innerIndentSimple = baseIndent + indentUnit;
+        var insertion = "\r\n" + innerIndentSimple + "\r\n" + baseIndent;
         doc.Insert(offset, insertion);
-        _editor.CaretOffset = offset + "\r\n".Length + innerIndent.Length;
+        _editor.CaretOffset = offset + "\r\n".Length + innerIndentSimple.Length;
         return true;
     }
 
@@ -594,6 +618,231 @@ internal class EditorBehaviorHandler
             var lastLine = doc.GetLineByNumber(endLine.LineNumber);
             _editor.Select(newStart, lastLine.EndOffset - newStart);
         }
+    }
+
+    /// <summary>
+    ///     Unified Enter handler. Tries structural cases in priority order,
+    ///     then falls back to auto-indent with content-aware line splitting.
+    /// </summary>
+    internal void HandleEnter()
+    {
+        if (TryExpandBraceBlock())
+        {
+            return;
+        }
+
+        if (TryExpandBeforeClosingParen())
+        {
+            return;
+        }
+
+        if (TryExpandAfterArrow())
+        {
+            return;
+        }
+
+        if (TryExpandLetBinding())
+        {
+            return;
+        }
+
+        AutoIndentEnter();
+    }
+
+    /// <summary>
+    ///     B7: When Enter is pressed after `=>` (trimmed) and before `{`,
+    ///     break the lambda body onto the next line with increased indent.
+    ///     Returns true if handled.
+    /// </summary>
+    internal bool TryExpandAfterArrow()
+    {
+        var offset = _editor.CaretOffset;
+        var doc = _editor.Document;
+        var line = doc.GetLineByOffset(offset);
+        var textBefore = doc.GetText(line.Offset, offset - line.Offset).TrimEnd();
+
+        if (!textBefore.EndsWith("=>"))
+        {
+            return false;
+        }
+
+        if (offset < doc.TextLength && doc.GetCharAt(offset) == '{')
+        {
+            var lineText = doc.GetText(line);
+            var baseIndent = lineText[..^lineText.TrimStart().Length];
+            var innerIndent = baseIndent + new string(' ', _editor.Options.IndentationSize);
+            var afterCaret = doc.GetText(offset, line.EndOffset - offset);
+
+            // Trim trailing whitespace between => and {
+            var beforeLength = offset - line.Offset;
+            var beforeText = doc.GetText(line.Offset, beforeLength);
+            var trailingWs = beforeLength - beforeText.TrimEnd().Length;
+
+            doc.Replace(offset - trailingWs, line.EndOffset - offset + trailingWs,
+                "\r\n" + innerIndent + afterCaret);
+            _editor.CaretOffset = offset - trailingWs + "\r\n".Length + innerIndent.Length;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     B7: When Enter is pressed between LET binding pairs (after a comma
+    ///     separating value from next name), format each binding on its own line.
+    ///     Returns true if handled.
+    /// </summary>
+    internal bool TryExpandLetBinding()
+    {
+        var offset = _editor.CaretOffset;
+        var doc = _editor.Document;
+        var line = doc.GetLineByOffset(offset);
+        var textBefore = doc.GetText(line.Offset, offset - line.Offset).TrimEnd();
+
+        if (!textBefore.EndsWith(","))
+        {
+            return false;
+        }
+
+        // Search backwards for matching '(' that follows 'LET'
+        var commaOffset = line.Offset + textBefore.Length - 1;
+        var letParenLine = FindLetParenOpen(doc, commaOffset);
+        if (letParenLine < 0)
+        {
+            return false;
+        }
+
+        // Indent to one level past the LET( line's indent
+        var letLine = doc.GetLineByNumber(letParenLine);
+        var letLineText = doc.GetText(letLine);
+        var baseIndent = letLineText[..^letLineText.TrimStart().Length];
+        var bindingIndent = baseIndent + new string(' ', _editor.Options.IndentationSize);
+
+        var afterCaret = doc.GetText(offset, line.EndOffset - offset).TrimStart();
+        var replaceLength = line.EndOffset - offset;
+
+        // Trim trailing whitespace before caret (e.g. space after comma)
+        var beforeLength = offset - line.Offset;
+        var beforeText = doc.GetText(line.Offset, beforeLength);
+        var trailingWs = beforeLength - beforeText.TrimEnd().Length;
+
+        var insertion = "\r\n" + bindingIndent + afterCaret;
+        doc.Replace(offset - trailingWs, replaceLength + trailingWs, insertion);
+        _editor.CaretOffset = offset - trailingWs + "\r\n".Length + bindingIndent.Length;
+        return true;
+    }
+
+    /// <summary>
+    ///     B8: Auto-indent on Enter. If the line before the caret ends with an opener,
+    ///     indent one level deeper. Otherwise inherit current indent. Text after the
+    ///     caret is moved to the new line.
+    /// </summary>
+    internal void AutoIndentEnter()
+    {
+        var offset = _editor.CaretOffset;
+        var doc = _editor.Document;
+        var line = doc.GetLineByOffset(offset);
+        var lineText = doc.GetText(line);
+        var currentIndent = lineText[..^lineText.TrimStart().Length];
+
+        var textBeforeCaret = doc.GetText(line.Offset, offset - line.Offset).TrimEnd();
+        var lastChar = textBeforeCaret.Length > 0 ? textBeforeCaret[^1] : '\0';
+
+        var newIndent = lastChar is '(' or '[' or '{'
+            ? currentIndent + new string(' ', _editor.Options.IndentationSize)
+            : currentIndent;
+
+        var afterCaret = doc.GetText(offset, line.EndOffset - offset).TrimStart();
+        var replaceLength = line.EndOffset - offset;
+
+        // Also trim trailing whitespace from the part before the caret
+        var beforeLength = offset - line.Offset;
+        var beforeText = doc.GetText(line.Offset, beforeLength);
+        var trimmedBefore = beforeText.TrimEnd();
+        var trailingWs = beforeLength - trimmedBefore.Length;
+
+        var insertion = "\r\n" + newIndent + afterCaret;
+        doc.Replace(offset - trailingWs, replaceLength + trailingWs, insertion);
+        _editor.CaretOffset = offset - trailingWs + "\r\n".Length + newIndent.Length;
+    }
+
+    /// <summary>
+    ///     Trailing whitespace cleanup: when the caret leaves a line, if that line
+    ///     contains only whitespace, trim it to empty.
+    /// </summary>
+    private void OnCaretPositionChanged(object? sender, EventArgs e)
+    {
+        try
+        {
+            var currentLine = _editor.TextArea.Caret.Line;
+            if (currentLine == _lastCaretLine)
+            {
+                return;
+            }
+
+            var prevLineNum = _lastCaretLine;
+            _lastCaretLine = currentLine;
+
+            var doc = _editor.Document;
+            if (prevLineNum < 1 || prevLineNum > doc.LineCount)
+            {
+                return;
+            }
+
+            var prevLine = doc.GetLineByNumber(prevLineNum);
+            var prevText = doc.GetText(prevLine);
+            if (prevText.Length > 0 && prevText.TrimStart().Length == 0)
+            {
+                doc.Replace(prevLine.Offset, prevLine.Length, "");
+            }
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            Debug.WriteLine($"OnCaretPositionChanged error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Searches backwards from a comma offset to find a matching '(' that is
+    ///     preceded by 'LET' (case-insensitive). Returns the line number of the
+    ///     LET( opener, or -1 if not found.
+    /// </summary>
+    private static int FindLetParenOpen(TextDocument doc, int commaOffset)
+    {
+        var depth = 0;
+        for (var i = commaOffset; i >= 0; i--)
+        {
+            var ch = doc.GetCharAt(i);
+            if (ch is ')' or ']' or '}')
+            {
+                depth++;
+            }
+            else if (ch is '(' or '[' or '{')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+                else if (ch == '(')
+                {
+                    // Check if preceded by 'LET'
+                    var textBefore = doc.GetText(0, i).TrimEnd();
+                    if (textBefore.Length >= 3 &&
+                        textBefore[^3..].Equals("LET", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return doc.GetLineByOffset(i).LineNumber;
+                    }
+
+                    return -1;
+                }
+                else
+                {
+                    return -1;
+                }
+            }
+        }
+
+        return -1;
     }
 
     private static int FindMatchingOpen(TextDocument doc, int closeOffset, char open, char close)

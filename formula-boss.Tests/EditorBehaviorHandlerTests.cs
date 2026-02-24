@@ -617,6 +617,164 @@ public class EditorBehaviorHandlerTests
         });
     }
 
+    public class StructuralEnterArrow : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Breaks_lambda_body_after_arrow_before_brace() => RunOnSta(() =>
+        {
+            // Caret before { (not between {}), so TryExpandAfterArrow fires
+            var text = "x => {y}";
+            var caretPos = text.IndexOf('{');
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("x =>\r\n  {y}", editor.Text);
+            Assert.Equal("x =>\r\n  ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Combined_arrow_brace_expansion() => RunOnSta(() =>
+        {
+            // Caret between {} with => before — combined expansion
+            var text = "r => {}";
+            var caretPos = text.IndexOf('}');
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  }", editor.Text);
+            Assert.Equal("r =>\r\n  {\r\n    ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Combined_arrow_brace_preserves_trailing_content() => RunOnSta(() =>
+        {
+            var text = "r => {})`)";
+            var caretPos = text.IndexOf('}');
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  })`)".Length, editor.Text.Length);
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  })`)", editor.Text);
+        });
+
+        [Fact]
+        public void Does_not_trigger_without_arrow() => RunOnSta(() =>
+        {
+            var text = "x = {}";
+            var caretPos = text.IndexOf('}');
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            // Simple brace expansion (no arrow)
+            Assert.Equal("x = {\r\n  \r\n}", editor.Text);
+        });
+    }
+
+    public class StructuralEnterLetBinding : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Splits_let_bindings_onto_new_line() => RunOnSta(() =>
+        {
+            var text = "LET(x, 1, y, 2)";
+            var caretPos = "LET(x, 1, ".Length;
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("LET(x, 1,\r\n  y, 2)", editor.Text);
+        });
+
+        [Fact]
+        public void Does_not_trigger_outside_let() => RunOnSta(() =>
+        {
+            var text = "FOO(x, 1, y)";
+            var caretPos = "FOO(x, 1, ".Length;
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Contains("\r\n", editor.Text);
+        });
+
+        [Fact]
+        public void Works_case_insensitive() => RunOnSta(() =>
+        {
+            var text = "let(a, 1, b, 2)";
+            var caretPos = "let(a, 1, ".Length;
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("let(a, 1,\r\n  b, 2)", editor.Text);
+        });
+    }
+
+    public class AutoIndentEnter : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Inherits_indent_from_current_line() => RunOnSta(() =>
+        {
+            var text = "  hello world";
+            var caretPos = "  hello".Length;
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.AutoIndentEnter();
+            Assert.Equal("  hello\r\n  world", editor.Text);
+            Assert.Equal("  hello\r\n  ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Indents_deeper_after_opener() => RunOnSta(() =>
+        {
+            var text = "  fn(";
+            var (editor, handler) = CreateEditor(text, text.Length, indentSize: 2);
+            handler.AutoIndentEnter();
+            Assert.Equal("  fn(\r\n    ", editor.Text);
+            Assert.Equal("  fn(\r\n    ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Splits_content_after_caret_to_new_line() => RunOnSta(() =>
+        {
+            var text = "fn(arg1, arg2)";
+            var caretPos = "fn(arg1, ".Length;
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.AutoIndentEnter();
+            Assert.Equal("fn(arg1,\r\narg2)", editor.Text);
+        });
+
+        [Fact]
+        public void Caret_placed_before_moved_content() => RunOnSta(() =>
+        {
+            var text = "  foo bar";
+            var caretPos = "  foo ".Length;
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.AutoIndentEnter();
+            Assert.Equal("  foo\r\n  bar", editor.Text);
+            Assert.Equal("  foo\r\n  ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Enter_at_end_of_line_creates_blank_indented_line() => RunOnSta(() =>
+        {
+            var text = "  hello";
+            var (editor, handler) = CreateEditor(text, text.Length, indentSize: 2);
+            handler.AutoIndentEnter();
+            Assert.Equal("  hello\r\n  ", editor.Text);
+        });
+    }
+
+    public class TrailingWhitespaceCleanup : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Trims_blank_line_when_caret_leaves() => RunOnSta(() =>
+        {
+            var text = "hello\r\n    \r\nworld";
+            var (editor, _) = CreateEditor(text, "hello\r\n  ".Length, indentSize: 2);
+            // Move caret to line 3 to trigger cleanup of line 2
+            editor.CaretOffset = "hello\r\n    \r\n".Length;
+            Assert.Equal("hello\r\n\r\nworld", editor.Text);
+        });
+
+        [Fact]
+        public void Does_not_trim_line_with_content() => RunOnSta(() =>
+        {
+            var text = "hello\r\n  x\r\nworld";
+            var (editor, _) = CreateEditor(text, "hello\r\n  x".Length, indentSize: 2);
+            editor.CaretOffset = "hello\r\n  x\r\n".Length;
+            Assert.Equal("hello\r\n  x\r\nworld", editor.Text);
+        });
+    }
+
     public class SurroundSelection : EditorBehaviorHandlerTests
     {
         [Theory]
