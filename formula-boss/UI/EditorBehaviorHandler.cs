@@ -64,13 +64,13 @@ internal class EditorBehaviorHandler
     ///     Whether the current completion context is bracket-based (e.g. [col name]),
     ///     which allows spaces in completion filtering.
     /// </summary>
+    public bool IsBracketContext { get; set; }
+
     /// <summary>
     ///     Returns true when the completion window is open, so Tab can be
     ///     passed through for completion selection instead of indenting.
     /// </summary>
     public Func<bool>? IsCompletionWindowOpen { get; set; }
-
-    public bool IsBracketContext { get; set; }
 
     private void OnTextEntering(object sender, TextCompositionEventArgs e)
     {
