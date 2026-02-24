@@ -82,7 +82,11 @@ internal class EditorBehaviorHandler
                 CompletionCloseRequested?.Invoke(ch);
             }
 
-            if (!e.Handled && TrySkipClosingChar(ch))
+            if (!e.Handled && TrySurroundSelection(ch))
+            {
+                e.Handled = true;
+            }
+            else if (!e.Handled && TrySkipClosingChar(ch))
             {
                 e.Handled = true;
             }
@@ -198,7 +202,10 @@ internal class EditorBehaviorHandler
 
     /// <summary>
     ///     After an opening brace/quote is inserted, auto-insert the matching closer
-    ///     and position the caret between the pair.
+    ///     and position the caret between the pair. For quotes (" and `), suppresses
+    ///     auto-close when the next character is an identifier char, digit, underscore,
+    ///     or another quote — only auto-closes before whitespace, closing brackets,
+    ///     commas, semicolons, or end-of-line.
     /// </summary>
     internal void AutoInsertClosingChar(char ch)
     {
@@ -207,9 +214,59 @@ internal class EditorBehaviorHandler
             return;
         }
 
+        if (ch is '"' or '`' && !ShouldAutoCloseQuote())
+        {
+            return;
+        }
+
         var offset = _editor.CaretOffset;
         _editor.Document.Insert(offset, closingChar.ToString());
         _editor.CaretOffset = offset;
+    }
+
+    /// <summary>
+    ///     When text is selected and the user types an opener, wrap the selection
+    ///     with the pair instead of replacing it. Returns true if handled.
+    /// </summary>
+    internal bool TrySurroundSelection(char ch)
+    {
+        if (_editor.SelectionLength == 0)
+        {
+            return false;
+        }
+
+        if (!BracePairs.TryGetValue(ch, out var closingChar))
+        {
+            return false;
+        }
+
+        var start = _editor.SelectionStart;
+        var selectedText = _editor.SelectedText;
+        var replacement = ch + selectedText + closingChar;
+
+        _editor.Document.Replace(start, selectedText.Length, replacement);
+        // Select the wrapped content (excluding the pair chars)
+        _editor.Select(start + 1, selectedText.Length);
+        return true;
+    }
+
+    /// <summary>
+    ///     Returns true if a quote should be auto-closed based on the character
+    ///     after the caret. Only auto-close before whitespace, closing brackets,
+    ///     commas, semicolons, or end-of-line.
+    /// </summary>
+    private bool ShouldAutoCloseQuote()
+    {
+        var offset = _editor.CaretOffset;
+        var doc = _editor.Document;
+
+        if (offset >= doc.TextLength)
+        {
+            return true; // EOL / end of document
+        }
+
+        var next = doc.GetCharAt(offset);
+        return next is ' ' or '\t' or '\r' or '\n' or ')' or ']' or '}' or ',' or ';';
     }
 
     /// <summary>
