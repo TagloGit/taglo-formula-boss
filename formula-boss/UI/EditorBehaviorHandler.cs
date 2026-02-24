@@ -64,6 +64,12 @@ internal class EditorBehaviorHandler
     ///     Whether the current completion context is bracket-based (e.g. [col name]),
     ///     which allows spaces in completion filtering.
     /// </summary>
+    /// <summary>
+    ///     Returns true when the completion window is open, so Tab can be
+    ///     passed through for completion selection instead of indenting.
+    /// </summary>
+    public Func<bool>? IsCompletionWindowOpen { get; set; }
+
     public bool IsBracketContext { get; set; }
 
     private void OnTextEntering(object sender, TextCompositionEventArgs e)
@@ -163,7 +169,8 @@ internal class EditorBehaviorHandler
                 return;
             }
 
-            if (e.Key == Key.Tab && e.KeyboardDevice.Modifiers is ModifierKeys.None or ModifierKeys.Shift)
+            if (e.Key == Key.Tab && e.KeyboardDevice.Modifiers is ModifierKeys.None or ModifierKeys.Shift
+                                 && IsCompletionWindowOpen?.Invoke() != true)
             {
                 var shift = e.KeyboardDevice.Modifiers == ModifierKeys.Shift;
                 if (shift)

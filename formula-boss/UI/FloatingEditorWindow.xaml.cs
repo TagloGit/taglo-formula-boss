@@ -62,7 +62,8 @@ public partial class FloatingEditorWindow
                 Hide();
             },
             IsCompletionListEmpty = () =>
-                _completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0
+                _completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0,
+            IsCompletionWindowOpen = () => _completionWindow != null
         };
 
         // Track size changes with debounced save
