@@ -814,4 +814,65 @@ public class EditorBehaviorHandlerTests
             Assert.False(handler.TrySurroundSelection('a'));
         });
     }
+
+    public class CutWholeLine : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Cuts_current_line_including_newline() => RunOnSta(() =>
+        {
+            string? clipped = null;
+            var (editor, handler) = CreateEditor("aaa\nbbb\nccc", 5);
+            handler.SetClipboardText = t => clipped = t;
+            handler.CutWholeLine();
+            Assert.Equal("aaa\nccc", editor.Text);
+            Assert.Equal("bbb\n", clipped);
+        });
+
+        [Fact]
+        public void Cuts_last_line_without_trailing_newline() => RunOnSta(() =>
+        {
+            string? clipped = null;
+            var (editor, handler) = CreateEditor("aaa\nbbb", 5);
+            handler.SetClipboardText = t => clipped = t;
+            handler.CutWholeLine();
+            Assert.Equal("aaa\n", editor.Text);
+            Assert.Equal("bbb", clipped);
+        });
+
+        [Fact]
+        public void Cuts_single_line_document() => RunOnSta(() =>
+        {
+            string? clipped = null;
+            var (editor, handler) = CreateEditor("hello", 2);
+            handler.SetClipboardText = t => clipped = t;
+            handler.CutWholeLine();
+            Assert.Equal("", editor.Text);
+            Assert.Equal("hello", clipped);
+        });
+    }
+
+    public class CopyWholeLine : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Copies_current_line_including_newline() => RunOnSta(() =>
+        {
+            string? clipped = null;
+            var (editor, handler) = CreateEditor("aaa\nbbb\nccc", 5);
+            handler.SetClipboardText = t => clipped = t;
+            handler.CopyWholeLine();
+            Assert.Equal("aaa\nbbb\nccc", editor.Text);
+            Assert.Equal("bbb\n", clipped);
+        });
+
+        [Fact]
+        public void Copies_last_line_without_trailing_newline() => RunOnSta(() =>
+        {
+            string? clipped = null;
+            var (editor, handler) = CreateEditor("aaa\nbbb", 5);
+            handler.SetClipboardText = t => clipped = t;
+            handler.CopyWholeLine();
+            Assert.Equal("aaa\nbbb", editor.Text);
+            Assert.Equal("bbb", clipped);
+        });
+    }
 }

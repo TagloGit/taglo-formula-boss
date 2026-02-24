@@ -71,6 +71,11 @@ internal class EditorBehaviorHandler
     public bool IsBracketContext { get; set; }
 
     /// <summary>
+    ///     Callback to set clipboard text. Defaults to <see cref="System.Windows.Clipboard.SetText(string)" />.
+    /// </summary>
+    public Action<string> SetClipboardText { get; set; } = System.Windows.Clipboard.SetText;
+
+    /// <summary>
     ///     Returns true when the completion window is open, so Tab can be
     ///     passed through for completion selection instead of indenting.
     /// </summary>
@@ -186,6 +191,22 @@ internal class EditorBehaviorHandler
                     Indent();
                 }
 
+                e.Handled = true;
+                return;
+            }
+
+            if (e is { Key: Key.X, KeyboardDevice.Modifiers: ModifierKeys.Control }
+                && _editor.SelectionLength == 0)
+            {
+                CutWholeLine();
+                e.Handled = true;
+                return;
+            }
+
+            if (e is { Key: Key.C, KeyboardDevice.Modifiers: ModifierKeys.Control }
+                && _editor.SelectionLength == 0)
+            {
+                CopyWholeLine();
                 e.Handled = true;
                 return;
             }
@@ -882,5 +903,32 @@ internal class EditorBehaviorHandler
         }
 
         return "";
+    }
+
+    /// <summary>
+    ///     Cuts the entire current line (including newline) to the clipboard
+    ///     when there is no selection. Matches VS/VS Code behavior.
+    /// </summary>
+    internal void CutWholeLine()
+    {
+        var doc = _editor.Document;
+        var line = doc.GetLineByOffset(_editor.CaretOffset);
+        var lineText = doc.GetText(line.Offset, line.TotalLength);
+
+        SetClipboardText(lineText);
+        doc.Remove(line.Offset, line.TotalLength);
+    }
+
+    /// <summary>
+    ///     Copies the entire current line (including newline) to the clipboard
+    ///     when there is no selection. Matches VS/VS Code behavior.
+    /// </summary>
+    internal void CopyWholeLine()
+    {
+        var doc = _editor.Document;
+        var line = doc.GetLineByOffset(_editor.CaretOffset);
+        var lineText = doc.GetText(line.Offset, line.TotalLength);
+
+        SetClipboardText(lineText);
     }
 }
