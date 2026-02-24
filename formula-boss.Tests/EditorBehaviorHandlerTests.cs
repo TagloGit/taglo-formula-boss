@@ -518,6 +518,105 @@ public class EditorBehaviorHandlerTests
         });
     }
 
+    public class TabIndent : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Inserts_spaces_to_next_tab_stop_no_selection() => RunOnSta(() =>
+        {
+            // Caret at column 1, indent size 4 → insert 3 spaces to reach column 4
+            var (editor, handler) = CreateEditor("ab", 1, indentSize: 4);
+            handler.Indent();
+            Assert.Equal("a   b", editor.Text);
+            Assert.Equal(4, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Inserts_full_indent_at_tab_stop() => RunOnSta(() =>
+        {
+            // Caret at column 0, indent size 2 → insert 2 spaces
+            var (editor, handler) = CreateEditor("ab", 0, indentSize: 2);
+            handler.Indent();
+            Assert.Equal("  ab", editor.Text);
+            Assert.Equal(2, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Indents_all_selected_lines_multiline() => RunOnSta(() =>
+        {
+            var text = "aaa\r\nbbb\r\nccc";
+            var (editor, handler) = CreateEditor(text, 0, indentSize: 2);
+            // Select lines 1 and 2 (first two lines)
+            editor.Select(0, "aaa\r\nbbb".Length);
+            handler.Indent();
+            Assert.Equal("  aaa\r\n  bbb\r\nccc", editor.Text);
+            Assert.True(editor.SelectionLength > 0);
+        });
+
+        [Fact]
+        public void Single_line_selection_inserts_to_tab_stop() => RunOnSta(() =>
+        {
+            // Single-line selection behaves like no selection: inserts spaces at caret
+            var (editor, handler) = CreateEditor("hello", 3, indentSize: 4);
+            editor.Select(1, 2); // select "el", caret at 3
+            handler.Indent();
+            // Caret was at col 3, next tab stop at 4 → insert 1 space
+            Assert.Equal("hel lo", editor.Text);
+        });
+    }
+
+    public class ShiftTabDedent : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Removes_one_indent_level() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, 6, indentSize: 2);
+            handler.Dedent();
+            Assert.Equal("  hello", editor.Text);
+        });
+
+        [Fact]
+        public void Removes_all_leading_whitespace_when_less_than_indent() => RunOnSta(() =>
+        {
+            var text = " hello";
+            var (editor, handler) = CreateEditor(text, 3, indentSize: 4);
+            handler.Dedent();
+            Assert.Equal("hello", editor.Text);
+        });
+
+        [Fact]
+        public void Dedents_all_selected_lines_multiline() => RunOnSta(() =>
+        {
+            var text = "  aaa\r\n  bbb\r\nccc";
+            var (editor, handler) = CreateEditor(text, 0, indentSize: 2);
+            editor.Select(0, "  aaa\r\n  bbb".Length);
+            handler.Dedent();
+            Assert.Equal("aaa\r\nbbb\r\nccc", editor.Text);
+            Assert.True(editor.SelectionLength > 0);
+        });
+
+        [Fact]
+        public void Does_nothing_on_line_with_no_indent() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("hello", 3, indentSize: 2);
+            handler.Dedent();
+            Assert.Equal("hello", editor.Text);
+        });
+
+        [Fact]
+        public void Preserves_selection_after_dedent() => RunOnSta(() =>
+        {
+            var text = "  aaa\r\n  bbb\r\n  ccc";
+            var (editor, handler) = CreateEditor(text, 0, indentSize: 2);
+            editor.Select(0, "  aaa\r\n  bbb\r\n  ccc".Length);
+            handler.Dedent();
+            Assert.Equal("aaa\r\nbbb\r\nccc", editor.Text);
+            // Selection should span all three lines
+            Assert.Equal(0, editor.SelectionStart);
+            Assert.Equal("aaa\r\nbbb\r\nccc".Length, editor.SelectionLength);
+        });
+    }
+
     public class SurroundSelection : EditorBehaviorHandlerTests
     {
         [Theory]
