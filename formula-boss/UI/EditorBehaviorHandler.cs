@@ -66,6 +66,12 @@ internal class EditorBehaviorHandler
     /// </summary>
     public bool IsBracketContext { get; set; }
 
+    /// <summary>
+    ///     Returns true when the completion window is open, so Tab can be
+    ///     passed through for completion selection instead of indenting.
+    /// </summary>
+    public Func<bool>? IsCompletionWindowOpen { get; set; }
+
     private void OnTextEntering(object sender, TextCompositionEventArgs e)
     {
         try
@@ -159,6 +165,23 @@ internal class EditorBehaviorHandler
             {
                 var extend = e.KeyboardDevice.Modifiers == ModifierKeys.Shift;
                 SmartHome(extend);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Tab && e.KeyboardDevice.Modifiers is ModifierKeys.None or ModifierKeys.Shift
+                                 && IsCompletionWindowOpen?.Invoke() != true)
+            {
+                var shift = e.KeyboardDevice.Modifiers == ModifierKeys.Shift;
+                if (shift)
+                {
+                    Dedent();
+                }
+                else
+                {
+                    Indent();
+                }
+
                 e.Handled = true;
                 return;
             }
@@ -474,6 +497,103 @@ internal class EditorBehaviorHandler
         doc.Remove(offset - 1, 2);
         _editor.CaretOffset = offset - 1;
         return true;
+    }
+
+    /// <summary>
+    ///     Tab with no multiline selection: insert spaces to the next tab stop.
+    ///     Tab with multiline selection: indent all selected lines by one indent unit.
+    ///     Selection is preserved after indent.
+    /// </summary>
+    internal void Indent()
+    {
+        var doc = _editor.Document;
+        var indentSize = _editor.Options.IndentationSize;
+        var indent = new string(' ', indentSize);
+        var selStart = _editor.SelectionStart;
+        var selLength = _editor.SelectionLength;
+
+        var startLine = doc.GetLineByOffset(selStart);
+        var endLine = doc.GetLineByOffset(selStart + selLength);
+
+        if (selLength == 0 || startLine.LineNumber == endLine.LineNumber)
+        {
+            // No selection or single-line selection: insert spaces to next tab stop
+            var offset = _editor.CaretOffset;
+            var line = doc.GetLineByOffset(offset);
+            var col = offset - line.Offset;
+            var spacesToInsert = indentSize - col % indentSize;
+            doc.Insert(offset, new string(' ', spacesToInsert));
+            _editor.CaretOffset = offset + spacesToInsert;
+            return;
+        }
+
+        // Multiline selection: indent all lines
+        doc.BeginUpdate();
+        var addedTotal = 0;
+        for (var i = startLine.LineNumber; i <= endLine.LineNumber; i++)
+        {
+            var line = doc.GetLineByNumber(i);
+            doc.Insert(line.Offset, indent);
+            addedTotal += indentSize;
+        }
+
+        doc.EndUpdate();
+
+        // Preserve selection spanning the same lines
+        var newSelStart = startLine.Offset;
+        var lastLine = doc.GetLineByNumber(endLine.LineNumber);
+        _editor.Select(newSelStart, lastLine.EndOffset - newSelStart);
+    }
+
+    /// <summary>
+    ///     Shift+Tab: remove one indent level from the current line or all selected lines.
+    ///     If a line has fewer spaces than one indent unit, remove all leading whitespace.
+    ///     Selection is preserved after dedent.
+    /// </summary>
+    internal void Dedent()
+    {
+        var doc = _editor.Document;
+        var indentSize = _editor.Options.IndentationSize;
+        var selStart = _editor.SelectionStart;
+        var selLength = _editor.SelectionLength;
+
+        var startLine = doc.GetLineByOffset(selStart);
+        var endLine = doc.GetLineByOffset(selStart + selLength);
+
+        doc.BeginUpdate();
+        for (var i = startLine.LineNumber; i <= endLine.LineNumber; i++)
+        {
+            var line = doc.GetLineByNumber(i);
+            var lineText = doc.GetText(line);
+            var leadingSpaces = 0;
+            foreach (var c in lineText)
+            {
+                if (c == ' ')
+                {
+                    leadingSpaces++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            var toRemove = Math.Min(leadingSpaces, indentSize);
+            if (toRemove > 0)
+            {
+                doc.Remove(line.Offset, toRemove);
+            }
+        }
+
+        doc.EndUpdate();
+
+        // Preserve selection spanning the same lines
+        if (selLength > 0 && startLine.LineNumber != endLine.LineNumber)
+        {
+            var newStart = doc.GetLineByNumber(startLine.LineNumber).Offset;
+            var lastLine = doc.GetLineByNumber(endLine.LineNumber);
+            _editor.Select(newStart, lastLine.EndOffset - newStart);
+        }
     }
 
     private static int FindMatchingOpen(TextDocument doc, int closeOffset, char open, char close)
