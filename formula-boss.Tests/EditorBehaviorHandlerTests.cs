@@ -435,6 +435,38 @@ public class EditorBehaviorHandlerTests
         });
 
         [Fact]
+        public void Suppresses_when_inside_open_quote() => RunOnSta(() =>
+        {
+            // User has: "some text| and types " — should NOT auto-close
+            var (editor, handler) = CreateEditor("\"some text ", 11);
+            editor.Document.Insert(11, "\"");
+            editor.CaretOffset = 12;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("\"some text \"", editor.Text); // no extra quote
+        });
+
+        [Fact]
+        public void Auto_closes_when_previous_quotes_are_balanced() => RunOnSta(() =>
+        {
+            // User has: "a" | and types " — should auto-close (balanced)
+            var (editor, handler) = CreateEditor("\"a\" ", 4);
+            editor.Document.Insert(4, "\"");
+            editor.CaretOffset = 5;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("\"a\" \"\"", editor.Text);
+        });
+
+        [Fact]
+        public void Suppresses_backtick_when_inside_open_backtick() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("`expr ", 6);
+            editor.Document.Insert(6, "`");
+            editor.CaretOffset = 7;
+            handler.AutoInsertClosingChar('`');
+            Assert.Equal("`expr `", editor.Text);
+        });
+
+        [Fact]
         public void Auto_closes_quote_before_closing_bracket() => RunOnSta(() =>
         {
             var (editor, handler) = CreateEditor("x)", 1);

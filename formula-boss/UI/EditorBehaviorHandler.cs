@@ -214,7 +214,7 @@ internal class EditorBehaviorHandler
             return;
         }
 
-        if (ch is '"' or '`' && !ShouldAutoCloseQuote())
+        if (ch is '"' or '`' && !ShouldAutoCloseQuote(ch))
         {
             return;
         }
@@ -251,18 +251,39 @@ internal class EditorBehaviorHandler
     }
 
     /// <summary>
-    ///     Returns true if a quote should be auto-closed based on the character
-    ///     after the caret. Only auto-close before whitespace, closing brackets,
-    ///     commas, semicolons, or end-of-line.
+    ///     Returns true if a quote should be auto-closed. Suppresses auto-close when
+    ///     there is an unmatched quote of the same type before the caret on the current
+    ///     line (i.e. we're inside a string). When not inside a string, only auto-closes
+    ///     before whitespace, closing brackets, commas, semicolons, or end-of-line.
     /// </summary>
-    private bool ShouldAutoCloseQuote()
+    private bool ShouldAutoCloseQuote(char quoteChar)
     {
         var offset = _editor.CaretOffset;
         var doc = _editor.Document;
+        var line = doc.GetLineByOffset(offset);
 
+        // Count occurrences of this quote char before caret on the current line.
+        // The char that was just inserted is at offset-1, so look before that.
+        var lineTextBeforeInserted = doc.GetText(line.Offset, offset - 1 - line.Offset);
+        var count = 0;
+        foreach (var c in lineTextBeforeInserted)
+        {
+            if (c == quoteChar)
+            {
+                count++;
+            }
+        }
+
+        // Odd count means we're inside an open quote — don't auto-close
+        if (count % 2 != 0)
+        {
+            return false;
+        }
+
+        // Even count (or zero) — apply forward-looking heuristic
         if (offset >= doc.TextLength)
         {
-            return true; // EOL / end of document
+            return true;
         }
 
         var next = doc.GetCharAt(offset);
