@@ -142,7 +142,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "  {}";
             var caretPos = text.IndexOf('}');
-            var (editor, handler) = CreateEditor(text, caretPos, 2);
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
 
             Assert.True(handler.TryExpandBraceBlock());
             Assert.Equal("  {\r\n    \r\n  }", editor.Text);
@@ -178,7 +178,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "foo(x)";
             var caretPos = text.IndexOf(')');
-            var (editor, handler) = CreateEditor(text, caretPos, 2);
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
 
             Assert.True(handler.TryExpandBeforeClosingParen());
             Assert.Equal("foo(x\r\n  )", editor.Text);
@@ -189,7 +189,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "arr[i]";
             var caretPos = text.IndexOf(']');
-            var (editor, handler) = CreateEditor(text, caretPos, 2);
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
 
             Assert.True(handler.TryExpandBeforeClosingParen());
             Assert.Equal("arr[i\r\n  ]", editor.Text);
@@ -266,7 +266,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "      x";
             // Caret at column 6 (6 spaces), indent size 2 -> should go to 4
-            var (editor, handler) = CreateEditor(text, 6, 2);
+            var (editor, handler) = CreateEditor(text, 6, indentSize: 2);
             Assert.True(handler.TrySmartBackspace());
             Assert.Equal("    x", editor.Text);
             Assert.Equal(4, editor.CaretOffset);
@@ -286,7 +286,7 @@ public class EditorBehaviorHandlerTests
         public void Does_nothing_when_not_in_leading_whitespace() => RunOnSta(() =>
         {
             var text = "  ab";
-            var (editor, handler) = CreateEditor(text, 3, 2);
+            var (editor, handler) = CreateEditor(text, 3, indentSize: 2);
             Assert.False(handler.TrySmartBackspace());
             Assert.Equal("  ab", editor.Text);
         });
@@ -294,7 +294,7 @@ public class EditorBehaviorHandlerTests
         [Fact]
         public void Does_nothing_at_start_of_document() => RunOnSta(() =>
         {
-            var (_, handler) = CreateEditor("  x", 0, 2);
+            var (_, handler) = CreateEditor("  x", 0, indentSize: 2);
             Assert.False(handler.TrySmartBackspace());
         });
 
@@ -303,7 +303,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "foo\r\n  bar";
             // Caret at start of second line (column 0)
-            var (_, handler) = CreateEditor(text, 5, 2);
+            var (_, handler) = CreateEditor(text, 5, indentSize: 2);
             Assert.False(handler.TrySmartBackspace());
         });
     }
