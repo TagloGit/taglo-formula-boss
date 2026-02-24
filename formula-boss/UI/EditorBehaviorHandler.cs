@@ -148,6 +148,23 @@ internal class EditorBehaviorHandler
             {
                 e.Handled = true;
                 FormulaApplyRequested?.Invoke(_editor.Text);
+                return;
+            }
+
+            if (e.Key == Key.Home && e.KeyboardDevice.Modifiers is ModifierKeys.None or ModifierKeys.Shift)
+            {
+                var extend = e.KeyboardDevice.Modifiers == ModifierKeys.Shift;
+                SmartHome(extend);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Back && e.KeyboardDevice.Modifiers == ModifierKeys.None)
+            {
+                if (TryDeletePairedChars() || TrySmartBackspace())
+                {
+                    e.Handled = true;
+                }
             }
         }
         catch (Exception ex)
@@ -282,6 +299,102 @@ internal class EditorBehaviorHandler
         var insertion = "\r\n" + indent;
         doc.Insert(offset, insertion);
         _editor.CaretOffset = offset + insertion.Length;
+        return true;
+    }
+
+    /// <summary>
+    ///     Smart Home: first press jumps to first non-whitespace character on the line;
+    ///     second press (or if already there) jumps to column 0. Toggles between the two.
+    ///     When extend is true, the selection is extended rather than moving the caret.
+    /// </summary>
+    internal void SmartHome(bool extend)
+    {
+        var doc = _editor.Document;
+        var line = doc.GetLineByOffset(_editor.CaretOffset);
+        var lineText = doc.GetText(line);
+        var firstNonWhitespace = line.Offset + (lineText.Length - lineText.TrimStart().Length);
+
+        var target = _editor.CaretOffset == firstNonWhitespace ? line.Offset : firstNonWhitespace;
+
+        if (extend)
+        {
+            var anchor = _editor.TextArea.Selection.IsEmpty
+                ? _editor.CaretOffset
+                : _editor.SelectionStart == _editor.CaretOffset
+                    ? _editor.SelectionStart + _editor.SelectionLength
+                    : _editor.SelectionStart;
+            var selStart = Math.Min(anchor, target);
+            var selLength = Math.Abs(anchor - target);
+            _editor.Select(selStart, selLength);
+            // Place caret at the target end of the selection
+            _editor.CaretOffset = target;
+        }
+        else
+        {
+            _editor.CaretOffset = target;
+        }
+    }
+
+    /// <summary>
+    ///     Smart Backspace: when the caret is in leading whitespace, remove back to
+    ///     the previous indent stop (nearest multiple of indent size) instead of one char.
+    ///     Returns true if handled.
+    /// </summary>
+    internal bool TrySmartBackspace()
+    {
+        var doc = _editor.Document;
+        var offset = _editor.CaretOffset;
+        if (offset == 0)
+        {
+            return false;
+        }
+
+        var line = doc.GetLineByOffset(offset);
+        var colInLine = offset - line.Offset;
+        var lineText = doc.GetText(line);
+
+        // Only act in leading whitespace (all chars before caret are spaces)
+        if (colInLine == 0 || lineText[..colInLine].TrimStart().Length > 0)
+        {
+            return false;
+        }
+
+        var indentSize = _editor.Options.IndentationSize;
+        // Calculate previous indent stop
+        var targetCol = colInLine <= indentSize
+            ? 0
+            : (colInLine - 1) / indentSize * indentSize;
+
+        var removeCount = colInLine - targetCol;
+        doc.Remove(line.Offset + targetCol, removeCount);
+        _editor.CaretOffset = line.Offset + targetCol;
+        return true;
+    }
+
+    /// <summary>
+    ///     Paired Delete: when Backspace is pressed between an empty auto-inserted pair
+    ///     (e.g. (), [], {}, "", ``), delete both characters. Returns true if handled.
+    /// </summary>
+    internal bool TryDeletePairedChars()
+    {
+        var offset = _editor.CaretOffset;
+        var doc = _editor.Document;
+
+        if (offset <= 0 || offset >= doc.TextLength)
+        {
+            return false;
+        }
+
+        var before = doc.GetCharAt(offset - 1);
+        var after = doc.GetCharAt(offset);
+
+        if (!BracePairs.TryGetValue(before, out var expected) || after != expected)
+        {
+            return false;
+        }
+
+        doc.Remove(offset - 1, 2);
+        _editor.CaretOffset = offset - 1;
         return true;
     }
 
