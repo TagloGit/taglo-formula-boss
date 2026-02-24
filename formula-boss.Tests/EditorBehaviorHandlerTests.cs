@@ -42,13 +42,14 @@ public class EditorBehaviorHandlerTests
     public class SkipClosingChar : EditorBehaviorHandlerTests
     {
         [Theory]
-        [InlineData(')')]
-        [InlineData(']')]
-        [InlineData('}')]
-        [InlineData('"')]
-        [InlineData('`')]
-        public void Skips_when_char_at_caret_matches(char ch) => RunOnSta(() =>
+        [InlineData(")")]
+        [InlineData("]")]
+        [InlineData("}")]
+        [InlineData("\"")]
+        [InlineData("`")]
+        public void Skips_when_char_at_caret_matches(string s) => RunOnSta(() =>
         {
+            var ch = s[0];
             var (editor, handler) = CreateEditor($"x{ch}y", 1);
             Assert.True(handler.TrySkipClosingChar(ch));
             Assert.Equal(2, editor.CaretOffset);
@@ -81,13 +82,15 @@ public class EditorBehaviorHandlerTests
     public class AutoInsertClosingChar : EditorBehaviorHandlerTests
     {
         [Theory]
-        [InlineData('(', ')')]
-        [InlineData('[', ']')]
-        [InlineData('{', '}')]
-        [InlineData('"', '"')]
-        [InlineData('`', '`')]
-        public void Inserts_matching_closer(char open, char close) => RunOnSta(() =>
+        [InlineData("(", ")")]
+        [InlineData("[", "]")]
+        [InlineData("{", "}")]
+        [InlineData("\"", "\"")]
+        [InlineData("`", "`")]
+        public void Inserts_matching_closer(string openStr, string closeStr) => RunOnSta(() =>
         {
+            var open = openStr[0];
+            var close = closeStr[0];
             var (editor, handler) = CreateEditor("x", 1);
             editor.Document.Insert(1, open.ToString());
             editor.CaretOffset = 2;
@@ -778,13 +781,15 @@ public class EditorBehaviorHandlerTests
     public class SurroundSelection : EditorBehaviorHandlerTests
     {
         [Theory]
-        [InlineData('(', ')')]
-        [InlineData('[', ']')]
-        [InlineData('{', '}')]
-        [InlineData('"', '"')]
-        [InlineData('`', '`')]
-        public void Wraps_selection_with_pair(char open, char close) => RunOnSta(() =>
+        [InlineData("(", ")")]
+        [InlineData("[", "]")]
+        [InlineData("{", "}")]
+        [InlineData("\"", "\"")]
+        [InlineData("`", "`")]
+        public void Wraps_selection_with_pair(string openStr, string closeStr) => RunOnSta(() =>
         {
+            var open = openStr[0];
+            var close = closeStr[0];
             var (editor, handler) = CreateEditor("xhelloy", 1);
             editor.Select(1, 5); // select "hello"
             Assert.True(handler.TrySurroundSelection(open));
