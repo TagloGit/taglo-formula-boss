@@ -1,5 +1,7 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using System.Windows;
 using System.Windows.Input;
+
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
 
@@ -73,7 +75,7 @@ internal class EditorBehaviorHandler
     /// <summary>
     ///     Callback to set clipboard text. Defaults to <see cref="System.Windows.Clipboard.SetText(string)" />.
     /// </summary>
-    public Action<string> SetClipboardText { get; set; } = System.Windows.Clipboard.SetText;
+    public Action<string> SetClipboardText { get; set; } = Clipboard.SetText;
 
     /// <summary>
     ///     Returns true when the completion window is open, so Tab can be
@@ -404,7 +406,8 @@ internal class EditorBehaviorHandler
 
             var expansion = "\r\n" + braceIndent + "{\r\n" + innerIndent + "\r\n" + braceIndent + "}" + afterClose;
             doc.Replace(replaceStart, replaceLen, expansion);
-            _editor.CaretOffset = replaceStart + "\r\n".Length + braceIndent.Length + "{\r\n".Length + innerIndent.Length;
+            _editor.CaretOffset =
+                replaceStart + "\r\n".Length + braceIndent.Length + "{\r\n".Length + innerIndent.Length;
             return true;
         }
 
@@ -566,7 +569,7 @@ internal class EditorBehaviorHandler
             var offset = _editor.CaretOffset;
             var line = doc.GetLineByOffset(offset);
             var col = offset - line.Offset;
-            var spacesToInsert = indentSize - col % indentSize;
+            var spacesToInsert = indentSize - (col % indentSize);
             doc.Insert(offset, new string(' ', spacesToInsert));
             _editor.CaretOffset = offset + spacesToInsert;
             return;
@@ -574,12 +577,10 @@ internal class EditorBehaviorHandler
 
         // Multiline selection: indent all lines
         doc.BeginUpdate();
-        var addedTotal = 0;
         for (var i = startLine.LineNumber; i <= endLine.LineNumber; i++)
         {
             var line = doc.GetLineByNumber(i);
             doc.Insert(line.Offset, indent);
-            addedTotal += indentSize;
         }
 
         doc.EndUpdate();
