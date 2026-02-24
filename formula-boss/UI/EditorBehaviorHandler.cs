@@ -796,7 +796,7 @@ internal class EditorBehaviorHandler
                 doc.Replace(prevLine.Offset, prevLine.Length, "");
             }
         }
-        catch (Exception ex)
+        catch (ArgumentOutOfRangeException ex)
         {
             Debug.WriteLine($"OnCaretPositionChanged error: {ex.Message}");
         }

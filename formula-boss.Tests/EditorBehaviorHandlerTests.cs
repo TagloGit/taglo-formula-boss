@@ -650,7 +650,8 @@ public class EditorBehaviorHandlerTests
             var caretPos = text.IndexOf('}');
             var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
             handler.HandleEnter();
-            Assert.Equal("r =>\r\n  {\r\n    \r\n  })`)".Replace("    \r\n  }", "    \r\n  }"), editor.Text);
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  })`)".Length, editor.Text.Length);
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  })`)", editor.Text);
         });
 
         [Fact]
