@@ -369,4 +369,187 @@ public class EditorBehaviorHandlerTests
             Assert.False(handler.TryDeletePairedChars());
         });
     }
+
+    public class SmartQuoteSuppression : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Auto_closes_quote_before_whitespace() => RunOnSta(() =>
+        {
+            // Simulate: user typed " and caret is after it, next char is space
+            var (editor, handler) = CreateEditor("x y", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"\" y", editor.Text);
+        });
+
+        [Fact]
+        public void Auto_closes_quote_at_end_of_document() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"\"", editor.Text);
+        });
+
+        [Fact]
+        public void Suppresses_quote_before_letter() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("xy", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"y", editor.Text); // no closing quote added
+        });
+
+        [Fact]
+        public void Suppresses_quote_before_digit() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x5", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"5", editor.Text);
+        });
+
+        [Fact]
+        public void Suppresses_quote_before_underscore() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x_y", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"_y", editor.Text);
+        });
+
+        [Fact]
+        public void Suppresses_quote_before_another_quote() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x\"", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"\"", editor.Text); // no extra quote
+            Assert.Equal(2, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Suppresses_when_inside_open_quote() => RunOnSta(() =>
+        {
+            // User has: "some text| and types " — should NOT auto-close
+            var (editor, handler) = CreateEditor("\"some text ", 11);
+            editor.Document.Insert(11, "\"");
+            editor.CaretOffset = 12;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("\"some text \"", editor.Text); // no extra quote
+        });
+
+        [Fact]
+        public void Auto_closes_when_previous_quotes_are_balanced() => RunOnSta(() =>
+        {
+            // User has: "a" | and types " — should auto-close (balanced)
+            var (editor, handler) = CreateEditor("\"a\" ", 4);
+            editor.Document.Insert(4, "\"");
+            editor.CaretOffset = 5;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("\"a\" \"\"", editor.Text);
+        });
+
+        [Fact]
+        public void Suppresses_backtick_when_inside_open_backtick() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("`expr ", 6);
+            editor.Document.Insert(6, "`");
+            editor.CaretOffset = 7;
+            handler.AutoInsertClosingChar('`');
+            Assert.Equal("`expr `", editor.Text);
+        });
+
+        [Fact]
+        public void Auto_closes_quote_before_closing_bracket() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x)", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"\")", editor.Text);
+        });
+
+        [Fact]
+        public void Auto_closes_quote_before_comma() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x,", 1);
+            editor.Document.Insert(1, "\"");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('"');
+            Assert.Equal("x\"\",", editor.Text);
+        });
+
+        [Fact]
+        public void Auto_closes_backtick_before_whitespace() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("x y", 1);
+            editor.Document.Insert(1, "`");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('`');
+            Assert.Equal("x`` y", editor.Text);
+        });
+
+        [Fact]
+        public void Suppresses_backtick_before_letter() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("xy", 1);
+            editor.Document.Insert(1, "`");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('`');
+            Assert.Equal("x`y", editor.Text);
+        });
+
+        [Fact]
+        public void Does_not_suppress_paren_before_letter() => RunOnSta(() =>
+        {
+            // Smart suppression only applies to quotes, not brackets
+            var (editor, handler) = CreateEditor("xy", 1);
+            editor.Document.Insert(1, "(");
+            editor.CaretOffset = 2;
+            handler.AutoInsertClosingChar('(');
+            Assert.Equal("x()y", editor.Text);
+        });
+    }
+
+    public class SurroundSelection : EditorBehaviorHandlerTests
+    {
+        [Theory]
+        [InlineData('(', ')')]
+        [InlineData('[', ']')]
+        [InlineData('{', '}')]
+        [InlineData('"', '"')]
+        [InlineData('`', '`')]
+        public void Wraps_selection_with_pair(char open, char close) => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("xhelloy", 1);
+            editor.Select(1, 5); // select "hello"
+            Assert.True(handler.TrySurroundSelection(open));
+            Assert.Equal($"x{open}hello{close}y", editor.Text);
+            // Selection should be on "hello" inside the pair
+            Assert.Equal(2, editor.SelectionStart);
+            Assert.Equal(5, editor.SelectionLength);
+        });
+
+        [Fact]
+        public void Does_nothing_without_selection() => RunOnSta(() =>
+        {
+            var (_, handler) = CreateEditor("hello", 2);
+            Assert.False(handler.TrySurroundSelection('('));
+        });
+
+        [Fact]
+        public void Does_nothing_for_non_opener() => RunOnSta(() =>
+        {
+            var (editor, handler) = CreateEditor("hello", 1);
+            editor.Select(1, 3);
+            Assert.False(handler.TrySurroundSelection('a'));
+        });
+    }
 }
