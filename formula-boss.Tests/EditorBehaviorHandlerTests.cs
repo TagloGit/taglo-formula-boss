@@ -142,7 +142,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "  {}";
             var caretPos = text.IndexOf('}');
-            var (editor, handler) = CreateEditor(text, caretPos, 2);
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
 
             Assert.True(handler.TryExpandBraceBlock());
             Assert.Equal("  {\r\n    \r\n  }", editor.Text);
@@ -178,7 +178,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "foo(x)";
             var caretPos = text.IndexOf(')');
-            var (editor, handler) = CreateEditor(text, caretPos, 2);
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
 
             Assert.True(handler.TryExpandBeforeClosingParen());
             Assert.Equal("foo(x\r\n  )", editor.Text);
@@ -189,7 +189,7 @@ public class EditorBehaviorHandlerTests
         {
             var text = "arr[i]";
             var caretPos = text.IndexOf(']');
-            var (editor, handler) = CreateEditor(text, caretPos, 2);
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
 
             Assert.True(handler.TryExpandBeforeClosingParen());
             Assert.Equal("arr[i\r\n  ]", editor.Text);
@@ -207,6 +207,166 @@ public class EditorBehaviorHandlerTests
         {
             var (_, handler) = CreateEditor("foo()", 5);
             Assert.False(handler.TryExpandBeforeClosingParen());
+        });
+    }
+
+    public class SmartHome : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Jumps_to_first_non_whitespace() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, text.Length);
+            handler.SmartHome(false);
+            Assert.Equal(4, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Jumps_to_column_zero_when_at_first_non_whitespace() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, 4);
+            handler.SmartHome(false);
+            Assert.Equal(0, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Toggles_back_to_first_non_whitespace() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, 0);
+            handler.SmartHome(false);
+            Assert.Equal(4, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Extends_selection_with_shift() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, text.Length);
+            handler.SmartHome(true);
+            Assert.Equal(4, editor.CaretOffset);
+            Assert.True(editor.SelectionLength > 0);
+        });
+
+        [Fact]
+        public void Shift_home_twice_extends_selection_to_column_zero() => RunOnSta(() =>
+        {
+            var text = "    hello";
+            var (editor, handler) = CreateEditor(text, text.Length);
+            // First Shift+Home: select from end to first non-ws (col 4)
+            handler.SmartHome(true);
+            Assert.Equal(4, editor.CaretOffset);
+            Assert.Equal(4, editor.SelectionStart);
+            Assert.Equal(5, editor.SelectionLength);
+            // Second Shift+Home: extend selection to col 0, anchor stays at end
+            handler.SmartHome(true);
+            Assert.Equal(0, editor.CaretOffset);
+            Assert.Equal(0, editor.SelectionStart);
+            Assert.Equal(9, editor.SelectionLength);
+        });
+
+        [Fact]
+        public void Works_on_line_with_no_indent() => RunOnSta(() =>
+        {
+            var text = "hello";
+            var (editor, handler) = CreateEditor(text, 3);
+            handler.SmartHome(false);
+            Assert.Equal(0, editor.CaretOffset);
+        });
+    }
+
+    public class SmartBackspace : EditorBehaviorHandlerTests
+    {
+        [Fact]
+        public void Removes_to_previous_indent_stop() => RunOnSta(() =>
+        {
+            var text = "      x";
+            // Caret at column 6 (6 spaces), indent size 2 -> should go to 4
+            var (editor, handler) = CreateEditor(text, 6, indentSize: 2);
+            Assert.True(handler.TrySmartBackspace());
+            Assert.Equal("    x", editor.Text);
+            Assert.Equal(4, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Removes_to_zero_when_within_first_indent() => RunOnSta(() =>
+        {
+            var text = "  x";
+            var (editor, handler) = CreateEditor(text, 2, indentSize: 4);
+            Assert.True(handler.TrySmartBackspace());
+            Assert.Equal("x", editor.Text);
+            Assert.Equal(0, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Does_nothing_when_not_in_leading_whitespace() => RunOnSta(() =>
+        {
+            var text = "  ab";
+            var (editor, handler) = CreateEditor(text, 3, indentSize: 2);
+            Assert.False(handler.TrySmartBackspace());
+            Assert.Equal("  ab", editor.Text);
+        });
+
+        [Fact]
+        public void Does_nothing_at_start_of_document() => RunOnSta(() =>
+        {
+            var (_, handler) = CreateEditor("  x", 0, indentSize: 2);
+            Assert.False(handler.TrySmartBackspace());
+        });
+
+        [Fact]
+        public void Does_nothing_at_column_zero_of_line() => RunOnSta(() =>
+        {
+            var text = "foo\r\n  bar";
+            // Caret at start of second line (column 0)
+            var (_, handler) = CreateEditor(text, 5, indentSize: 2);
+            Assert.False(handler.TrySmartBackspace());
+        });
+    }
+
+    public class PairedDelete : EditorBehaviorHandlerTests
+    {
+        [Theory]
+        [InlineData("()", 1)]
+        [InlineData("[]", 1)]
+        [InlineData("{}", 1)]
+        [InlineData("\"\"", 1)]
+        [InlineData("``", 1)]
+        public void Deletes_both_chars_of_empty_pair(string pair, int caret) => RunOnSta(() =>
+        {
+            var text = "x" + pair + "y";
+            var (editor, handler) = CreateEditor(text, caret + 1);
+            Assert.True(handler.TryDeletePairedChars());
+            Assert.Equal("xy", editor.Text);
+        });
+
+        [Fact]
+        public void Does_not_delete_when_pair_is_not_empty() => RunOnSta(() =>
+        {
+            var (_, handler) = CreateEditor("(a)", 2);
+            Assert.False(handler.TryDeletePairedChars());
+        });
+
+        [Fact]
+        public void Does_not_delete_at_start_of_document() => RunOnSta(() =>
+        {
+            var (_, handler) = CreateEditor("()", 0);
+            Assert.False(handler.TryDeletePairedChars());
+        });
+
+        [Fact]
+        public void Does_not_delete_at_end_of_document() => RunOnSta(() =>
+        {
+            var (_, handler) = CreateEditor("()", 2);
+            Assert.False(handler.TryDeletePairedChars());
+        });
+
+        [Fact]
+        public void Does_not_delete_mismatched_pair() => RunOnSta(() =>
+        {
+            var (_, handler) = CreateEditor("(]", 1);
+            Assert.False(handler.TryDeletePairedChars());
         });
     }
 }
