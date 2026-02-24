@@ -366,11 +366,31 @@ internal class EditorBehaviorHandler
         var line = doc.GetLineByOffset(offset);
         var lineText = doc.GetText(line);
         var baseIndent = lineText[..^lineText.TrimStart().Length];
-        var innerIndent = baseIndent + new string(' ', _editor.Options.IndentationSize);
+        var indentUnit = new string(' ', _editor.Options.IndentationSize);
 
-        var insertion = "\r\n" + innerIndent + "\r\n" + baseIndent;
+        // Check if preceded by => — if so, move braces down with combined expansion
+        var textBeforeBrace = doc.GetText(line.Offset, offset - 1 - line.Offset).TrimEnd();
+        if (textBeforeBrace.EndsWith("=>"))
+        {
+            var braceIndent = baseIndent + indentUnit;
+            var innerIndent = braceIndent + indentUnit;
+            var afterClose = doc.GetText(offset + 1, line.EndOffset - offset - 1);
+
+            // Replace from after => (trimmed) through end of line
+            var trimmedBeforeLen = line.Offset + textBeforeBrace.Length;
+            var replaceStart = trimmedBeforeLen;
+            var replaceLen = line.EndOffset - replaceStart;
+
+            var expansion = "\r\n" + braceIndent + "{\r\n" + innerIndent + "\r\n" + braceIndent + "}" + afterClose;
+            doc.Replace(replaceStart, replaceLen, expansion);
+            _editor.CaretOffset = replaceStart + "\r\n".Length + braceIndent.Length + "{\r\n".Length + innerIndent.Length;
+            return true;
+        }
+
+        var innerIndentSimple = baseIndent + indentUnit;
+        var insertion = "\r\n" + innerIndentSimple + "\r\n" + baseIndent;
         doc.Insert(offset, insertion);
-        _editor.CaretOffset = offset + "\r\n".Length + innerIndent.Length;
+        _editor.CaretOffset = offset + "\r\n".Length + innerIndentSimple.Length;
         return true;
     }
 

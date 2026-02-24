@@ -622,23 +622,46 @@ public class EditorBehaviorHandlerTests
         [Fact]
         public void Breaks_lambda_body_after_arrow_before_brace() => RunOnSta(() =>
         {
-            var text = "x => {}";
+            // Caret before { (not between {}), so TryExpandAfterArrow fires
+            var text = "x => {y}";
             var caretPos = text.IndexOf('{');
             var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
             handler.HandleEnter();
-            Assert.Equal("x =>\r\n  {}", editor.Text);
+            Assert.Equal("x =>\r\n  {y}", editor.Text);
             Assert.Equal("x =>\r\n  ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Combined_arrow_brace_expansion() => RunOnSta(() =>
+        {
+            // Caret between {} with => before — combined expansion
+            var text = "r => {}";
+            var caretPos = text.IndexOf('}');
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  }", editor.Text);
+            Assert.Equal("r =>\r\n  {\r\n    ".Length, editor.CaretOffset);
+        });
+
+        [Fact]
+        public void Combined_arrow_brace_preserves_trailing_content() => RunOnSta(() =>
+        {
+            var text = "r => {})`)";
+            var caretPos = text.IndexOf('}');
+            var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
+            handler.HandleEnter();
+            Assert.Equal("r =>\r\n  {\r\n    \r\n  })`)".Replace("    \r\n  }", "    \r\n  }"), editor.Text);
         });
 
         [Fact]
         public void Does_not_trigger_without_arrow() => RunOnSta(() =>
         {
             var text = "x = {}";
-            var caretPos = text.IndexOf('{');
+            var caretPos = text.IndexOf('}');
             var (editor, handler) = CreateEditor(text, caretPos, indentSize: 2);
             handler.HandleEnter();
-            // Between {}, so brace expansion fires instead
-            Assert.Contains("\r\n", editor.Text);
+            // Simple brace expansion (no arrow)
+            Assert.Equal("x = {\r\n  \r\n}", editor.Text);
         });
     }
 
