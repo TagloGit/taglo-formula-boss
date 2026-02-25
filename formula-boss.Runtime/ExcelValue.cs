@@ -25,8 +25,16 @@ public abstract class ExcelValue
     // Comparison operators
     public static bool operator ==(ExcelValue? a, ExcelValue? b)
     {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+
+        if (a is null || b is null)
+        {
+            return false;
+        }
+
         return Equals(a.RawValue, b.RawValue);
     }
 

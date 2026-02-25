@@ -1,9 +1,9 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 public class ExcelArray : ExcelValue, IExcelRange
 {
-    private readonly object?[,] _data;
     private readonly Dictionary<string, int>? _columnMap;
+    private readonly object?[,] _data;
     private readonly RangeOrigin? _origin;
 
     public ExcelArray(object?[,] data, Dictionary<string, int>? columnMap = null,
@@ -14,7 +14,7 @@ public class ExcelArray : ExcelValue, IExcelRange
         _origin = origin;
     }
 
-    public override object? RawValue => _data;
+    public override object RawValue => _data;
 
     public int RowCount => _data.GetLength(0);
     public int ColCount => _data.GetLength(1);
@@ -29,7 +29,10 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var values = new object?[cols];
                 for (var c = 0; c < cols; c++)
+                {
                     values[c] = _data[r, c];
+                }
+
                 var rowIdx = r;
                 Func<int, Cell>? cellResolver = _origin != null && RuntimeBridge.GetCell != null
                     ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
@@ -45,15 +48,19 @@ public class ExcelArray : ExcelValue, IExcelRange
         get
         {
             if (_origin == null || RuntimeBridge.GetCell == null)
+            {
                 throw new InvalidOperationException(
                     "Cell access requires a macro-type UDF with range position context.");
+            }
 
             var rows = _data.GetLength(0);
             var cols = _data.GetLength(1);
             for (var r = 0; r < rows; r++)
                 for (var c = 0; c < cols; c++)
+                {
                     yield return RuntimeBridge.GetCell(_origin.SheetName,
                         _origin.TopRow + r, _origin.LeftCol + c);
+                }
         }
     }
 
@@ -65,7 +72,10 @@ public class ExcelArray : ExcelValue, IExcelRange
         var results = Rows.Select(selector).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
@@ -74,7 +84,10 @@ public class ExcelArray : ExcelValue, IExcelRange
         var results = Rows.SelectMany(selector).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
@@ -126,7 +139,9 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var cols = Math.Min(arr.GetLength(1), ColCount);
                 for (var c = 0; c < cols; c++)
+                {
                     result[r, c] = arr[0, c];
+                }
             }
             else
             {
@@ -165,7 +180,9 @@ public class ExcelArray : ExcelValue, IExcelRange
         {
             var key = string.Join("|", Enumerable.Range(0, row.ColumnCount).Select(i => row[i].Value));
             if (seen.Add(key))
+            {
                 distinctRows.Add(row);
+            }
         }
 
         return FromRows(distinctRows);
@@ -186,7 +203,10 @@ public class ExcelArray : ExcelValue, IExcelRange
 
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
@@ -194,8 +214,13 @@ public class ExcelArray : ExcelValue, IExcelRange
     {
         var result = seed;
         foreach (var row in Rows)
+        {
             for (var c = 0; c < row.ColumnCount; c++)
+            {
                 result = func(result, Convert.ToDouble(row[c].Value));
+            }
+        }
+
         return result;
     }
 
@@ -203,24 +228,34 @@ public class ExcelArray : ExcelValue, IExcelRange
     {
         var list = rows.ToList();
         if (list.Count == 0)
+        {
             return new ExcelArray(new object?[0, ColCount], _columnMap);
+        }
 
         var cols = list[0].ColumnCount;
         var result = new object?[list.Count, cols];
         for (var r = 0; r < list.Count; r++)
             for (var c = 0; c < cols; c++)
+            {
                 result[r, c] = list[r][c].Value;
+            }
+
         return new ExcelArray(result, _columnMap);
     }
 
     private static ExcelValue RowToValue(Row row)
     {
         if (row.ColumnCount == 1)
+        {
             return new ExcelScalar(row[0].Value);
+        }
 
         var arr = new object?[1, row.ColumnCount];
         for (var c = 0; c < row.ColumnCount; c++)
+        {
             arr[0, c] = row[c].Value;
+        }
+
         return new ExcelArray(arr);
     }
 }

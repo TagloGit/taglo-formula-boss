@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -7,17 +7,15 @@ public class ExcelTableTests
     private static ExcelTable MakeTable() => new(
         new object?[,]
         {
-            { "Alice", 30.0, "Engineering" },
-            { "Bob", 25.0, "Marketing" },
-            { "Charlie", 35.0, "Engineering" }
+            { "Alice", 30.0, "Engineering" }, { "Bob", 25.0, "Marketing" }, { "Charlie", 35.0, "Engineering" }
         },
-        new[] { "Name", "Age", "Department" });
+        ["Name", "Age", "Department"]);
 
     [Fact]
     public void Headers_ReturnsColumnNames()
     {
         var table = MakeTable();
-        Assert.Equal(new[] { "Name", "Age", "Department" }, table.Headers);
+        Assert.Equal(["Name", "Age", "Department"], table.Headers);
     }
 
     [Fact]
@@ -25,7 +23,7 @@ public class ExcelTableTests
     {
         var table = MakeTable();
         var rows = table.Rows.ToList();
-        Assert.Equal("Alice", (string?)rows[0]["Name"]);
+        Assert.Equal("Alice", rows[0]["Name"]);
         Assert.Equal(30.0, (double)rows[0]["Age"]);
     }
 
@@ -34,7 +32,7 @@ public class ExcelTableTests
     {
         var table = MakeTable();
         dynamic row = table.Rows.First();
-        Assert.Equal("Alice", (string?)(ColumnValue)row.Name);
+        Assert.Equal("Alice", (ColumnValue)row.Name);
     }
 
     [Fact]
@@ -58,8 +56,8 @@ public class ExcelTableTests
     {
         var table = MakeTable();
         var row = table.Rows.First();
-        Assert.Equal("Alice", (string?)row["name"]);
-        Assert.Equal("Alice", (string?)row["NAME"]);
+        Assert.Equal("Alice", row["name"]);
+        Assert.Equal("Alice", row["NAME"]);
     }
 
     [Fact]
