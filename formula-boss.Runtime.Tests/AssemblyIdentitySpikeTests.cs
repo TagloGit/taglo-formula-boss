@@ -40,7 +40,7 @@ public class AssemblyIdentitySpikeTests
             var wrapMethod = excelValueType.GetMethod("Wrap",
                 BindingFlags.Public | BindingFlags.Static,
                 null,
-                new[] { typeof(object), typeof(string[]), loadedAssembly.GetType("FormulaBoss.Runtime.RangeOrigin") },
+                new[] { typeof(object), typeof(string[]), loadedAssembly.GetType("FormulaBoss.Runtime.RangeOrigin")! },
                 null);
             Assert.NotNull(wrapMethod);
 
