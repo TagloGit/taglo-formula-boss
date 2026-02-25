@@ -1,17 +1,42 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 public class ExcelScalar : ExcelValue, IExcelRange
 {
+    private readonly RangeOrigin? _origin;
     private readonly object? _value;
 
-    public ExcelScalar(object? value)
+    public ExcelScalar(object? value, RangeOrigin? origin = null)
     {
         _value = value;
+        _origin = origin;
     }
 
     public override object? RawValue => _value;
 
-    private Row SingleRow => new(new[] { _value }, null);
+    private Row SingleRow
+    {
+        get
+        {
+            Func<int, Cell>? cellResolver = _origin != null && RuntimeBridge.GetCell != null
+                ? _ => RuntimeBridge.GetCell(_origin.SheetName, _origin.TopRow, _origin.LeftCol)
+                : null;
+            return new Row(new[] { _value }, null, cellResolver);
+        }
+    }
+
+    public IEnumerable<Cell> Cells
+    {
+        get
+        {
+            if (_origin == null || RuntimeBridge.GetCell == null)
+            {
+                throw new InvalidOperationException(
+                    "Cell access requires a macro-type UDF with range position context.");
+            }
+
+            yield return RuntimeBridge.GetCell(_origin.SheetName, _origin.TopRow, _origin.LeftCol);
+        }
+    }
 
     public IEnumerable<Row> Rows
     {
@@ -32,12 +57,16 @@ public class ExcelScalar : ExcelValue, IExcelRange
         var results = selector(SingleRow).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
     public bool Any(Func<Row, bool> predicate) => predicate(SingleRow);
     public bool All(Func<Row, bool> predicate) => predicate(SingleRow);
+
     public ExcelValue First(Func<Row, bool> predicate) =>
         predicate(SingleRow) ? this : throw new InvalidOperationException("No matching element.");
 

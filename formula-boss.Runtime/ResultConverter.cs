@@ -1,4 +1,4 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 public static class ResultConverter
 {
@@ -14,17 +14,24 @@ public static class ResultConverter
     public static object?[,] ToResult(this IExcelRange range)
     {
         if (range is ExcelValue ev)
+        {
             return ev.ToResult();
+        }
 
         var rows = range.Rows.ToList();
         if (rows.Count == 0)
+        {
             return new object?[0, 0];
+        }
 
         var cols = rows[0].ColumnCount;
         var result = new object?[rows.Count, cols];
         for (var r = 0; r < rows.Count; r++)
             for (var c = 0; c < cols; c++)
+            {
                 result[r, c] = rows[r][c].Value;
+            }
+
         return result;
     }
 

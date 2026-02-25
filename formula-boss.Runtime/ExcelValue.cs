@@ -4,15 +4,16 @@ public abstract class ExcelValue
 {
     public abstract object? RawValue { get; }
 
-    public static ExcelValue Wrap(object? value, string[]? headers = null)
+    public static ExcelValue Wrap(object? value, string[]? headers = null,
+        RangeOrigin? origin = null)
     {
         return value switch
         {
             object[,] array => headers != null
-                ? new ExcelTable(array, headers)
-                : new ExcelArray(array),
+                ? new ExcelTable(array, headers, origin)
+                : new ExcelArray(array, origin: origin),
             ExcelValue ev => ev,
-            _ => new ExcelScalar(value)
+            _ => new ExcelScalar(value, origin)
         };
     }
 
@@ -24,8 +25,16 @@ public abstract class ExcelValue
     // Comparison operators
     public static bool operator ==(ExcelValue? a, ExcelValue? b)
     {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+
+        if (a is null || b is null)
+        {
+            return false;
+        }
+
         return Equals(a.RawValue, b.RawValue);
     }
 

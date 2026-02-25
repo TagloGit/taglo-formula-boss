@@ -1,17 +1,20 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 public class ExcelArray : ExcelValue, IExcelRange
 {
-    private readonly object?[,] _data;
     private readonly Dictionary<string, int>? _columnMap;
+    private readonly object?[,] _data;
+    private readonly RangeOrigin? _origin;
 
-    public ExcelArray(object?[,] data, Dictionary<string, int>? columnMap = null)
+    public ExcelArray(object?[,] data, Dictionary<string, int>? columnMap = null,
+        RangeOrigin? origin = null)
     {
         _data = data;
         _columnMap = columnMap;
+        _origin = origin;
     }
 
-    public override object? RawValue => _data;
+    public override object RawValue => _data;
 
     public int RowCount => _data.GetLength(0);
     public int ColCount => _data.GetLength(1);
@@ -26,30 +29,67 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var values = new object?[cols];
                 for (var c = 0; c < cols; c++)
+                {
                     values[c] = _data[r, c];
-                yield return new Row(values, _columnMap);
+                }
+
+                var rowIdx = r;
+                Func<int, Cell>? cellResolver = _origin != null && RuntimeBridge.GetCell != null
+                    ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
+                        _origin.TopRow + rowIdx, _origin.LeftCol + colIdx)
+                    : null;
+                yield return new Row(values, _columnMap, cellResolver);
             }
+        }
+    }
+
+    public IEnumerable<Cell> Cells
+    {
+        get
+        {
+            if (_origin == null || RuntimeBridge.GetCell == null)
+            {
+                throw new InvalidOperationException(
+                    "Cell access requires a macro-type UDF with range position context.");
+            }
+
+            var rows = _data.GetLength(0);
+            var cols = _data.GetLength(1);
+            for (var r = 0; r < rows; r++)
+                for (var c = 0; c < cols; c++)
+                {
+                    yield return RuntimeBridge.GetCell(_origin.SheetName,
+                        _origin.TopRow + r, _origin.LeftCol + c);
+                }
         }
     }
 
     public IExcelRange Where(Func<Row, bool> predicate) =>
         FromRows(Rows.Where(predicate));
 
+    // Origin is not propagated — projected values don't map to original cell positions.
     public IExcelRange Select(Func<Row, ExcelValue> selector)
     {
         var results = Rows.Select(selector).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
+    // Origin is not propagated — projected values don't map to original cell positions.
     public IExcelRange SelectMany(Func<Row, IEnumerable<ExcelValue>> selector)
     {
         var results = Rows.SelectMany(selector).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
@@ -101,7 +141,9 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var cols = Math.Min(arr.GetLength(1), ColCount);
                 for (var c = 0; c < cols; c++)
+                {
                     result[r, c] = arr[0, c];
+                }
             }
             else
             {
@@ -140,7 +182,9 @@ public class ExcelArray : ExcelValue, IExcelRange
         {
             var key = string.Join("|", Enumerable.Range(0, row.ColumnCount).Select(i => row[i].Value));
             if (seen.Add(key))
+            {
                 distinctRows.Add(row);
+            }
         }
 
         return FromRows(distinctRows);
@@ -149,6 +193,7 @@ public class ExcelArray : ExcelValue, IExcelRange
     public ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func) =>
         Rows.Aggregate(seed, (acc, row) => func(acc, row));
 
+    // Origin is not propagated — accumulated values don't map to original cell positions.
     public IExcelRange Scan(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func)
     {
         var results = new List<ExcelValue>();
@@ -161,7 +206,10 @@ public class ExcelArray : ExcelValue, IExcelRange
 
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
@@ -169,33 +217,50 @@ public class ExcelArray : ExcelValue, IExcelRange
     {
         var result = seed;
         foreach (var row in Rows)
+        {
             for (var c = 0; c < row.ColumnCount; c++)
+            {
                 result = func(result, Convert.ToDouble(row[c].Value));
+            }
+        }
+
         return result;
     }
 
+    // Origin is intentionally not propagated — after filtering/sorting, row positions no longer
+    // correspond to original worksheet cells, so cell escalation (.Cell, .Cells) is unavailable.
     private ExcelArray FromRows(IEnumerable<Row> rows)
     {
         var list = rows.ToList();
         if (list.Count == 0)
+        {
             return new ExcelArray(new object?[0, ColCount], _columnMap);
+        }
 
         var cols = list[0].ColumnCount;
         var result = new object?[list.Count, cols];
         for (var r = 0; r < list.Count; r++)
             for (var c = 0; c < cols; c++)
+            {
                 result[r, c] = list[r][c].Value;
+            }
+
         return new ExcelArray(result, _columnMap);
     }
 
     private static ExcelValue RowToValue(Row row)
     {
         if (row.ColumnCount == 1)
+        {
             return new ExcelScalar(row[0].Value);
+        }
 
         var arr = new object?[1, row.ColumnCount];
         for (var c = 0; c < row.ColumnCount; c++)
+        {
             arr[0, c] = row[c].Value;
+        }
+
         return new ExcelArray(arr);
     }
 }

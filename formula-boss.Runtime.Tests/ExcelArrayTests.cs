@@ -1,15 +1,11 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
 public class ExcelArrayTests
 {
-    private static ExcelArray MakeArray() => new(new object?[,]
-    {
-        { 1.0, "Alice" },
-        { 2.0, "Bob" },
-        { 3.0, "Charlie" }
-    });
+    private static ExcelArray MakeArray() =>
+        new(new object?[,] { { 1.0, "Alice" }, { 2.0, "Bob" }, { 3.0, "Charlie" } });
 
     [Fact]
     public void Rows_IteratesAllRows()
@@ -18,14 +14,11 @@ public class ExcelArrayTests
         var rows = arr.Rows.ToList();
         Assert.Equal(3, rows.Count);
         Assert.Equal(1.0, (double)rows[0][0]);
-        Assert.Equal("Charlie", (string?)rows[2][1]);
+        Assert.Equal("Charlie", rows[2][1]);
     }
 
     [Fact]
-    public void Count_ReturnsRowCount()
-    {
-        Assert.Equal(3, MakeArray().Count());
-    }
+    public void Count_ReturnsRowCount() => Assert.Equal(3, MakeArray().Count());
 
     [Fact]
     public void Where_FiltersRows()
@@ -67,7 +60,7 @@ public class ExcelArrayTests
         var resultArray = (ExcelArray)result;
         var row = resultArray.Rows.First();
         Assert.Equal(2.0, (double)row[0]);
-        Assert.Equal("Bob", (string?)row[1]);
+        Assert.Equal("Bob", row[1]);
     }
 
     [Fact]
@@ -98,10 +91,7 @@ public class ExcelArrayTests
     [Fact]
     public void OrderBy_SortsRows()
     {
-        var arr = new ExcelArray(new object?[,]
-        {
-            { 3.0 }, { 1.0 }, { 2.0 }
-        });
+        var arr = new ExcelArray(new object?[,] { { 3.0 }, { 1.0 }, { 2.0 } });
         var result = arr.OrderBy(r => (double)r[0]);
         var rows = result.Rows.ToList();
         Assert.Equal(1.0, (double)rows[0][0]);
@@ -112,10 +102,7 @@ public class ExcelArrayTests
     [Fact]
     public void OrderByDescending_SortsRowsDescending()
     {
-        var arr = new ExcelArray(new object?[,]
-        {
-            { 1.0 }, { 3.0 }, { 2.0 }
-        });
+        var arr = new ExcelArray(new object?[,] { { 1.0 }, { 3.0 }, { 2.0 } });
         var result = arr.OrderByDescending(r => (double)r[0]);
         var rows = result.Rows.ToList();
         Assert.Equal(3.0, (double)rows[0][0]);
@@ -156,12 +143,7 @@ public class ExcelArrayTests
     [Fact]
     public void Distinct_RemovesDuplicateRows()
     {
-        var arr = new ExcelArray(new object?[,]
-        {
-            { 1.0, "a" },
-            { 2.0, "b" },
-            { 1.0, "a" }
-        });
+        var arr = new ExcelArray(new object?[,] { { 1.0, "a" }, { 2.0, "b" }, { 1.0, "a" } });
         var result = arr.Distinct();
         Assert.Equal(2, result.Count());
     }

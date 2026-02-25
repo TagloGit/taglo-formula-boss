@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -54,10 +54,10 @@ public class ColumnValueTests
         var a = new ColumnValue(10.0);
         var b = new ColumnValue(3.0);
 
-        ColumnValue sum = a + b;
-        ColumnValue diff = a - b;
-        ColumnValue prod = a * b;
-        ColumnValue quot = a / b;
+        var sum = a + b;
+        var diff = a - b;
+        var prod = a * b;
+        var quot = a / b;
 
         Assert.Equal(13.0, (double)sum);
         Assert.Equal(7.0, (double)diff);
@@ -91,8 +91,8 @@ public class ColumnValueTests
     public void Equality_WorksWithRawObjects()
     {
         var cv = new ColumnValue("hello");
-        Assert.True(cv == (object)"hello");
-        Assert.False(cv == (object)"world");
+        Assert.True(cv == "hello");
+        Assert.False(cv == "world");
     }
 
     [Fact]

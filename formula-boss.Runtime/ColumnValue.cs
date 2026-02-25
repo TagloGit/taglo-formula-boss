@@ -4,6 +4,20 @@ public class ColumnValue
 {
     public object? Value { get; }
 
+    /// <summary>
+    ///     Lazy cell accessor, set by <see cref="Row" /> when positional context is available.
+    ///     Invokes <see cref="RuntimeBridge.GetCell" /> to escalate to COM.
+    /// </summary>
+    internal Func<Cell>? CellAccessor { get; init; }
+
+    /// <summary>
+    ///     Escalates to a <see cref="Cell" /> object, providing access to formatting properties.
+    ///     Requires a macro-type UDF (the transpiler detects .Cell usage and sets IsMacroType).
+    /// </summary>
+    public Cell Cell => CellAccessor?.Invoke()
+                        ?? throw new InvalidOperationException(
+                            "Cell access requires a macro-type UDF with range position context.");
+
     public ColumnValue(object? value)
     {
         Value = value;
