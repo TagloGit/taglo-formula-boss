@@ -67,6 +67,7 @@ public class ExcelArray : ExcelValue, IExcelRange
     public IExcelRange Where(Func<Row, bool> predicate) =>
         FromRows(Rows.Where(predicate));
 
+    // Origin is not propagated — projected values don't map to original cell positions.
     public IExcelRange Select(Func<Row, ExcelValue> selector)
     {
         var results = Rows.Select(selector).ToList();
@@ -79,6 +80,7 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
+    // Origin is not propagated — projected values don't map to original cell positions.
     public IExcelRange SelectMany(Func<Row, IEnumerable<ExcelValue>> selector)
     {
         var results = Rows.SelectMany(selector).ToList();
@@ -191,6 +193,7 @@ public class ExcelArray : ExcelValue, IExcelRange
     public ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func) =>
         Rows.Aggregate(seed, (acc, row) => func(acc, row));
 
+    // Origin is not propagated — accumulated values don't map to original cell positions.
     public IExcelRange Scan(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func)
     {
         var results = new List<ExcelValue>();
@@ -224,6 +227,8 @@ public class ExcelArray : ExcelValue, IExcelRange
         return result;
     }
 
+    // Origin is intentionally not propagated — after filtering/sorting, row positions no longer
+    // correspond to original worksheet cells, so cell escalation (.Cell, .Cells) is unavailable.
     private ExcelArray FromRows(IEnumerable<Row> rows)
     {
         var list = rows.ToList();

@@ -7,6 +7,10 @@ public interface IExcelRange
     /// <summary>
     ///     Iterates all cells in the range as <see cref="Cell" /> objects.
     ///     Forces IsMacroType — requires positional context and <see cref="RuntimeBridge.GetCell" />.
+    ///     Only available on ranges with a <see cref="RangeOrigin" /> — transformation operators
+    ///     (Where, Select, OrderBy, etc.) drop origin because row positions no longer map to
+    ///     original worksheet cells. Calling this on a transformed range throws
+    ///     <see cref="InvalidOperationException" />.
     /// </summary>
     IEnumerable<Cell> Cells { get; }
 
