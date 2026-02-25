@@ -4,11 +4,14 @@ public class ExcelArray : ExcelValue, IExcelRange
 {
     private readonly object?[,] _data;
     private readonly Dictionary<string, int>? _columnMap;
+    private readonly RangeOrigin? _origin;
 
-    public ExcelArray(object?[,] data, Dictionary<string, int>? columnMap = null)
+    public ExcelArray(object?[,] data, Dictionary<string, int>? columnMap = null,
+        RangeOrigin? origin = null)
     {
         _data = data;
         _columnMap = columnMap;
+        _origin = origin;
     }
 
     public override object? RawValue => _data;
@@ -27,8 +30,30 @@ public class ExcelArray : ExcelValue, IExcelRange
                 var values = new object?[cols];
                 for (var c = 0; c < cols; c++)
                     values[c] = _data[r, c];
-                yield return new Row(values, _columnMap);
+                var rowIdx = r;
+                Func<int, Cell>? cellResolver = _origin != null && RuntimeBridge.GetCell != null
+                    ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
+                        _origin.TopRow + rowIdx, _origin.LeftCol + colIdx)
+                    : null;
+                yield return new Row(values, _columnMap, cellResolver);
             }
+        }
+    }
+
+    public IEnumerable<Cell> Cells
+    {
+        get
+        {
+            if (_origin == null || RuntimeBridge.GetCell == null)
+                throw new InvalidOperationException(
+                    "Cell access requires a macro-type UDF with range position context.");
+
+            var rows = _data.GetLength(0);
+            var cols = _data.GetLength(1);
+            for (var r = 0; r < rows; r++)
+                for (var c = 0; c < cols; c++)
+                    yield return RuntimeBridge.GetCell(_origin.SheetName,
+                        _origin.TopRow + r, _origin.LeftCol + c);
         }
     }
 

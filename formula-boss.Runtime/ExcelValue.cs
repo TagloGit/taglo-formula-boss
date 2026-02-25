@@ -4,15 +4,16 @@ public abstract class ExcelValue
 {
     public abstract object? RawValue { get; }
 
-    public static ExcelValue Wrap(object? value, string[]? headers = null)
+    public static ExcelValue Wrap(object? value, string[]? headers = null,
+        RangeOrigin? origin = null)
     {
         return value switch
         {
             object[,] array => headers != null
-                ? new ExcelTable(array, headers)
-                : new ExcelArray(array),
+                ? new ExcelTable(array, headers, origin)
+                : new ExcelArray(array, origin: origin),
             ExcelValue ev => ev,
-            _ => new ExcelScalar(value)
+            _ => new ExcelScalar(value, origin)
         };
     }
 

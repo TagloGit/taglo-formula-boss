@@ -4,8 +4,8 @@ public class ExcelTable : ExcelArray
 {
     public string[] Headers { get; }
 
-    public ExcelTable(object?[,] data, string[] headers)
-        : base(data, BuildColumnMap(headers))
+    public ExcelTable(object?[,] data, string[] headers, RangeOrigin? origin = null)
+        : base(data, BuildColumnMap(headers), origin)
     {
         Headers = headers;
     }

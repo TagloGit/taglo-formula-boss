@@ -7,10 +7,17 @@ public class Row : DynamicObject
     private readonly object?[] _values;
     private readonly Dictionary<string, int>? _columnMap;
 
-    public Row(object?[] values, Dictionary<string, int>? columnMap)
+    /// <summary>
+    ///     Optional cell resolver: (columnIndex) → Cell.
+    ///     Set when the row originates from a range with positional context.
+    /// </summary>
+    internal Func<int, Cell>? CellResolver { get; }
+
+    public Row(object?[] values, Dictionary<string, int>? columnMap, Func<int, Cell>? cellResolver = null)
     {
         _values = values;
         _columnMap = columnMap;
+        CellResolver = cellResolver;
     }
 
     public ColumnValue this[string columnName]
@@ -19,7 +26,7 @@ public class Row : DynamicObject
         {
             if (_columnMap == null || !_columnMap.TryGetValue(columnName, out var index))
                 throw new KeyNotFoundException($"Column '{columnName}' not found.");
-            return new ColumnValue(_values[index]);
+            return MakeColumnValue(index);
         }
     }
 
@@ -28,7 +35,7 @@ public class Row : DynamicObject
         get
         {
             var i = index < 0 ? _values.Length + index : index;
-            return new ColumnValue(_values[i]);
+            return MakeColumnValue(i);
         }
     }
 
@@ -38,7 +45,7 @@ public class Row : DynamicObject
     {
         if (_columnMap != null && _columnMap.TryGetValue(binder.Name, out var index))
         {
-            result = new ColumnValue(_values[index]);
+            result = MakeColumnValue(index);
             return true;
         }
 
@@ -48,4 +55,13 @@ public class Row : DynamicObject
 
     public override IEnumerable<string> GetDynamicMemberNames() =>
         _columnMap?.Keys ?? Enumerable.Empty<string>();
+
+    private ColumnValue MakeColumnValue(int colIndex)
+    {
+        var resolver = CellResolver;
+        return new ColumnValue(_values[colIndex])
+        {
+            CellAccessor = resolver != null ? () => resolver(colIndex) : null
+        };
+    }
 }

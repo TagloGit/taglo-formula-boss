@@ -40,12 +40,12 @@ public class AssemblyIdentitySpikeTests
             var wrapMethod = excelValueType.GetMethod("Wrap",
                 BindingFlags.Public | BindingFlags.Static,
                 null,
-                new[] { typeof(object), typeof(string[]) },
+                new[] { typeof(object), typeof(string[]), loadedAssembly.GetType("FormulaBoss.Runtime.RangeOrigin") },
                 null);
             Assert.NotNull(wrapMethod);
 
             // Invoke Wrap() from the loaded assembly with a value
-            var result = wrapMethod.Invoke(null, new object?[] { 42.0, null });
+            var result = wrapMethod.Invoke(null, new object?[] { 42.0, null, null });
             Assert.NotNull(result);
 
             // Check if the result type name matches what we expect
@@ -95,7 +95,7 @@ public class AssemblyIdentitySpikeTests
 
         // Simulate generated code creating types via reflection
         var scalarType = runtimeAssembly.GetType("FormulaBoss.Runtime.ExcelScalar")!;
-        var scalar = Activator.CreateInstance(scalarType, 42.0)!;
+        var scalar = Activator.CreateInstance(scalarType, new object?[] { 42.0, null })!;
 
         // Access RawValue via reflection
         var rawValueProp = scalarType.GetProperty("RawValue")!;
@@ -105,7 +105,7 @@ public class AssemblyIdentitySpikeTests
         // Use Wrap factory
         var excelValueType = runtimeAssembly.GetType("FormulaBoss.Runtime.ExcelValue")!;
         var wrapMethod = excelValueType.GetMethod("Wrap")!;
-        var wrapped = wrapMethod.Invoke(null, new object?[] { "hello", null })!;
+        var wrapped = wrapMethod.Invoke(null, new object?[] { "hello", null, null })!;
         Assert.Equal("ExcelScalar", wrapped.GetType().Name);
     }
 }

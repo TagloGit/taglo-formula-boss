@@ -4,6 +4,12 @@ public interface IExcelRange
 {
     IEnumerable<Row> Rows { get; }
 
+    /// <summary>
+    ///     Iterates all cells in the range as <see cref="Cell" /> objects.
+    ///     Forces IsMacroType — requires positional context and <see cref="RuntimeBridge.GetCell" />.
+    /// </summary>
+    IEnumerable<Cell> Cells { get; }
+
     // Element-wise operations
     IExcelRange Where(Func<Row, bool> predicate);
     IExcelRange Select(Func<Row, ExcelValue> selector);
