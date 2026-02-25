@@ -22,7 +22,7 @@ An Excel add-in that allows power users to write inline expressions using a conc
 **Scenario:** User needs to sum all yellow-highlighted cells in a range.
 
 1. User selects target cell for result
-2. User types: `'=SUM(`data.cells.where(c=>c.color==6).values`)`
+2. User types: `'=SUM(`data.Cells.Where(c=>c.Color==6).Select(c=>c.Value)`)`
 3. User presses Enter
 4. Formula briefly appears as text
 5. Add-in detects the pattern, parses the backtick expression
@@ -72,10 +72,10 @@ See [Floating Editor](#floating-editor) for detailed design.
 
 1. User types `'=LET(x, `data.cells.where(c=>c.colr==6).values`, SUM(x))`
 2. User presses Enter
-3. Add-in detects backtick expression, attempts to parse
-4. Parse/compile fails: `colr` is not a valid property
+3. Add-in detects backtick expression, attempts to compile
+4. Roslyn compile fails: `'Cell' does not contain a definition for 'Colr'`
 5. Cell displays: `#UDF_ERR`
-6. Cell comment shows: `Error: 'colr' is not a recognised cell property. Did you mean 'color'?`
+6. Cell comment shows: `Error: 'Cell' does not contain a definition for 'Colr'. Did you mean 'Color'?`
 7. User clicks cell, presses `Ctrl+Shift+`` ` to open floating editor
 8. Editor loads the failed formula (still quote-prefixed text in cell), shows `colr` underlined in red
 9. User corrects to `color` with help from autocomplete, presses Ctrl+Enter
@@ -87,7 +87,7 @@ See [Floating Editor](#floating-editor) for detailed design.
 
 **Scenario:** User needs to filter and transform values using LINQ-style operations, but doesn't need object model access.
 
-1. User types: `'=`nums.where(n=>n>0).select(n=>n*2).toArray()`
+1. User types: `'=`nums.Where(n=>n>0).Select(n=>n*2)`
 2. Add-in recognises this as value-only operation (no `.cells`, no `.color` etc.)
 3. Transpiles to fast path — no COM interop, pure array manipulation
 4. Executes with minimal overhead
@@ -200,29 +200,28 @@ See [Floating Editor](#floating-editor) for detailed design.
 
 **Minimum implementation of the fast path.**
 
-1. User types: `'=SUM(`A1:J10.where(c=>c.color==6).values`)`
+1. User types: `'=SUM(`A1:J10.Cells.Where(c=>c.Color==6).Select(c=>c.Value)`)`
 2. User presses Enter
 3. Worksheet change handler detects cell starting with `'=` containing backticks
 4. Extracts backtick expression
-5. Transpiles using simple template substitution
-6. Compiles with Roslyn
+5. Identifies inputs, wraps in typed facades, emits C# lambda
+6. Compiles with Roslyn (referencing pre-compiled wrapper types)
 7. Registers UDF with ExcelDNA
 8. Rewrites cell formula
 9. If error: cell shows `#UDF_ERR`, error message in adjacent comment or task pane
 
-**Supported DSL for MVP:**
+**Supported API for MVP:**
 
-- `range.cells` — iterate with object model access (required for color, formatting, etc.)
-- `range.values` — iterate values only (fast path) — **implicit if omitted**
-- `.where(c => condition)` — filter
-- `.select(c => expression)` — map
-- `.toArray()` — materialise to 2D output — **implicit for collection results**
-- Cell properties: `.value`, `.color`, `.row`, `.col`
+- `.Cells` — iterate with object model access (required for color, formatting, etc.)
+- `.Where(predicate)` — filter
+- `.Select(transform)` — map
+- Cell properties via `.Cell`: `.Value`, `.Color`, `.Row`, `.Col`
 - Basic operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `&&`, `||`, `+`, `-`, `*`, `/`
+- Implicit result conversion to `object[,]`
 
 **Simplified syntax examples:**
-- `data.where(v => v > 0)` — same as `data.values.where(v => v > 0).toArray()`
-- `data.cells.where(c => c.color == 6).select(c => c.value)` — cell filtering with implicit `.toArray()`
+- `data.Where(v => v > 0)` — element-wise value filtering with implicit result conversion
+- `data.Cells.Where(c => c.Color == 6).Select(c => c.Value)` — cell filtering
 
 **Not in MVP:**
 
@@ -245,83 +244,88 @@ See [Floating Editor](#floating-editor) for detailed design.
 
 ### MVP Journey 3: Range vs. Values Automatic Detection
 
-1. If expression uses `.cells` or object model properties (`.color`, `.bold`, etc.), use range reference path
-2. If expression uses only `.values` and value operations, use fast value array path
-3. User doesn't need to think about this — add-in infers from expression content
+1. If expression uses `.Cells` or `.Cell` property access, transpiler sets `IsMacroType = true` (COM path)
+2. If expression uses only value operations, fast value array path is used
+3. User doesn't need to think about this — static analysis detects `.Cell`/`.Cells` usage before compilation
 
 ---
 
 ## Non-UI Capabilities
 
-### DSL Feature Set
+### Expression Model and Type System
 
-**Cell/Range Access:**
+> **Architecture change (spec 0003):** Formula Boss expressions are standard C# lambdas operating on pre-compiled wrapper types. There is no separate DSL — the API is provided by typed facades (`ExcelTable`, `ExcelArray`, `ExcelScalar`) with C# LINQ naming conventions. See spec 0003 for the full wrapper-type architecture design.
 
-| Syntax | Meaning | Output Shape |
-|--------|---------|--------------|
-| `range.cells` | Iterate cells with object model access | 1D (flattened) |
-| `range.values` | Iterate values only (fast path) | 1D (flattened) |
-| `range.rows` | Iterate as Row objects with column access | 2D (row count changes, columns preserved) |
-| `range.cols` | Iterate columns as arrays | 2D (column count changes, rows preserved) |
+**Range/Table Access (properties on wrapper types):**
+
+| Accessor | Meaning | Output Shape |
+|----------|---------|--------------|
+| `.Cells` | Iterate cells with object model access (COM, forces IsMacroType) | 1D (flattened) |
+| `.Rows` | Iterate as Row objects with column access | 2D (row count changes, columns preserved) |
+| `.Cols` | Iterate columns as arrays | 2D (column count changes, rows preserved) |
+| (none) | Element-wise iteration on values (fast path) | 1D (flattened) |
 
 **Row-wise operations** enable filtering/sorting entire rows with column access:
-```
-data.rows.where(r => r[0] > 10)           // filter rows where first column > 10
-data.rows.orderBy(r => r[Price])          // sort rows by Price column
-data.rows.where(r => r.Region == "North") // filter by column name (no spaces)
-tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])  // aggregate across rows
+```csharp
+data.Rows.Where(r => r[0] > 10)            // filter rows where first column > 10
+data.Rows.OrderBy(r => r[Price])            // sort rows by Price column
+data.Rows.Where(r => r.Region == "North")   // filter by column name (no spaces)
+tbl.Rows.Aggregate(0, (acc, r) => acc + r[Price] * r[Qty])  // aggregate across rows
 ```
 
-**Cell Properties (object model required):**
+**Cell Properties (via `.Cell` escalation on ColumnValue, or via `.Cells` accessor):**
 
 | Property | Type | Notes |
 |----------|------|-------|
-| `.value` | variant | Cell value |
-| `.color` | int | Interior.ColorIndex |
-| `.rgb` | int | Interior.Color (RGB) |
-| `.bold` | bool | Font.Bold |
-| `.italic` | bool | Font.Italic |
-| `.fontSize` | int | Font.Size |
-| `.format` | string | NumberFormat |
-| `.formula` | string | Cell formula |
-| `.row` | int | Row number |
-| `.col` | int | Column number |
-| `.address` | string | Cell address |
+| `.Value` | object | Cell value |
+| `.Color` | int | Interior.ColorIndex |
+| `.Rgb` | int | Interior.Color (RGB) |
+| `.Bold` | bool | Font.Bold |
+| `.Italic` | bool | Font.Italic |
+| `.FontSize` | double | Font.Size |
+| `.Format` | string | NumberFormat |
+| `.Formula` | string | Cell formula |
+| `.Row` | int | Row number |
+| `.Col` | int | Column number |
+| `.Address` | string | Cell address |
+| `.Interior` | Interior | Full Interior sub-object |
+| `.Font` | Font | Full Font sub-object |
 
-**LINQ-Style Operations:**
+**Operations (C# LINQ naming):**
 
 | Method | Description |
 |--------|-------------|
-| `.where(predicate)` | Filter elements |
-| `.select(transform)` | Map/transform elements (flattens to 1D) |
-| `.map(transform)` | Transform elements preserving 2D shape |
-| `.orderBy(keySelector)` | Sort ascending |
-| `.orderByDesc(keySelector)` | Sort descending |
-| `.take(n)` | First n elements (negative n takes last n) |
-| `.skip(n)` | Skip first n elements (negative n skips last n) |
-| `.distinct()` | Remove duplicates |
-| `.groupBy(keySelector)` | Group elements |
-| `.reduce(seed, func)` | Reduce/fold to single value |
-| `.scan(seed, func)` | Running reduction, returns array of intermediate states |
-| `.toArray()` | Output as 2D array |
-| `.sum()`, `.avg()`, `.min()`, `.max()`, `.count()` | Aggregations |
-| `.find(predicate)` | First element matching predicate (or null) |
-| `.some(predicate)` | True if any element matches |
-| `.every(predicate)` | True if all elements match |
+| `.Where(predicate)` | Filter elements |
+| `.Select(transform)` | Map/transform elements, row-major iteration, flattens to 1D |
+| `.SelectMany(transform)` | Flatten nested collections (standard LINQ) |
+| `.Map(transform)` | Transform elements preserving 2D shape |
+| `.OrderBy(keySelector)` | Sort ascending |
+| `.OrderByDescending(keySelector)` | Sort descending |
+| `.Take(n)` | First n elements (negative n takes last n) |
+| `.Skip(n)` | Skip first n elements (negative n skips last n) |
+| `.Distinct()` | Remove duplicates |
+| `.GroupBy(keySelector)` | Group elements |
+| `.Aggregate(seed, func)` | Reduce/fold to single value |
+| `.Scan(seed, func)` | Running reduction, returns array of intermediate states |
+| `.Sum()`, `.Average()`, `.Min()`, `.Max()`, `.Count()` | Aggregations |
+| `.First(predicate)` | First element matching predicate (throws if none) |
+| `.FirstOrDefault(predicate)` | First element matching predicate (or null) |
+| `.Any(predicate)` | True if any element matches |
+| `.All(predicate)` | True if all elements match |
 
-**`.map` vs `.select`:** Use `.map` when you want to transform each cell while keeping the original 2D shape:
-```
-data.select(v => v * 2)                           // returns 1D array of doubled values
-data.map(v => v * 2)                              // returns 2D array same shape as input
-data.map(c => c.color == 6 ? c.value * 2 : c.value)  // double yellow cells, preserve shape
+**`.Map()` vs `.Select()`:** Use `.Map()` when you want to transform each cell while keeping the original 2D shape:
+```csharp
+data.Select(v => v * 2)                                    // returns 1D array of doubled values
+data.Map(v => v * 2)                                       // returns 2D array same shape as input
+data.Cells.Map(c => c.Color == 6 ? c.Value * 2 : c.Value)  // double yellow cells, preserve shape
 ```
 
-**Implicit Syntax (convenience features):**
+**Implicit Behaviours:**
 
 | Feature | Meaning | Example |
 |---------|---------|---------|
-| Implicit `.values` | Methods called directly on range default to values path | `data.where(v => v > 0)` equals `data.values.where(v => v > 0)` |
-| Implicit `.toArray()` | Collection results auto-convert to 2D arrays for Excel | `data.where(v => v > 0)` returns array without explicit `.toArray()` |
+| Single-input sugar | Methods called directly on a name infer it as the input | `tbl.Rows.Where(r => r.X > 0)` equivalent to `(tbl) => tbl.Rows.Where(...)` |
+| Implicit result conversion | Collection results auto-convert to `object[,]` for Excel | `.Where(...)` returns array without explicit conversion |
 
 ---
 
@@ -339,14 +343,14 @@ Many competitive Excel challenges involve tabular data where you need row-by-row
 ```
 The indices are fragile, unreadable, and break if the table structure changes. Native Excel also cannot create reusable helper LAMBDAs that accept callback functions inside REDUCE.
 
-**The DSL Solution:**
-```
-tbl.reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+**The Formula Boss Solution:**
+```csharp
+tbl.Rows.Aggregate(0, (acc, r) => acc + r[Price] * r[Qty])
 ```
 
 #### Row Object and Column Access
 
-When iterating with `.rows`, `.reduce`, `.scan`, or related methods, the lambda parameter is a **Row object** with column access:
+When iterating with `.Rows`, the lambda parameter is a **Row object** (a pre-compiled wrapper type, see spec 0003) with column access:
 
 | Syntax | Mode | Description |
 |--------|------|-------------|
@@ -358,35 +362,37 @@ When iterating with `.rows`, `.reduce`, `.scan`, or related methods, the lambda 
 
 **Named column access** requires headers (see Table Detection below). **Index access** always works.
 
+Each column access returns a `ColumnValue` with implicit type conversion (so `r.Population > 1000` works) and a `.Cell` property for formatting access (see spec 0003).
+
 #### Row-Wise Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `.reduce(init, fn)` | `(T, (T, Row) => T) => T` | Aggregate rows to single value |
-| `.scan(init, fn)` | `(T, (T, Row) => T) => T[]` | Running aggregation, returns array |
-| `.where(fn)` | `(Row => bool) => Row[]` | Filter rows by predicate |
-| `.select(fn)` | `(Row => U) => U[]` | Transform each row to value |
-| `.map(fn)` | `(Row => Row) => Row[]` | Transform rows preserving structure |
-| `.find(fn)` | `(Row => bool) => Row?` | First row matching predicate |
-| `.some(fn)` | `(Row => bool) => bool` | Any row matches |
-| `.every(fn)` | `(Row => bool) => bool` | All rows match |
+| `.Aggregate(init, fn)` | `(T, (T, Row) => T) => T` | Aggregate rows to single value |
+| `.Scan(init, fn)` | `(T, (T, Row) => T) => T[]` | Running aggregation, returns array |
+| `.Where(fn)` | `(Row => bool) => Row[]` | Filter rows by predicate |
+| `.Select(fn)` | `(Row => U) => U[]` | Transform each row to value |
+| `.Map(fn)` | `(Row => Row) => Row[]` | Transform rows preserving structure |
+| `.FirstOrDefault(fn)` | `(Row => bool) => Row?` | First row matching predicate |
+| `.Any(fn)` | `(Row => bool) => bool` | Any row matches |
+| `.All(fn)` | `(Row => bool) => bool` | All rows match |
 
 **Examples:**
-```
+```csharp
 // Sum product of two columns
-tblSales.reduce(0, (acc, r) => acc + r[Price] * r[Qty])
+tblSales.Rows.Aggregate(0, (acc, r) => acc + r[Price] * r[Qty])
 
 // Filter rows where first column > 10
-data.rows.where(r => r[0] > 10)
+data.Rows.Where(r => r[0] > 10)
 
 // Running total that resets on category change
-tbl.scan({sum: 0, cat: ""}, (s, r) =>
-    LET(reset, r.Category != s.cat,
-        {sum: IF(reset, r.Amount, s.sum + r.Amount), cat: r.Category})
-).select(s => s.sum)
+tbl.Rows.Scan(new { Sum = 0.0, Cat = "" }, (s, r) =>
+    new { Sum = r.Category != s.Cat ? (double)r.Amount : s.Sum + (double)r.Amount,
+          Cat = (string)r.Category })
+.Select(s => s.Sum)
 
 // Sort rows by third column
-data.rows.orderBy(r => r[2])
+data.Rows.OrderBy(r => r[2])
 ```
 
 ---
@@ -512,73 +518,74 @@ The column names are passed as parameters, enabling dynamic lookup.
 
 ### Deep Property Access
 
-Beyond the shorthand cell properties (`.color`, `.bold`, etc.), users can access the full Excel object model via chained property access.
+> **Architecture change (spec 0003):** Cell properties are now accessed via pre-compiled wrapper types (`Cell`, `Interior`, `Font`). Validation happens at Roslyn compile time, not via a custom type system. The `@` escape hatch is no longer needed — users can access any COM property via `dynamic` on the underlying COM object if needed.
 
-**Type System:**
+Cell formatting is accessed via the `.Cell` property on `ColumnValue` (from row iteration) or via the `.Cells` accessor:
 
-The transpiler maintains a type system for Excel COM objects to provide parse-time validation:
+**Wrapper Types for COM Objects:**
 
 | Type | Properties |
 |------|------------|
-| `Cell` | `Interior`, `Font`, `Value`, `Formula`, `Row`, `Column`, `Address`, etc. |
+| `Cell` | `Interior`, `Font`, `Value`, `Formula`, `Row`, `Col`, `Address`, `Color`, `Bold`, etc. |
 | `Interior` | `ColorIndex`, `Color`, `Pattern`, `PatternColor`, `PatternColorIndex`, etc. |
 | `Font` | `Bold`, `Italic`, `Size`, `Color`, `Name`, `Underline`, etc. |
 
 **Examples:**
-```
-c.Interior.ColorIndex        // validated: Cell → Interior → ColorIndex
-c.Interior.Pattern           // validated: Cell → Interior → Pattern
-c.Font.Color                 // validated: Cell → Font → Color
-```
-
-**Escape Hatch:**
-
-For properties not in the type system, prefix with `@` to bypass validation:
-```
-c.@SomeObscureProperty       // passes through verbatim, validated at runtime
-c.Interior.@NewExcelProperty // partial validation, then pass-through
+```csharp
+r.Price.Cell.Interior.ColorIndex   // via ColumnValue → Cell → Interior
+r.Price.Cell.Font.Bold             // via ColumnValue → Cell → Font
+c.Color                            // shorthand on Cell (via .Cells accessor)
 ```
 
 **Error Messages:**
 
-Invalid properties produce helpful parse-time errors:
-```
-c.Interior.Patern
-// Error: Unknown property 'Patern' on Interior. Did you mean 'Pattern'?
-```
+Invalid properties produce Roslyn compile errors with precise locations. Intellisense helps prevent these by showing available properties on each type.
 
 ---
 
-### Statement Lambdas
+### Statement Blocks
 
-For complex logic that can't be expressed as a single expression, statement lambdas allow full C# code blocks.
+> **Architecture change (spec 0003):** With wrapper types, both expression and statement lambdas operate on the same typed API. There is no longer a distinction between "DSL methods" and "C# methods" — the same `.Where()`, `.Any()`, `.Cell` etc. work everywhere. Statement blocks are simply multi-line C# when a single expression isn't enough.
+
+For complex logic that can't be expressed as a single expression, statement blocks allow full C# code:
 
 **Syntax:**
-```
-data.cells.where(c => {
-    var color = (int)(c.Interior.ColorIndex ?? 0);
+```csharp
+data.Cells.Where(c => {
+    var color = c.Color;
     var isYellow = color == 6;
     var isOrange = color == 44;
     return isYellow || isOrange;
 })
 ```
 
+**Multi-input with statement block:**
+```csharp
+`(tblCountries, maxPop, pConts) => {
+    return tblCountries.Rows.Where(r =>
+        r.Population < maxPop
+        && pConts.Any(c => c == r.Continent));
+}`
+```
+
 **Behaviour:**
 
 - Lexer detects `{` after `=>` and captures the entire block (brace-balanced)
-- Block content is emitted as literal C# code
-- Lambda parameter (`c`) references work normally
-- Type system validation does **not** apply inside statement blocks — Roslyn validates at compile time, COM validates at runtime
+- Block content is standard C# operating on wrapper types
+- All wrapper type methods and properties are available (same as in expression lambdas)
+- Standard C# methods also available (string methods, LINQ, regex, etc.)
+- Roslyn validates at compile time
 
 **Available Namespaces:**
 
-Statement lambdas have access to these namespaces by default:
+All expressions (both single-expression and statement blocks) have access to:
 ```csharp
 using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using FormulaBoss.Runtime;  // wrapper types
 ```
 
 **Use Cases:**
@@ -587,15 +594,7 @@ using System.Text.RegularExpressions;
 - Complex conditional logic
 - Loops and iteration within a cell's evaluation
 - Try/catch for error handling
-
-**Trade-offs:**
-
-| Aspect | Expression Lambda | Statement Lambda |
-|--------|-------------------|------------------|
-| Validation | Parse-time (type system) | Compile/runtime |
-| Error messages | DSL-specific, helpful | Roslyn errors, may be cryptic |
-| Complexity | Single expression | Full C# |
-| Recommended for | Simple transforms, filters | Complex algorithms |
+- Multi-input operations that aren't a simple method chain
 
 ---
 
@@ -615,15 +614,19 @@ using System.Text.RegularExpressions;
 
 ### Transpilation Behaviour
 
-**Input types:**
+> **Architecture change (spec 0003):** The transpiler's role is greatly simplified. It identifies inputs, wraps them in typed facades, and emits the user's code inside a C# lambda. Most of the heavy lifting moves to the pre-compiled wrapper types.
 
-- Range reference → passed as `ExcelReference`, converted to COM `Range` if object model needed
-- Value array → passed as `object[,]`, processed directly
-- Scalar → passed as `object`, handled appropriately
+**Input wrapping:**
+
+All UDF parameters arrive as `object`. The generated code wraps them via `ExcelValue.Wrap()`:
+- Range reference (`ExcelReference`) → `ExcelTable` (if ListObject detected) or `ExcelArray`
+- Value array (`object[,]`) → `ExcelArray`
+- Scalar (`double`, `string`, `bool`) → `ExcelScalar`
+- Column header strings → passed to `ExcelTable` constructor for named column access
 
 **Output types:**
 
-- All outputs normalised to `object[,]` for spill compatibility
+- All outputs normalised to `object[,]` for spill compatibility via `.ToResult()`
 - Scalars wrapped in 1x1 array
 - Ragged results padded with `null` (appears blank)
 
@@ -1104,32 +1107,37 @@ This is where the editor provides the most value — turning the "edit, Enter, r
 
 Custom highlighting definition (`.xshd`) covering:
 
-- DSL methods (`.where`, `.select`, `.reduce`, etc.)
-- DSL accessor keywords (`.cells`, `.values`, `.rows`)
-- Cell properties (`.color`, `.bold`, `.fontSize`, etc.)
+- Wrapper type methods (`.Where`, `.Select`, `.Aggregate`, `.Any`, etc.)
+- Accessor properties (`.Cells`, `.Rows`, `.Cols`)
+- Cell properties (`.Color`, `.Bold`, `.FontSize`, etc.)
+- C# keywords (`var`, `return`, `if`, `new`, etc.)
 - Strings, numbers, operators
 - Lambda arrow (`=>`)
 
-#### Autocomplete
+#### Autocomplete (Roslyn-Powered)
+
+> **Architecture change (spec 0003):** Intellisense is powered by Roslyn's `CompletionService` operating on a synthetic C# document with typed wrapper variable declarations. This provides full C# completions including string methods, LINQ, regex, and all wrapper type methods.
 
 Context-aware completion triggered on `.` or after typing a letter:
 
 | Context | Completion Items |
 |---------|-----------------|
-| After range/variable `.` | DSL methods and accessors (`.where`, `.cells`, `.reduce`, etc.) |
-| After cell parameter `c.` | Cell properties (`.value`, `.color`, `.bold`, etc.) |
-| After row parameter `r.` | Column names from the active table (if detectable) |
-| General typing | DSL keywords, LET-bound variable names |
+| After `ExcelTable`/`ExcelArray` `.` | `.Rows`, `.Cols`, `.Cells`, `.Where()`, `.Any()`, `.Select()`, etc. |
+| After `Row` `r.` | Column names from table metadata + `.Cell` escalation |
+| After `ColumnValue` `.` | `.Cell` (for formatting) + implicit value via type conversion |
+| After `string` `.` | All C# string methods (`.Split()`, `.Contains()`, `.Trim()`, etc.) |
+| After any `IEnumerable` `.` | LINQ methods (`.Any()`, `.Select()`, `.Where()`, etc.) |
+| General typing | LET-bound variable names, C# keywords, `Regex`, etc. |
 
 Completion accepts on Tab or Enter only. Spacebar and other characters close the completion window (allowing single-letter variable names without interference).
 
-#### Real-Time Parsing
+#### Real-Time Diagnostics
 
-The existing parser is invoked on each keystroke (debounced) to provide:
+Roslyn provides real-time diagnostics (debounced) including:
 
-- Error squiggles on invalid syntax
-- Context information for autocomplete (e.g., knowing `c` is a Cell after `.cells.where(c =>`)
-- Validation of property names and method chains
+- Compile errors with precise locations (type mismatches, unknown methods, etc.)
+- Context information for autocomplete (type at caret position)
+- Full C# validation — no separate parse-time type system needed
 
 This reuses the same parsing infrastructure as the pipeline — not a separate parser.
 
