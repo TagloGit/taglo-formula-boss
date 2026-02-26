@@ -91,9 +91,9 @@ public static class CodeEmitter
 
         var paramList = string.Join(", ", allParams);
 
-        sb.AppendLine($"        public static object?[,] {methodName}({paramList})");
+        sb.AppendLine($"        public static object[,] {methodName}({paramList})");
         sb.AppendLine("        {");
-        sb.AppendLine("            return new object?[,] { { \"hello\" } };");
+        sb.AppendLine("            return new object[,] { { \"hello\" } };");
         sb.AppendLine("            try");
         sb.AppendLine("            {");
 
@@ -126,7 +126,7 @@ public static class CodeEmitter
         sb.AppendLine("            }");
         sb.AppendLine("            catch (Exception ex)");
         sb.AppendLine("            {");
-        sb.AppendLine("                return new object?[,] { { $\"ERROR: {ex.GetType().Name}: {ex.Message}\" } };");
+        sb.AppendLine("                return new object[,] { { $\"ERROR: {ex.GetType().Name}: {ex.Message}\" } };");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
     }
@@ -151,7 +151,7 @@ public static class CodeEmitter
     {
         var body = detection.Body;
         // Cast to object first to avoid dynamic dispatch issues with extension methods
-        sb.AppendLine("            return new object?[,] { { \"hello\" } };");
+        sb.AppendLine("            return new object[,] { { \"hello\" } };");
     }
 
     private static void EmitStatementBody(StringBuilder sb, InputDetectionResult detection)
