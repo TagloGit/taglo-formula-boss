@@ -151,7 +151,10 @@ public static class CodeEmitter
         var body = detection.Body;
         // Cast to object first to avoid dynamic dispatch issues with extension methods
         sb.AppendLine($"            object __result = {body};");
-        sb.AppendLine("            return FormulaBoss.Runtime.ResultConverter.ToResult(__result);");
+        sb.AppendLine($"            System.Diagnostics.Debug.WriteLine($\"__result type: {{__result?.GetType()?.FullName ?? \"null\"}} value: {{__result}}\");");
+        sb.AppendLine("            var __converted = FormulaBoss.Runtime.ResultConverter.ToResult(__result);");
+        sb.AppendLine($"            System.Diagnostics.Debug.WriteLine($\"__converted type: {{__converted?.GetType()?.FullName ?? \"null\"}} value: {{__converted}}\");");
+        sb.AppendLine("            return __converted;");
     }
 
     private static void EmitStatementBody(StringBuilder sb, InputDetectionResult detection)
