@@ -93,6 +93,7 @@ public static class CodeEmitter
 
         sb.AppendLine($"        public static object?[,] {methodName}({paramList})");
         sb.AppendLine("        {");
+        sb.AppendLine("            return new object?[,] { { \"hello\" } };");
         sb.AppendLine("            try");
         sb.AppendLine("            {");
 
