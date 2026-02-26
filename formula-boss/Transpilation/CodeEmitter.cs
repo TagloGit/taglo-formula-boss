@@ -129,7 +129,7 @@ public static class CodeEmitter
         sb.AppendLine($"            var {name}__values = {name}__raw?.GetType()?.Name == \"ExcelReference\"");
         sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({name}__raw)");
         sb.AppendLine($"                : {name}__raw;");
-        sb.AppendLine($"            dynamic {name} = ExcelValue.Wrap({name}__values);");
+        sb.AppendLine($"            var {name} = ExcelValue.Wrap({name}__values);");
     }
 
     private static void EmitExpressionBody(StringBuilder sb, InputDetectionResult detection)
@@ -145,7 +145,7 @@ public static class CodeEmitter
         // For statement bodies, we need to wrap the block in a way that captures the return value.
         // The body is a { ... } block with return statements.
         // We use a local function approach.
-        sb.AppendLine("            object?[,] __exec()");
+        sb.AppendLine("            object __exec()");
         sb.AppendLine($"            {detection.Body}");
         sb.AppendLine("            return FormulaBoss.Runtime.ResultConverter.ToResult(__exec());");
     }

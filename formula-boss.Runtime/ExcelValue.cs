@@ -1,8 +1,32 @@
 namespace FormulaBoss.Runtime;
 
-public abstract class ExcelValue
+public abstract class ExcelValue : IExcelRange
 {
     public abstract object? RawValue { get; }
+
+    // IExcelRange forwarding — all concrete subclasses implement these
+    public abstract IEnumerable<Row> Rows { get; }
+    public abstract IEnumerable<Cell> Cells { get; }
+    public abstract IExcelRange Where(Func<Row, bool> predicate);
+    public abstract IExcelRange Select(Func<Row, ExcelValue> selector);
+    public abstract IExcelRange SelectMany(Func<Row, IEnumerable<ExcelValue>> selector);
+    public abstract bool Any(Func<Row, bool> predicate);
+    public abstract bool All(Func<Row, bool> predicate);
+    public abstract ExcelValue First(Func<Row, bool> predicate);
+    public abstract ExcelValue? FirstOrDefault(Func<Row, bool> predicate);
+    public abstract int Count();
+    public abstract ExcelScalar Sum();
+    public abstract ExcelScalar Min();
+    public abstract ExcelScalar Max();
+    public abstract ExcelScalar Average();
+    public abstract IExcelRange Map(Func<Row, ExcelValue> selector);
+    public abstract IExcelRange OrderBy(Func<Row, object> keySelector);
+    public abstract IExcelRange OrderByDescending(Func<Row, object> keySelector);
+    public abstract IExcelRange Take(int count);
+    public abstract IExcelRange Skip(int count);
+    public abstract IExcelRange Distinct();
+    public abstract ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func);
+    public abstract IExcelRange Scan(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func);
 
     public static ExcelValue Wrap(object? value, string[]? headers = null,
         RangeOrigin? origin = null)

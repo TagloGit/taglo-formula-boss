@@ -59,7 +59,63 @@ public static class ResultConverter
             object?[,] array => array,
             bool b => new object?[,] { { b } },
             string s => new object?[,] { { s } },
+            IEnumerable<Row> rows => MaterializeRows(rows),
+            IEnumerable<ColumnValue> cols => MaterializeColumnValues(cols),
+            IEnumerable<ExcelValue> vals => MaterializeExcelValues(vals),
             _ => new object?[,] { { value } }
         };
+    }
+
+    private static object?[,] MaterializeRows(IEnumerable<Row> rows)
+    {
+        var list = rows.ToList();
+        if (list.Count == 0)
+        {
+            return new object?[0, 0];
+        }
+
+        var cols = list[0].ColumnCount;
+        var result = new object?[list.Count, cols];
+        for (var r = 0; r < list.Count; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                result[r, c] = list[r][c].Value;
+            }
+
+        return result;
+    }
+
+    private static object?[,] MaterializeColumnValues(IEnumerable<ColumnValue> values)
+    {
+        var list = values.ToList();
+        if (list.Count == 0)
+        {
+            return new object?[0, 0];
+        }
+
+        var result = new object?[list.Count, 1];
+        for (var i = 0; i < list.Count; i++)
+        {
+            result[i, 0] = list[i].Value;
+        }
+
+        return result;
+    }
+
+    private static object?[,] MaterializeExcelValues(IEnumerable<ExcelValue> values)
+    {
+        var list = values.ToList();
+        if (list.Count == 0)
+        {
+            return new object?[0, 0];
+        }
+
+        var result = new object?[list.Count, 1];
+        for (var i = 0; i < list.Count; i++)
+        {
+            result[i, 0] = list[i].RawValue;
+        }
+
+        return result;
     }
 }

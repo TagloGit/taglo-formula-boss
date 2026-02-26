@@ -38,8 +38,18 @@ public class ColumnValue
     {
         var aVal = a?.Value;
         var bVal = b is ColumnValue cv ? cv.Value : b;
+
+        // Numeric type coercion: double 10.0 == int 10 should be true
+        if (aVal != null && bVal != null && IsNumeric(aVal) && IsNumeric(bVal))
+        {
+            return Convert.ToDouble(aVal) == Convert.ToDouble(bVal);
+        }
+
         return Equals(aVal, bVal);
     }
+
+    private static bool IsNumeric(object? value) =>
+        value is double or float or int or long or short or byte or decimal;
 
     public static bool operator !=(ColumnValue? a, object? b) => !(a == b);
     public static bool operator ==(object? a, ColumnValue? b) => b == a;

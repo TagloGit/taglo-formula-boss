@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -202,11 +202,9 @@ public static class InputDetector
             .Any(m => m.Name.Identifier.Text is "Cell" or "Cells");
     }
 
-    private static bool DetectCellUsageByText(string expression)
-    {
+    private static bool DetectCellUsageByText(string expression) =>
         // Simple text-based fallback
-        return expression.Contains(".Cell") || expression.Contains(".Cells");
-    }
+        expression.Contains(".Cell") || expression.Contains(".Cells");
 
     /// <summary>
     ///     Collects identifiers used in the node that are not in the bound set
@@ -313,8 +311,8 @@ public static class InputDetector
     /// </summary>
     private sealed class LinkedHashSet
     {
-        private readonly HashSet<string> _set = new();
-        private readonly List<string> _list = new();
+        private readonly List<string> _list = [];
+        private readonly HashSet<string> _set = [];
 
         public void Add(string item)
         {
@@ -324,6 +322,6 @@ public static class InputDetector
             }
         }
 
-        public List<string> ToList() => new(_list);
+        public List<string> ToList() => [.. _list];
     }
 }
