@@ -44,4 +44,22 @@ public static class ResultConverter
     public static object?[,] ToResult(this int value) => new object?[,] { { value } };
     public static object?[,] ToResult(this double value) => new object?[,] { { value } };
     public static object?[,] ToResult(this string? value) => new object?[,] { { value } };
+
+    /// <summary>
+    ///     Catch-all overload for dynamic dispatch. Routes to the correct typed overload
+    ///     based on runtime type, or wraps the value in a 1×1 array as a fallback.
+    /// </summary>
+    public static object?[,] ToResult(this object? value)
+    {
+        return value switch
+        {
+            null => new object?[,] { { null } },
+            ExcelValue ev => ev.ToResult(),
+            IExcelRange range => range.ToResult(),
+            object?[,] array => array,
+            bool b => new object?[,] { { b } },
+            string s => new object?[,] { { s } },
+            _ => new object?[,] { { value } }
+        };
+    }
 }

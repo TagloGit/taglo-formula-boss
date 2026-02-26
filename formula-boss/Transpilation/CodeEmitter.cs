@@ -129,13 +129,14 @@ public static class CodeEmitter
         sb.AppendLine($"            var {name}__values = {name}__raw?.GetType()?.Name == \"ExcelReference\"");
         sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({name}__raw)");
         sb.AppendLine($"                : {name}__raw;");
-        sb.AppendLine($"            var {name} = ExcelValue.Wrap({name}__values);");
+        sb.AppendLine($"            dynamic {name} = ExcelValue.Wrap({name}__values);");
     }
 
     private static void EmitExpressionBody(StringBuilder sb, InputDetectionResult detection)
     {
         var body = detection.Body;
-        sb.AppendLine($"            var __result = {body};");
+        // Cast to object first to avoid dynamic dispatch issues with extension methods
+        sb.AppendLine($"            object __result = {body};");
         sb.AppendLine("            return FormulaBoss.Runtime.ResultConverter.ToResult(__result);");
     }
 
