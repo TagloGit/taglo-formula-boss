@@ -125,11 +125,18 @@ public static class CodeEmitter
 
     private static void EmitWrapInput(StringBuilder sb, string name)
     {
-        // Resolve ExcelReference to raw values using RuntimeHelpers
-        sb.AppendLine($"            var {name}__values = {name}__raw?.GetType()?.Name == \"ExcelReference\"");
+        // Resolve ExcelReference to raw values, headers, and origin using RuntimeHelpers
+        sb.AppendLine($"            var {name}__isRef = {name}__raw?.GetType()?.Name == \"ExcelReference\";");
+        sb.AppendLine($"            var {name}__values = {name}__isRef == true");
         sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({name}__raw)");
         sb.AppendLine($"                : {name}__raw;");
-        sb.AppendLine($"            var {name} = ExcelValue.Wrap({name}__values);");
+        sb.AppendLine($"            var {name}__headers = {name}__isRef == true");
+        sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetHeadersFromReference({name}__raw)");
+        sb.AppendLine($"                : null;");
+        sb.AppendLine($"            var {name}__origin = {name}__isRef == true");
+        sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetOriginFromReference({name}__raw)");
+        sb.AppendLine($"                : null;");
+        sb.AppendLine($"            var {name} = ExcelValue.Wrap({name}__values, {name}__headers, {name}__origin);");
     }
 
     private static void EmitExpressionBody(StringBuilder sb, InputDetectionResult detection)

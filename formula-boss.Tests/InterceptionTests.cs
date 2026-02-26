@@ -178,7 +178,7 @@ public class InterceptionTests
 
         Assert.True(result.Success);
         Assert.NotNull(result.UdfName);
-        Assert.Equal("DATA", result.UdfName);
+        Assert.StartsWith("__UDF_", result.UdfName);
     }
 
     [Fact]

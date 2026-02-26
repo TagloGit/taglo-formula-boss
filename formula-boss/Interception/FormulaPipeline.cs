@@ -149,15 +149,10 @@ public class FormulaPipeline
     /// </summary>
     private static string GenerateMethodName(string expression)
     {
-        var dotIdx = expression.IndexOf('.');
-        if (dotIdx > 0)
-        {
-            return expression[..dotIdx].Trim();
-        }
-
-        // Fallback: hash-based name
+        // Use a hash-based name with prefix to avoid colliding with input parameter names.
+        // E.g., "tblSpaces.Rows.Where(...)" → "__udf_A1B2C3D4" not "TBLSPACES"
         var hash = Math.Abs(expression.GetHashCode()).ToString("X8");
-        return $"_UDF_{hash}";
+        return $"__udf_{hash}";
     }
 
     private string GetUniqueUdfName(string preferredName, string expression)

@@ -81,6 +81,50 @@ public static class RuntimeHelpers
     }
 
     /// <summary>
+    ///     Gets table headers from an ExcelReference via RuntimeBridge.GetHeaders delegate.
+    ///     Returns null if the range is not part of an Excel Table or the delegate is not initialized.
+    /// </summary>
+    public static string[]? GetHeadersFromReference(object? rangeRef)
+    {
+        if (rangeRef == null || Runtime.RuntimeBridge.GetHeaders == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Runtime.RuntimeBridge.GetHeaders(rangeRef);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"GetHeadersFromReference failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Gets the range origin (sheet, row, col) from an ExcelReference via RuntimeBridge.GetOrigin delegate.
+    ///     Returns null if the delegate is not initialized.
+    /// </summary>
+    public static Runtime.RangeOrigin? GetOriginFromReference(object? rangeRef)
+    {
+        if (rangeRef == null || Runtime.RuntimeBridge.GetOrigin == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Runtime.RuntimeBridge.GetOrigin(rangeRef);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"GetOriginFromReference failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
     ///     Normalizes a result for return to Excel.
     ///     Handles arrays, enumerables, nulls, and scalars.
     /// </summary>

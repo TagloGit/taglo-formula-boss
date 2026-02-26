@@ -68,6 +68,112 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 return app.Range[address];
             };
 
+            // Initialize RuntimeBridge delegates for wrapper types
+            Runtime.RuntimeBridge.GetCell = (sheetName, row, col) =>
+            {
+                dynamic app = ExcelDnaUtil.Application;
+                dynamic sheet = app.Sheets[sheetName];
+                dynamic cell = sheet.Cells[row, col];
+                try
+                {
+                    return new Runtime.Cell
+                    {
+                        Value = cell.Value2,
+                        Formula = cell.Formula,
+                        Format = cell.NumberFormat,
+                        Address = cell.Address,
+                        Row = cell.Row,
+                        Col = cell.Column,
+                        Interior = new Runtime.Interior
+                        {
+                            ColorIndex = cell.Interior.ColorIndex is double ci ? (int)ci : 0,
+                            Color = cell.Interior.Color is double c ? (int)c : 0
+                        },
+                        Font = new Runtime.CellFont
+                        {
+                            Bold = cell.Font.Bold is true,
+                            Italic = cell.Font.Italic is true,
+                            Size = cell.Font.Size is double s ? s : 11,
+                            Name = cell.Font.Name?.ToString() ?? "",
+                            Color = cell.Font.Color is double fc ? (int)fc : 0
+                        }
+                    };
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(cell);
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(sheet);
+                }
+            };
+
+            Runtime.RuntimeBridge.GetHeaders = rangeRef =>
+            {
+                try
+                {
+                    var address = (string)XlCall.Excel(XlCall.xlfReftext, rangeRef, true);
+                    dynamic app = ExcelDnaUtil.Application;
+                    dynamic range = app.Range[address];
+                    try
+                    {
+                        dynamic listObject = range.ListObject;
+                        if (listObject == null)
+                        {
+                            return null;
+                        }
+
+                        dynamic headerRow = listObject.HeaderRowRange;
+                        if (headerRow == null)
+                        {
+                            return null;
+                        }
+
+                        var cols = (int)headerRow.Columns.Count;
+                        var headers = new string[cols];
+                        for (var i = 1; i <= cols; i++)
+                        {
+                            headers[i - 1] = headerRow.Cells[1, i].Value2?.ToString() ?? "";
+                        }
+
+                        return headers;
+                    }
+                    finally
+                    {
+                        System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GetHeaders failed: {ex.Message}");
+                    return null;
+                }
+            };
+
+            Runtime.RuntimeBridge.GetOrigin = rangeRef =>
+            {
+                try
+                {
+                    var address = (string)XlCall.Excel(XlCall.xlfReftext, rangeRef, true);
+                    dynamic app = ExcelDnaUtil.Application;
+                    dynamic range = app.Range[address];
+                    try
+                    {
+                        var sheetName = (string)range.Worksheet.Name;
+                        var topRow = (int)range.Row;
+                        var leftCol = (int)range.Column;
+                        return new Runtime.RangeOrigin(sheetName, topRow, leftCol);
+                    }
+                    finally
+                    {
+                        System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GetOrigin failed: {ex.Message}");
+                    return null;
+                }
+            };
+
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);

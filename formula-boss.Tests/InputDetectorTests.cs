@@ -52,6 +52,14 @@ public class InputDetectorTests
     }
 
     [Fact]
+    public void Sugar_DetectsStringBracketAccess()
+    {
+        var result = InputDetector.Detect("tbl.Rows.Where(r => r[\"Unit Price\"] > 5)");
+
+        Assert.True(result.RequiresObjectModel);
+    }
+
+    [Fact]
     public void Sugar_DetectsFreeVariables_WithKnownLetVars()
     {
         var knownVars = new HashSet<string> { "maxPop", "pConts" };

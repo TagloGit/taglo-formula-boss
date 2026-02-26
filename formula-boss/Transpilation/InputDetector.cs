@@ -112,7 +112,7 @@ public static class InputDetector
         }
 
         // Detect .Cell/.Cells usage and collect free variables from body
-        var requiresObjectModel = DetectCellUsage(body);
+        var requiresObjectModel = DetectObjectModelUsage(body);
         var freeVars = CollectFreeVariables(body, inputs);
 
         return new PartialResult(inputs, bodyText, true, requiresObjectModel, freeVars, isStatementBody);
@@ -148,12 +148,12 @@ public static class InputDetector
         IReadOnlyList<string> freeVars;
         if (expr != null)
         {
-            requiresObjectModel = DetectCellUsage(expr);
+            requiresObjectModel = DetectObjectModelUsage(expr);
             freeVars = CollectFreeVariables(expr, inputs);
         }
         else
         {
-            requiresObjectModel = DetectCellUsageByText(expression);
+            requiresObjectModel = DetectObjectModelUsageByText(expression);
             freeVars = Array.Empty<string>();
         }
 
@@ -193,18 +193,35 @@ public static class InputDetector
     }
 
     /// <summary>
-    ///     Detects usage of .Cell or .Cells in a syntax node.
+    ///     Detects usage that requires IsMacroType:
+    ///     - .Cell or .Cells (cell formatting access)
+    ///     - String-based bracket access like r["Column"] (requires header detection via xlfReftext)
     /// </summary>
-    private static bool DetectCellUsage(SyntaxNode node)
+    private static bool DetectObjectModelUsage(SyntaxNode node)
     {
-        return node.DescendantNodesAndSelf()
+        // Check for .Cell or .Cells member access
+        var hasCellAccess = node.DescendantNodesAndSelf()
             .OfType<MemberAccessExpressionSyntax>()
             .Any(m => m.Name.Identifier.Text is "Cell" or "Cells");
+
+        if (hasCellAccess)
+        {
+            return true;
+        }
+
+        // Check for string-based bracket access: r["Column Name"]
+        var hasStringBracket = node.DescendantNodesAndSelf()
+            .OfType<ElementAccessExpressionSyntax>()
+            .Any(e => e.ArgumentList.Arguments.Any(
+                a => a.Expression is LiteralExpressionSyntax literal &&
+                     literal.IsKind(SyntaxKind.StringLiteralExpression)));
+
+        return hasStringBracket;
     }
 
-    private static bool DetectCellUsageByText(string expression) =>
-        // Simple text-based fallback
-        expression.Contains(".Cell") || expression.Contains(".Cells");
+    private static bool DetectObjectModelUsageByText(string expression) =>
+        expression.Contains(".Cell") || expression.Contains(".Cells") ||
+        expression.Contains("[\"") || expression.Contains("[@");
 
     /// <summary>
     ///     Collects identifiers used in the node that are not in the bound set
