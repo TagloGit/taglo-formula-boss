@@ -93,6 +93,8 @@ public static class CodeEmitter
 
         sb.AppendLine($"        public static object?[,] {methodName}({paramList})");
         sb.AppendLine("        {");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
 
         // Wrap each input with ExcelValue.Wrap()
         // For inputs, resolve ExcelReference to values first using RuntimeHelpers
@@ -120,6 +122,11 @@ public static class CodeEmitter
             EmitExpressionBody(sb, detection);
         }
 
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch (Exception ex)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                return new object?[,] { { $\"ERROR: {ex.GetType().Name}: {ex.Message}\" } };");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
     }
 
