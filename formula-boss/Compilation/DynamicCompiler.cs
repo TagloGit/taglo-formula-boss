@@ -55,7 +55,9 @@ public class DynamicCompiler
                               {
                                   public static object ALC_SPIKE(object raw)
                                   {
-                                      var wrapped = ExcelValue.Wrap(raw);
+                                      // Extract value from ExcelReference if needed
+                                      var values = FormulaBoss.RuntimeHelpers.GetValuesFromReference(raw);
+                                      var wrapped = ExcelValue.Wrap(values);
                                       return wrapped.ToResult();
                                   }
                               }
