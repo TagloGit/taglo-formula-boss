@@ -94,6 +94,23 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Detection!.HasStringBracketAccess);
     }
 
+    [Fact]
+    public void Sugar_StringKeyFilter_ExecutesWithHeaders()
+    {
+        // Row 0 = headers, rows 1-3 = data. Headers should be stripped.
+        var values = new object[,] { { "Price" }, { 5.0 }, { 15.0 }, { 8.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.Where(r => r[\"Price\"] > 10)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(1, arr.GetLength(0)); // Only 15 passes
+        Assert.Equal(15.0, arr[0, 0]);
+    }
+
     #endregion
 
     #region Explicit Lambda — Multi-Input
@@ -112,6 +129,23 @@ public class WrapperTypePipelineTests
         var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, values, maxVal);
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(2, arr.GetLength(0)); // 5 and 3
+    }
+
+    [Fact]
+    public void ExplicitLambda_MultiInput_NoCast()
+    {
+        // Test that r[0] > maxVal works without explicit casts (ColumnValue > ExcelValue operator)
+        var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
+        var maxVal = 10.0;
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "(tbl, maxVal) => tbl.Rows.Where(r => r[0] > maxVal)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, values, maxVal);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0)); // 15 and 20
     }
 
     #endregion

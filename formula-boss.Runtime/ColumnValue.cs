@@ -1,6 +1,6 @@
 namespace FormulaBoss.Runtime;
 
-public class ColumnValue
+public class ColumnValue : IComparable<ColumnValue>, IComparable
 {
     public object? Value { get; }
 
@@ -71,6 +71,17 @@ public class ColumnValue
     public static bool operator >=(int a, ColumnValue b) => a >= b.ToDouble();
     public static bool operator <=(int a, ColumnValue b) => a <= b.ToDouble();
 
+    // ExcelValue comparison operators (so r[0] > maxVal works when maxVal is ExcelValue)
+    public static bool operator >(ColumnValue a, ExcelValue b) => a.ToDouble() > Convert.ToDouble(b.RawValue);
+    public static bool operator <(ColumnValue a, ExcelValue b) => a.ToDouble() < Convert.ToDouble(b.RawValue);
+    public static bool operator >=(ColumnValue a, ExcelValue b) => a.ToDouble() >= Convert.ToDouble(b.RawValue);
+    public static bool operator <=(ColumnValue a, ExcelValue b) => a.ToDouble() <= Convert.ToDouble(b.RawValue);
+
+    public static bool operator >(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) > b.ToDouble();
+    public static bool operator <(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) < b.ToDouble();
+    public static bool operator >=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) >= b.ToDouble();
+    public static bool operator <=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) <= b.ToDouble();
+
     // Arithmetic operators
     public static ColumnValue operator +(ColumnValue a, ColumnValue b) =>
         new(a.ToDouble() + b.ToDouble());
@@ -104,6 +115,13 @@ public class ColumnValue
     public static ColumnValue operator -(int a, ColumnValue b) => new(a - b.ToDouble());
     public static ColumnValue operator *(int a, ColumnValue b) => new(a * b.ToDouble());
     public static ColumnValue operator /(int a, ColumnValue b) => new(a / b.ToDouble());
+
+    public int CompareTo(ColumnValue? other) =>
+        other is null ? 1 : ToDouble().CompareTo(other.ToDouble());
+
+    public int CompareTo(object? obj) => obj is ColumnValue cv
+        ? CompareTo(cv)
+        : Convert.ToDouble(Value).CompareTo(Convert.ToDouble(obj));
 
     public override bool Equals(object? obj) =>
         obj is ColumnValue other ? Equals(Value, other.Value) : Equals(Value, obj);

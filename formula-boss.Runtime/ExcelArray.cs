@@ -71,13 +71,41 @@ public class ExcelArray : ExcelValue, IExcelRange
     public IExcelRange Select(Func<Row, ExcelValue> selector)
     {
         var results = Rows.Select(selector).ToList();
-        var array = new object?[results.Count, 1];
-        for (var i = 0; i < results.Count; i++)
+        if (results.Count == 0)
         {
-            array[i, 0] = results[i].RawValue;
+            return new ExcelArray(new object?[0, ColCount]);
         }
 
-        return new ExcelArray(array);
+        // Check if first result is multi-column (e.g., identity select returning full rows)
+        if (results[0].RawValue is object?[,] firstArr && firstArr.GetLength(1) > 1)
+        {
+            var cols = firstArr.GetLength(1);
+            var array = new object?[results.Count, cols];
+            for (var r = 0; r < results.Count; r++)
+            {
+                if (results[r].RawValue is object?[,] rowArr)
+                {
+                    for (var c = 0; c < Math.Min(rowArr.GetLength(1), cols); c++)
+                    {
+                        array[r, c] = rowArr[0, c];
+                    }
+                }
+                else
+                {
+                    array[r, 0] = results[r].RawValue;
+                }
+            }
+
+            return new ExcelArray(array, _columnMap);
+        }
+
+        var result = new object?[results.Count, 1];
+        for (var i = 0; i < results.Count; i++)
+        {
+            result[i, 0] = results[i].RawValue is object?[,] arr ? arr[0, 0] : results[i].RawValue;
+        }
+
+        return new ExcelArray(result);
     }
 
     // Origin is not propagated — projected values don't map to original cell positions.
