@@ -61,6 +61,11 @@ public class InputDetector
     /// </summary>
     public DetectionResult Detect(string expression)
     {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            throw new TranspileException("Expression is empty");
+        }
+
         // Step 1: Pre-process range references
         var (normalized, rangeRefMap) = PreprocessRangeRefs(expression);
 
