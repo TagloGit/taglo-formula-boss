@@ -42,6 +42,37 @@ public class DynamicCompiler
     }
 
     /// <summary>
+    ///     Compiles and registers a spike UDF that references FormulaBoss.Runtime types directly.
+    ///     Tests whether the ALC-based loading allows generated code to resolve Runtime types.
+    ///     Call =ALC_SPIKE(A1) from Excel — should return the value, not #VALUE!.
+    /// </summary>
+    public static void CompileAndRegisterAlcSpike()
+    {
+        const string source = """
+                              using FormulaBoss.Runtime;
+
+                              public static class AlcSpikeTest
+                              {
+                                  public static object ALC_SPIKE(object raw)
+                                  {
+                                      var wrapped = ExcelValue.Wrap(raw);
+                                      return wrapped.ToResult();
+                                  }
+                              }
+                              """;
+
+        var (assembly, errors) = CompileSourceWithErrors(source);
+        if (assembly == null)
+        {
+            Debug.WriteLine($"ALC spike compilation failed:\n{string.Join("\n", errors)}");
+            return;
+        }
+
+        RegisterFunctionsFromAssemblyStatic(assembly);
+        Debug.WriteLine("ALC spike registered: =ALC_SPIKE(A1)");
+    }
+
+    /// <summary>
     ///     Compiles and registers a test function to validate the Roslyn + ExcelDNA pipeline.
     /// </summary>
     public static void CompileAndRegisterTestFunction()
@@ -115,7 +146,8 @@ public class DynamicCompiler
         }
 
         ms.Seek(0, SeekOrigin.Begin);
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(ms);
+        var alc = GetHostLoadContext();
+        var assembly = alc.LoadFromStream(ms);
         return (assembly, []);
     }
 
@@ -146,6 +178,9 @@ public class DynamicCompiler
 
         // Add reference to formula-boss.dll for RuntimeHelpers
         AddFormulaBossReference(references);
+
+        // Add reference to FormulaBoss.Runtime for wrapper types (ExcelValue, etc.)
+        AddRuntimeReference(references);
 
         return references;
     }
@@ -182,6 +217,48 @@ public class DynamicCompiler
         }
 
         Debug.WriteLine("WARNING: Could not add FormulaBoss assembly reference - compilation may fail");
+    }
+
+    /// <summary>
+    ///     Gets the AssemblyLoadContext used by the host (ExcelDNA) so that generated code
+    ///     can resolve types from host-loaded assemblies like FormulaBoss.Runtime.
+    /// </summary>
+    private static AssemblyLoadContext GetHostLoadContext()
+    {
+        return AssemblyLoadContext.GetLoadContext(typeof(ExcelFunctionAttribute).Assembly)
+               ?? AssemblyLoadContext.Default;
+    }
+
+    /// <summary>
+    ///     Adds a reference to the FormulaBoss.Runtime assembly for wrapper types.
+    /// </summary>
+    private static void AddRuntimeReference(List<MetadataReference> references)
+    {
+        var runtimeAssembly = typeof(FormulaBoss.Runtime.ExcelValue).Assembly;
+
+        if (!string.IsNullOrEmpty(runtimeAssembly.Location))
+        {
+            references.Add(MetadataReference.CreateFromFile(runtimeAssembly.Location));
+            Debug.WriteLine($"Using FormulaBoss.Runtime from Location: {runtimeAssembly.Location}");
+            return;
+        }
+
+        try
+        {
+            var assemblyBytes = GetAssemblyBytesFromMemory(runtimeAssembly);
+            if (assemblyBytes != null)
+            {
+                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
+                Debug.WriteLine("Created FormulaBoss.Runtime reference from memory image");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to get Runtime assembly bytes from memory: {ex.Message}");
+        }
+
+        Debug.WriteLine("WARNING: Could not add FormulaBoss.Runtime assembly reference");
     }
 
     /// <summary>

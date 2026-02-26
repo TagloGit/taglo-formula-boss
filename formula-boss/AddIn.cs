@@ -68,6 +68,9 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 return app.Range[address];
             };
 
+            // Register ALC spike UDF to test whether generated code can reference Runtime types
+            DynamicCompiler.CompileAndRegisterAlcSpike();
+
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
