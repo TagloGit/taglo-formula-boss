@@ -150,8 +150,7 @@ public static class CodeEmitter
     {
         var body = detection.Body;
         // Cast to object first to avoid dynamic dispatch issues with extension methods
-        sb.AppendLine($"            object __result = {body};");
-        sb.AppendLine("            return new object?[,] { { $\"TYPE: {__result?.GetType()?.FullName ?? \"null\"}\" } };");
+        sb.AppendLine("            return new object?[,] { { \"hello\" } };");
     }
 
     private static void EmitStatementBody(StringBuilder sb, InputDetectionResult detection)
