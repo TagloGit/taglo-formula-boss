@@ -44,6 +44,21 @@ public class Row : DynamicObject
 
     public int ColumnCount => _values.Length;
 
+    /// <summary>
+    ///     Converts a Row to an ExcelArray (1 row × N columns) so it can be returned
+    ///     from IExcelRange.Select() and other methods expecting ExcelValue.
+    /// </summary>
+    public static implicit operator ExcelValue(Row row)
+    {
+        var result = new object?[1, row._values.Length];
+        for (var i = 0; i < row._values.Length; i++)
+        {
+            result[0, i] = row._values[i];
+        }
+
+        return new ExcelArray(result, row._columnMap);
+    }
+
     public override bool TryGetMember(GetMemberBinder binder, out object? result)
     {
         if (_columnMap != null && _columnMap.TryGetValue(binder.Name, out var index))

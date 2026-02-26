@@ -60,6 +60,17 @@ public class ColumnValue
     public static bool operator >=(double a, ColumnValue b) => a >= b.ToDouble();
     public static bool operator <=(double a, ColumnValue b) => a <= b.ToDouble();
 
+    // Int comparison operators (so r[0] > 10 works without casting)
+    public static bool operator >(ColumnValue a, int b) => a.ToDouble() > b;
+    public static bool operator <(ColumnValue a, int b) => a.ToDouble() < b;
+    public static bool operator >=(ColumnValue a, int b) => a.ToDouble() >= b;
+    public static bool operator <=(ColumnValue a, int b) => a.ToDouble() <= b;
+
+    public static bool operator >(int a, ColumnValue b) => a > b.ToDouble();
+    public static bool operator <(int a, ColumnValue b) => a < b.ToDouble();
+    public static bool operator >=(int a, ColumnValue b) => a >= b.ToDouble();
+    public static bool operator <=(int a, ColumnValue b) => a <= b.ToDouble();
+
     // Arithmetic operators
     public static ColumnValue operator +(ColumnValue a, ColumnValue b) =>
         new(a.ToDouble() + b.ToDouble());
@@ -82,6 +93,17 @@ public class ColumnValue
     public static ColumnValue operator -(double a, ColumnValue b) => new(a - b.ToDouble());
     public static ColumnValue operator *(double a, ColumnValue b) => new(a * b.ToDouble());
     public static ColumnValue operator /(double a, ColumnValue b) => new(a / b.ToDouble());
+
+    // Int arithmetic operators
+    public static ColumnValue operator +(ColumnValue a, int b) => new(a.ToDouble() + b);
+    public static ColumnValue operator -(ColumnValue a, int b) => new(a.ToDouble() - b);
+    public static ColumnValue operator *(ColumnValue a, int b) => new(a.ToDouble() * b);
+    public static ColumnValue operator /(ColumnValue a, int b) => new(a.ToDouble() / b);
+
+    public static ColumnValue operator +(int a, ColumnValue b) => new(a + b.ToDouble());
+    public static ColumnValue operator -(int a, ColumnValue b) => new(a - b.ToDouble());
+    public static ColumnValue operator *(int a, ColumnValue b) => new(a * b.ToDouble());
+    public static ColumnValue operator /(int a, ColumnValue b) => new(a / b.ToDouble());
 
     public override bool Equals(object? obj) =>
         obj is ColumnValue other ? Equals(Value, other.Value) : Equals(Value, obj);
