@@ -55,14 +55,11 @@ public static class CodeEmitter
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using FormulaBoss.Runtime;");
         sb.AppendLine();
-        sb.AppendLine("namespace FormulaBoss.Generated");
+        sb.AppendLine($"public static class {sanitized}_Class");
         sb.AppendLine("{");
-        sb.AppendLine($"    public static class {sanitized}_Class");
-        sb.AppendLine("    {");
 
         EmitUdfMethod(sb, detection, sanitized);
 
-        sb.AppendLine("    }");
         sb.AppendLine("}");
 
         // Collect free variables that were used as additional parameters
