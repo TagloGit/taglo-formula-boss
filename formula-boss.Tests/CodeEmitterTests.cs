@@ -139,11 +139,19 @@ public class CodeEmitterTests
     }
 
     [Fact]
-    public void Emit_ContainsGetHeadersDelegate()
+    public void Emit_ContainsGetHeadersDelegate_WhenStringBracketAccess()
+    {
+        var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[\"Price\"] > 5)");
+
+        Assert.Contains("GetHeadersDelegate", result.SourceCode);
+    }
+
+    [Fact]
+    public void Emit_NoHeaders_WhenNoStringBracketAccess()
     {
         var result = EmitFromExpression("tbl.Rows.Count()");
 
-        Assert.Contains("GetHeadersDelegate", result.SourceCode);
+        Assert.DoesNotContain("GetHeadersDelegate", result.SourceCode);
     }
 
     #endregion

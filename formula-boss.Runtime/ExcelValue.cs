@@ -72,6 +72,17 @@ public abstract class ExcelValue
     public static bool operator >=(double a, ExcelValue b) => a >= Convert.ToDouble(b.RawValue);
     public static bool operator <=(double a, ExcelValue b) => a <= Convert.ToDouble(b.RawValue);
 
+    // Int comparison operators (so scalar > 10 works without casting)
+    public static bool operator >(ExcelValue a, int b) => Convert.ToDouble(a.RawValue) > b;
+    public static bool operator <(ExcelValue a, int b) => Convert.ToDouble(a.RawValue) < b;
+    public static bool operator >=(ExcelValue a, int b) => Convert.ToDouble(a.RawValue) >= b;
+    public static bool operator <=(ExcelValue a, int b) => Convert.ToDouble(a.RawValue) <= b;
+
+    public static bool operator >(int a, ExcelValue b) => a > Convert.ToDouble(b.RawValue);
+    public static bool operator <(int a, ExcelValue b) => a < Convert.ToDouble(b.RawValue);
+    public static bool operator >=(int a, ExcelValue b) => a >= Convert.ToDouble(b.RawValue);
+    public static bool operator <=(int a, ExcelValue b) => a <= Convert.ToDouble(b.RawValue);
+
     public override bool Equals(object? obj) =>
         obj is ExcelValue other ? Equals(RawValue, other.RawValue) : Equals(RawValue, obj);
 

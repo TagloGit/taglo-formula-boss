@@ -117,7 +117,8 @@ public class CodeEmitter
         for (var i = 0; i < detection.Inputs.Count; i++)
         {
             var isFirstInput = i == 0;
-            EmitInputWrapping(sb, detection.Inputs[i], detection.RequiresObjectModel, isFirstInput);
+            EmitInputWrapping(sb, detection.Inputs[i], detection.RequiresObjectModel, isFirstInput,
+                detection.HasStringBracketAccess);
         }
 
         // Wrap free variables as scalars (keep as ExcelValue, not IExcelRange)
@@ -141,7 +142,7 @@ public class CodeEmitter
     }
 
     private static void EmitInputWrapping(StringBuilder sb, string input, bool requiresObjectModel,
-        bool castToRange)
+        bool castToRange, bool extractHeaders)
     {
         // Check if input is an ExcelReference and extract values
         sb.AppendLine($"        var {input}__isRef = {input}__raw?.GetType()?.Name == \"ExcelReference\";");
@@ -149,12 +150,31 @@ public class CodeEmitter
         sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({input}__raw)");
         sb.AppendLine($"            : {input}__raw;");
 
-        // Get headers if available (from ExcelReference or directly from array)
-        sb.AppendLine($"        var {input}__headers = {input}__isRef == true");
-        sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
-        sb.AppendLine($"            : ({input}__raw is object[,] {input}__arr && {input}__arr.GetLength(0) > 0");
-        sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
-        sb.AppendLine($"                : null);");
+        if (extractHeaders)
+        {
+            // Get headers from first row (only when expression uses r["Col"] syntax)
+            sb.AppendLine($"        var {input}__headers = {input}__isRef == true");
+            sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
+            sb.AppendLine($"            : ({input}__raw is object[,] {input}__arr && {input}__arr.GetLength(0) > 0");
+            sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
+            sb.AppendLine($"                : null);");
+
+            // Strip header row from values when headers are present
+            sb.AppendLine($"        if ({input}__headers != null && {input}__values is object[,] {input}__valArr)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var __rows = {input}__valArr.GetLength(0) - 1;");
+            sb.AppendLine($"            var __cols = {input}__valArr.GetLength(1);");
+            sb.AppendLine($"            var __stripped = new object[__rows, __cols];");
+            sb.AppendLine($"            for (var __r = 0; __r < __rows; __r++)");
+            sb.AppendLine($"                for (var __c = 0; __c < __cols; __c++)");
+            sb.AppendLine($"                    __stripped[__r, __c] = {input}__valArr[__r + 1, __c];");
+            sb.AppendLine($"            {input}__values = __stripped;");
+            sb.AppendLine("        }");
+        }
+        else
+        {
+            sb.AppendLine($"        string[]? {input}__headers = null;");
+        }
 
         // Get origin if object model is needed
         if (requiresObjectModel)
