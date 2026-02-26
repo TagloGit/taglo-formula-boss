@@ -86,7 +86,90 @@ Replace the current DSL syntax transformation with a pre-compiled type-safe wrap
 
 **Goal:** Replace the DSL transpiler with a Roslyn-based input detector and thin code emitter. Delete the custom lexer, parser, and old transpiler.
 
-**Files to delete:**
+> **Lesson from first attempt (Feb 2026):** Generated code cannot reference `FormulaBoss.Runtime` types directly due to the assembly identity constraint (see `docs/assembly-identity-investigation.md`). The CodeEmitter must use delegate bridges for all Runtime type interactions. Additionally: migrate relevant old test cases before deleting old code, and include integration tests that compile and execute generated code.
+
+### Step 1: Migrate test cases (before deleting anything)
+
+Review the existing test files and extract test cases that cover edge cases the new implementation must handle:
+
+- `formula-boss.Tests/TranspilerTests.cs` — extract cases for: range ref parsing (`A1:A10`, `$A$1:$B$10`), UDF naming (hash-based `__udf_` prefix, collision avoidance, reserved Excel names), `IsMacroType` detection, LET variable capture, multi-input handling
+- `formula-boss.Tests/ParserTests.cs` — extract cases for: operator precedence, member access chains, lambda parameter handling, bracket notation (`r[0]`, `r["Col Name"]`)
+
+Create `formula-boss.Tests/TranspilerMigrationCases.md` documenting each extracted case and what the new test should verify. This is a checklist, not test code.
+
+### Step 2: Build InputDetector and CodeEmitter
+
+**Files to create:**
+- `formula-boss/Transpilation/InputDetector.cs` — uses Roslyn `CSharpSyntaxTree.ParseText()` to:
+  - Detect single-input sugar vs explicit lambda
+  - Extract input identifier names
+  - Detect `.Cell`/`.Cells` usage for `IsMacroType`
+  - Detect free variables (for LET capture)
+  - Handle range references (`A1:A10`) — these are not valid C# identifiers, so the detector must handle them as special tokens or pre-process them
+- `formula-boss/Transpilation/CodeEmitter.cs` — generates the UDF method:
+  - **No direct references to `FormulaBoss.Runtime` types** in generated code
+  - Uses delegate bridges on `RuntimeHelpers` for: wrapping inputs (`WrapDelegate`), converting results (`ToResultDelegate`), getting headers/origin
+  - All UDF parameters are `object` type
+  - Return type is `object` (not `object?[,]`)
+  - No namespace wrapper in generated code
+  - UDF names use `__udf_` + hash prefix (never derived from input parameter names)
+  - User's expression/lambda body passed through verbatim
+
+**Delegate bridges to add on `RuntimeHelpers`:**
+- `WrapDelegate: Func<object, string[], object, object>` — calls `ExcelValue.Wrap(value, headers, origin)`, returns `object` (the wrapped ExcelValue)
+- `ToResultDelegate: Func<object, object>` — calls `ResultConverter.ToResult(result)`, returns `object[,]`
+- `GetHeadersDelegate: Func<object, string[]>` — calls through to header extraction
+- `GetOriginDelegate: Func<object, object>` — calls through to origin extraction
+- `GetValuesDelegate: Func<object, object>` — calls through to value extraction from ExcelReference
+
+These are initialized in `AddIn.AutoOpen` with lambdas that reference Runtime types directly (host context).
+
+**Generated code pattern:**
+```csharp
+// NO namespace, NO Runtime using statements
+public static class __udf_A1B2C3D4_Class
+{
+    public static object __udf_A1B2C3D4(object tbl__raw)
+    {
+        // Resolve ExcelReference to values
+        var tbl__isRef = tbl__raw?.GetType()?.Name == "ExcelReference";
+        var tbl__values = tbl__isRef == true
+            ? FormulaBoss.RuntimeHelpers.GetValuesDelegate(tbl__raw)
+            : tbl__raw;
+        var tbl__headers = tbl__isRef == true
+            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate(tbl__raw)
+            : null;
+        var tbl__origin = tbl__isRef == true
+            ? FormulaBoss.RuntimeHelpers.GetOriginDelegate(tbl__raw)
+            : null;
+
+        // Wrap via delegate bridge (returns object, actually ExcelValue at runtime)
+        dynamic tbl = FormulaBoss.RuntimeHelpers.WrapDelegate(tbl__values, tbl__headers, tbl__origin);
+
+        // User's code — operates on dynamic, Runtime types resolve at runtime
+        object __result = tbl.Rows.Where(r => r["Unit Price"] > 5);
+
+        // Convert result via delegate bridge
+        return FormulaBoss.RuntimeHelpers.ToResultDelegate(__result);
+    }
+}
+```
+
+**Key difference from first attempt:** Generated code uses `dynamic` for wrapped values and delegate bridges for all Runtime interactions. The `dynamic` keyword means method calls like `.Rows`, `.Where()` resolve at runtime via the DLR, where the actual `ExcelValue` types are available. No compile-time type references needed.
+
+### Step 3: Wire pipeline and update compiler
+
+**Files to modify:**
+- `formula-boss/Interception/FormulaPipeline.cs` — replace lexer→parser→transpiler with `InputDetector` → `CodeEmitter` → `DynamicCompiler`
+- `formula-boss/Compilation/DynamicCompiler.cs` — Runtime `MetadataReference` is no longer needed for generated code (generated code doesn't reference Runtime types). Keep it only if other compilation needs require it.
+- `formula-boss/RuntimeHelpers.cs` — add `WrapDelegate`, `ToResultDelegate`, `GetHeadersDelegate`, `GetOriginDelegate`, `GetValuesDelegate` fields
+- `formula-boss/AddIn.cs` — initialize new delegate bridges in `AutoOpen`
+- `formula-boss/Transpilation/TranspileResult.cs` — simplify if needed
+
+### Step 4: Delete old code
+
+Only after all new tests pass:
+
 - `formula-boss/Parsing/Lexer.cs`
 - `formula-boss/Parsing/Parser.cs`
 - `formula-boss/Parsing/Ast.cs`
@@ -95,27 +178,41 @@ Replace the current DSL syntax transformation with a pre-compiled type-safe wrap
 - `formula-boss.Tests/TranspilerTests.cs`
 - `formula-boss.Tests/ParserTests.cs`
 
-**Files to create:**
-- `formula-boss/Transpilation/InputDetector.cs` — uses Roslyn `CSharpSyntaxTree.ParseText()` to:
-  - Detect single-input sugar vs explicit lambda
-  - Extract input identifier names
-  - Detect `.Cell`/`.Cells` usage for `IsMacroType`
-  - Detect free variables (for LET capture)
-- `formula-boss/Transpilation/CodeEmitter.cs` — generates the UDF method:
-  - `ExcelValue.Wrap()` calls for each input
-  - User's code passed through mostly verbatim
-  - `.ToResult()` on the return value
-  - Wrapping in a static class
+Note: `Lexer.cs`, `Parser.cs`, `Ast.cs`, `ExcelTypeSystem.cs` are still used by `CompletionProvider` and `ErrorHighlighter`. Keep them if Phase 5 hasn't landed yet; delete them in Phase 5 or 6 when those UI components are rewritten.
 
-**Files to modify:**
-- `formula-boss/Interception/FormulaPipeline.cs` — replace lexer→parser→transpiler pipeline with `InputDetector` → `CodeEmitter` → `DynamicCompiler`
-- `formula-boss/Compilation/DynamicCompiler.cs` — add `FormulaBoss.Runtime.dll` to `MetadataReference` list
-- `formula-boss/Transpilation/TranspileResult.cs` — simplify if needed (may keep as-is)
+### Tests required in this PR
 
-**Files to create (tests):**
-- `formula-boss.Tests/InputDetectorTests.cs` — test input detection for all expression forms
-- `formula-boss.Tests/CodeEmitterTests.cs` — test generated code structure
-- `formula-boss.Tests/PipelineIntegrationTests.cs` — end-to-end: expression → generated C# → compiles
+**Unit tests:**
+- `formula-boss.Tests/InputDetectorTests.cs`:
+  - Sugar syntax: `tbl.Rows.Where(...)` → primary input `tbl`
+  - Explicit lambda: `(a, b) => a.Rows.Count()` → inputs `[a, b]`
+  - Statement block: `(tbl) => { return tbl.Rows.Count(); }` → input `tbl`, `IsStatementBody = true`
+  - Range refs: `A1:A10.Rows.Count()` → must not truncate to `A1`
+  - Object model detection: `.Cell`, `.Cells` → `RequiresObjectModel = true`
+  - Free variable detection: `(tbl) => tbl.Rows.Where(r => r.X < maxVal)` → free var `maxVal`
+  - String bracket detection: `r["Col Name"]` → detected as requiring headers
+- `formula-boss.Tests/CodeEmitterTests.cs`:
+  - Generated code contains delegate bridge calls, not direct Runtime references
+  - Generated code uses `dynamic` for wrapped values
+  - UDF naming: `__udf_` + hash prefix, never matches input parameter name
+  - Return type is `object`
+  - No namespace in generated code
+  - Free variables become additional `object` parameters with wrapping
+  - `RequiresObjectModel` propagated to `TranspileResult`
+
+**Integration tests (compile and execute):**
+- `formula-boss.IntegrationTests/WrapperTypePipelineTests.cs`:
+  - Expression → InputDetector → CodeEmitter → Roslyn compile → load assembly → invoke method → verify result
+  - Tests must exercise the Runtime types at runtime (the compiled code uses `dynamic`, so the Runtime types resolve when the test assembly loads them)
+  - Minimum scenarios:
+    - Single-input value filtering: `tbl.Where(v => v > 5)` (element-wise)
+    - Row filtering: `tbl.Rows.Where(r => r[0] > 10)`
+    - Row filtering with string key: `tbl.Rows.Where(r => r["Price"] > 10)` (requires headers)
+    - Multi-input: `(tbl, maxVal) => tbl.Rows.Where(r => r[0] < maxVal)`
+    - Aggregation: `tbl.Rows.Count()`
+    - Statement block: `(tbl) => { var c = tbl.Rows.Count(); return c; }`
+    - Range ref in sugar syntax (verify `A1:A10` not truncated)
+    - UDF name doesn't collide with parameter name
 
 **What this PR delivers:**
 - Single-input sugar: `` `tbl.Rows.Where(r => r.X > 0)` `` works
@@ -123,8 +220,10 @@ Replace the current DSL syntax transformation with a pre-compiled type-safe wrap
 - Statement blocks: `` `(tbl) => { return tbl.Rows.Count(); }` `` works
 - LET variable capture: free variables detected and added as UDF parameters
 - `.Cell`/`.Cells` detection sets `IsMacroType`
-- Old lexer/parser/transpiler deleted
+- All Runtime type interaction via delegate bridges — no direct type references in generated code
+- Old lexer/parser/transpiler deleted (unless still needed by UI components)
 - All method names are C# convention (`.Any()`, `.Where()`, etc.)
+- Comprehensive test coverage including integration tests that compile and execute generated code
 
 ## Phase 4: TypedRow Generation and Column Intellisense Support
 
