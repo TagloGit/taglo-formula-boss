@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Diagnostics;
 
 using ExcelDna.Integration;
@@ -171,6 +172,62 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 if (result is string s)
                 {
                     return s.ToResult();
+                }
+
+                // Handle LINQ IEnumerable<Row> results (from .Rows.Where(), etc.)
+                if (result is IEnumerable<Row> rows)
+                {
+                    var rowList = rows.ToList();
+                    if (rowList.Count == 0)
+                    {
+                        return string.Empty;
+                    }
+
+                    var cols = rowList[0].ColumnCount;
+                    var arr = new object?[rowList.Count, cols];
+                    for (var r = 0; r < rowList.Count; r++)
+                    for (var c = 0; c < cols; c++)
+                    {
+                        arr[r, c] = rowList[r][c].Value;
+                    }
+
+                    return arr;
+                }
+
+                // Handle IEnumerable<ColumnValue> results
+                if (result is IEnumerable<ColumnValue> colValues)
+                {
+                    var list = colValues.ToList();
+                    if (list.Count == 0)
+                    {
+                        return string.Empty;
+                    }
+
+                    var arr = new object?[list.Count, 1];
+                    for (var r = 0; r < list.Count; r++)
+                    {
+                        arr[r, 0] = list[r].Value;
+                    }
+
+                    return arr;
+                }
+
+                // Handle generic IEnumerable
+                if (result is IEnumerable enumerable and not string and not object[,])
+                {
+                    var list = enumerable.Cast<object>().ToList();
+                    if (list.Count == 0)
+                    {
+                        return string.Empty;
+                    }
+
+                    var arr = new object?[list.Count, 1];
+                    for (var r = 0; r < list.Count; r++)
+                    {
+                        arr[r, 0] = list[r] is ColumnValue cv ? cv.Value : list[r];
+                    }
+
+                    return arr;
                 }
 
                 return result;

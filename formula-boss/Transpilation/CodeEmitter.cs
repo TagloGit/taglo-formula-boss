@@ -112,12 +112,15 @@ public class CodeEmitter
         sb.AppendLine("    {");
 
         // Preamble: wrap each input
-        foreach (var input in detection.Inputs)
+        // First input is assumed to be a range (cast to IExcelRange)
+        // Additional inputs in explicit lambdas may be scalars (keep as ExcelValue)
+        for (var i = 0; i < detection.Inputs.Count; i++)
         {
-            EmitInputWrapping(sb, input, detection.RequiresObjectModel);
+            var isFirstInput = i == 0;
+            EmitInputWrapping(sb, detection.Inputs[i], detection.RequiresObjectModel, isFirstInput);
         }
 
-        // Wrap free variables as scalars
+        // Wrap free variables as scalars (keep as ExcelValue, not IExcelRange)
         foreach (var freeVar in detection.FreeVariables)
         {
             sb.AppendLine($"        var {freeVar} = ExcelValue.Wrap({freeVar}__raw);");
@@ -137,7 +140,8 @@ public class CodeEmitter
         return sb.ToString();
     }
 
-    private static void EmitInputWrapping(StringBuilder sb, string input, bool requiresObjectModel)
+    private static void EmitInputWrapping(StringBuilder sb, string input, bool requiresObjectModel,
+        bool castToRange)
     {
         // Check if input is an ExcelReference and extract values
         sb.AppendLine($"        var {input}__isRef = {input}__raw?.GetType()?.Name == \"ExcelReference\";");
@@ -145,10 +149,12 @@ public class CodeEmitter
         sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({input}__raw)");
         sb.AppendLine($"            : {input}__raw;");
 
-        // Get headers if available
+        // Get headers if available (from ExcelReference or directly from array)
         sb.AppendLine($"        var {input}__headers = {input}__isRef == true");
         sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
-        sb.AppendLine($"            : null;");
+        sb.AppendLine($"            : ({input}__raw is object[,] {input}__arr && {input}__arr.GetLength(0) > 0");
+        sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
+        sb.AppendLine($"                : null);");
 
         // Get origin if object model is needed
         if (requiresObjectModel)
@@ -156,11 +162,13 @@ public class CodeEmitter
             sb.AppendLine($"        var {input}__origin = {input}__isRef == true");
             sb.AppendLine($"            ? (RangeOrigin?)FormulaBoss.RuntimeHelpers.GetOriginDelegate?.Invoke({input}__raw)");
             sb.AppendLine($"            : null;");
-            sb.AppendLine($"        var {input} = ExcelValue.Wrap({input}__values, {input}__headers, {input}__origin);");
+            var cast = castToRange ? "(IExcelRange)" : "";
+            sb.AppendLine($"        var {input} = {cast}ExcelValue.Wrap({input}__values, {input}__headers, {input}__origin);");
         }
         else
         {
-            sb.AppendLine($"        var {input} = ExcelValue.Wrap({input}__values, {input}__headers);");
+            var cast = castToRange ? "(IExcelRange)" : "";
+            sb.AppendLine($"        var {input} = {cast}ExcelValue.Wrap({input}__values, {input}__headers);");
         }
     }
 
