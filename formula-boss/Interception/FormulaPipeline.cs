@@ -152,7 +152,7 @@ public class FormulaPipeline
         // Use a hash-based name with prefix to avoid colliding with input parameter names.
         // E.g., "tblSpaces.Rows.Where(...)" → "__udf_A1B2C3D4" not "TBLSPACES"
         var hash = Math.Abs(expression.GetHashCode()).ToString("X8");
-        return $"__udf_{hash}";
+        return $"FB{hash}";
     }
 
     private string GetUniqueUdfName(string preferredName, string expression)
