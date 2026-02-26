@@ -60,52 +60,55 @@ This repo follows the [Taglo Claude Code workflow](https://github.com/TagloGit/t
 - Specs: `specs/NNNN-short-title.md`
 - Plans: `plans/NNNN-short-title.md`
 
-## ExcelDNA Assembly Identity Issues
+## Assembly Identity — Generated Code Cannot Reference Host Types
 
-**Critical lesson learned:** When dynamically compiling code at runtime with Roslyn that references ExcelDNA types, you WILL encounter assembly identity mismatches.
+**Critical constraint:** Roslyn-compiled code loaded via `AssemblyLoadContext.Default.LoadFromStream()` cannot directly reference types from ANY assembly loaded by the host process. This is a .NET runtime limitation, not ExcelDNA-specific. It affects `ExcelDna.Integration`, `FormulaBoss.Runtime`, and any other host-loaded assembly.
 
-**The problem:**
-- ExcelDNA packs assemblies into the .xll file at build time
-- Roslyn compilation references ExcelDNA from the NuGet cache (`~/.nuget/packages/exceldna.integration/`)
-- At runtime, objects like `ExcelReference` come from the packed assembly
-- Even though type names match (`ExcelDna.Integration.ExcelReference`), .NET treats them as different types
-- Pattern matching like `rangeRef is ExcelReference` fails with `#VALUE!` error
+**Root cause:** `LoadFromStream()` creates an assembly without file-backed identity. The JIT cannot match type references in the stream-loaded assembly to already-loaded assemblies, even when Roslyn compiled against the exact same DLL. The JIT fails silently; ExcelDNA surfaces it as `#VALUE!`.
 
-**The solution:**
-1. **Never reference ExcelDNA types directly in generated code** - use `object` parameter types instead
-2. **Use string-based type checking:** `rangeRef?.GetType()?.Name == "ExcelReference"`
-3. **Use reflection for method calls:** `rangeRef.GetType().GetMethod("GetValue")?.Invoke(rangeRef, null)`
-4. **Use reflection for static API access:** Get `ExcelDnaUtil` via `rangeRef.GetType().Assembly.GetType("ExcelDna.Integration.ExcelDnaUtil")`
-5. **Don't generate `[ExcelFunction]` attributes** - register UDFs manually via `ExcelIntegration.RegisterDelegates`
-6. **Keep ExcelDna.Integration.dll unpacked** - add `<Reference Path="ExcelDna.Integration.dll" Pack="false" />` in .dna file
+**What does NOT fix this:** `Pack="false"` in the `.dna` file, pointing Roslyn at the loaded assembly's `Location`, or using `MetadataReference.CreateFromImage()`. See `docs/assembly-identity-investigation.md` for the full investigation and test results.
 
-**The identity mismatch is transitive.** Generated code also cannot load host assembly types that have ExcelDNA types in their fields, method signatures, or method bodies. Calling `hostAsm.GetType("FormulaBoss.SomeClass")` will throw `TypeLoadException` if `SomeClass` references any ExcelDNA type, because .NET tries to resolve those dependencies in the caller's assembly context.
+**The rules for generated code:**
+1. **Never reference any host type directly** — no `typeof()`, `using`, or direct method calls to `ExcelDna.*`, `FormulaBoss.Runtime.*`, etc.
+2. **Use `object` parameter types** and string-based type checking: `obj?.GetType()?.Name == "ExcelReference"`
+3. **Use reflection for one-off calls:** `obj.GetType().GetMethod("Foo")?.Invoke(obj, args)`
+4. **Use the delegate bridge pattern** for repeated or complex operations (see below)
+5. **Don't generate `[ExcelFunction]` attributes** — register UDFs manually via `ExcelIntegration.RegisterDelegates`
 
-**Reflection-based XlCall.Excel does not work for C API functions.** Calling `XlCall.Excel(xlfReftext, ...)` via `MethodInfo.Invoke` returns `Object[,]` (range values) instead of the expected address string. Only direct (statically compiled) calls to `XlCall.Excel` work correctly for C API functions like xlfReftext.
+**The identity mismatch is transitive.** Generated code cannot load host types that reference other host types in their fields, method signatures, or method bodies. `hostAsm.GetType("FormulaBoss.SomeClass")` will throw `TypeLoadException` if `SomeClass` references any ExcelDNA or Runtime type.
 
-**Code patterns to avoid in generated code:**
+**Reflection-based XlCall.Excel does not work for C API functions.** `XlCall.Excel(xlfReftext, ...)` via `MethodInfo.Invoke` returns `Object[,]` instead of the expected address string. Only direct (statically compiled) calls work. This is why the delegate bridge pattern exists.
+
+**Code patterns:**
 ```csharp
-// BAD - will cause assembly identity mismatch
+// BAD — will cause #VALUE! at runtime (any host assembly, not just ExcelDNA)
+typeof(FormulaBoss.Runtime.ExcelValue)
+FormulaBoss.Runtime.ExcelValue.Wrap(x)
 if (rangeRef is ExcelReference excelRef)
 using ExcelDna.Integration;
-[ExcelFunction(...)]
+using FormulaBoss.Runtime;
 
-// GOOD - use reflection
+// GOOD — reflection or delegate bridges
 if (rangeRef?.GetType()?.Name == "ExcelReference")
 var getValueMethod = rangeRef.GetType().GetMethod("GetValue");
+RuntimeHelpers.WrapDelegate?.Invoke(rawValue)  // delegate bridge
 ```
 
 ## Delegate Bridge Pattern
 
-When generated code needs to call ExcelDNA C API functions (like `xlfReftext`), use a delegate bridge:
+When generated code needs to interact with host-loaded assemblies (ExcelDNA, FormulaBoss.Runtime), use delegate bridges:
 
-1. **Define a `Func<>` field** on a host class with NO ExcelDNA dependencies (e.g. `RuntimeHelpers.ResolveRangeDelegate`)
-2. **Initialize it from `AddIn.AutoOpen`** with a lambda that calls `XlCall.Excel(...)` directly
-3. **Generated code invokes the delegate** by finding the field via reflection on the host assembly
+1. **Define `Func<>` / `Action<>` fields** on a bridge class whose signatures use ONLY primitive types and `object` — no types from ExcelDNA or FormulaBoss.Runtime
+2. **Initialize delegates from `AddIn.AutoOpen`** with lambdas that call the actual typed APIs (lambdas JIT-compile in the host context where all types resolve)
+3. **Generated code invokes the delegates** — it can load the bridge class because the class has no problematic type dependencies
 
-The lambda is JIT-compiled in the host context (where ExcelDNA resolves), but the field type (`Func<object, object>`) has no ExcelDNA dependency, so the host class can be loaded from generated code. See `RuntimeHelpers.ResolveRangeDelegate` and `AddIn.AutoOpen` for the implementation.
+**Why this works:** The delegate fields use types like `Func<object, object>` from the base class library — no cross-assembly resolution needed. The lambdas are compiled in the host context where all types are known.
 
-**Critical rule:** `RuntimeHelpers` (and any class loaded from generated code) must NEVER have `using ExcelDna.Integration` or reference any ExcelDNA type — not even in private method bodies. Any such reference causes `TypeLoadException` when the type is loaded from the Roslyn-compiled assembly's context.
+**Current bridge classes:**
+- `RuntimeHelpers` — delegates for ExcelDNA operations (`ResolveRangeDelegate`, `GetValuesFromReference`, etc.)
+- `RuntimeBridge` (in FormulaBoss.Runtime) — delegates for COM/cell access (`GetCell`, `GetHeaders`, `GetOrigin`)
+
+**Critical rule:** Bridge classes must NEVER have `using ExcelDna.Integration`, `using FormulaBoss.Runtime`, or reference any host-loaded type — not even in private method bodies. Any such reference causes `TypeLoadException` when the class is loaded from generated code's context.
 
 ## Object Model UDFs and IsMacroType
 
