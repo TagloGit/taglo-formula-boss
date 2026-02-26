@@ -91,9 +91,9 @@ public static class CodeEmitter
 
         var paramList = string.Join(", ", allParams);
 
-        sb.AppendLine($"        public static object[,] {methodName}({paramList})");
+        sb.AppendLine($"        public static object {methodName}({paramList})");
         sb.AppendLine("        {");
-        sb.AppendLine("            return new object[,] { { \"hello\" } };");
+        sb.AppendLine("            return \"hello\";");
         sb.AppendLine("            try");
         sb.AppendLine("            {");
 
