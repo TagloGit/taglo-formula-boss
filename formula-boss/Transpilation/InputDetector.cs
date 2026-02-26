@@ -253,13 +253,20 @@ public class InputDetector
         var inputSet = new HashSet<string>(inputs);
         var freeVars = new HashSet<string>();
 
+        // Collect all locally declared variable names
+        var declaredLocals = new HashSet<string>();
+        foreach (var varDecl in root.DescendantNodes().OfType<VariableDeclaratorSyntax>())
+        {
+            declaredLocals.Add(varDecl.Identifier.Text);
+        }
+
         foreach (var identifier in root.DescendantNodes().OfType<IdentifierNameSyntax>())
         {
             var name = identifier.Identifier.Text;
 
             // Skip if it's a known identifier
             if (inputSet.Contains(name) || allLambdaParams.Contains(name) ||
-                IgnoredIdentifiers.Contains(name))
+                IgnoredIdentifiers.Contains(name) || declaredLocals.Contains(name))
             {
                 continue;
             }
