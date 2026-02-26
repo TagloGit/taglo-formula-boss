@@ -81,6 +81,26 @@ public static class RuntimeHelpers
     }
 
     /// <summary>
+    ///     Delegate that extracts column headers from an ExcelReference.
+    ///     Reads the first row of the referenced range to get header names.
+    ///     Initialized by <c>AddIn.AutoOpen</c>.
+    /// </summary>
+    public static Func<object, string[]?>? GetHeadersDelegate { get; set; }
+
+    /// <summary>
+    ///     Delegate that extracts the origin (sheet name, top row, left col) from an ExcelReference.
+    ///     Returns a <c>RangeOrigin</c> object (typed as object to avoid assembly identity issues).
+    ///     Initialized by <c>AddIn.AutoOpen</c>.
+    /// </summary>
+    public static Func<object, object?>? GetOriginDelegate { get; set; }
+
+    /// <summary>
+    ///     Delegate that converts a result (ExcelValue, IExcelRange, scalar) to object[,] for Excel.
+    ///     Initialized by <c>AddIn.AutoOpen</c>.
+    /// </summary>
+    public static Func<object, object>? ToResultDelegate { get; set; }
+
+    /// <summary>
     ///     Normalizes a result for return to Excel.
     ///     Handles arrays, enumerables, nulls, and scalars.
     /// </summary>

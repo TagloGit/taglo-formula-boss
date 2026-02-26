@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics;
-using System.Text;
 
 using FormulaBoss.Compilation;
-using FormulaBoss.Parsing;
 using FormulaBoss.Transpilation;
 
 namespace FormulaBoss.Interception;
@@ -40,9 +38,10 @@ public record ExpressionContext(
 /// </summary>
 public class FormulaPipeline
 {
-    // Cache for column parameters alongside UDF names
+    // Cache for column parameters and input parameters alongside UDF names
     private readonly Dictionary<string, IReadOnlyList<ColumnParameter>?> _columnParamsCache = new();
     private readonly DynamicCompiler _compiler;
+    private readonly Dictionary<string, string?> _inputParamCache = new();
 
     // Maps UDF names to the expression they were created from, to detect collisions
     private readonly Dictionary<string, string> _registeredUdfExpressions = new();
@@ -76,38 +75,25 @@ public class FormulaPipeline
         // Check cache first
         if (_udfCache.TryGetValue(cacheKey, out var cachedUdfName))
         {
-            // Extract input parameter and column params from cache
-            var inputParam = ExtractInputParameter(expression);
+            _inputParamCache.TryGetValue(cacheKey, out var cachedInputParam);
             _columnParamsCache.TryGetValue(cacheKey, out var cachedColumnParams);
-            return new PipelineResult(true, cachedUdfName, null, inputParam, cachedColumnParams);
+            return new PipelineResult(true, cachedUdfName, null, cachedInputParam, cachedColumnParams);
         }
 
-        // Step 1: Lex
-        var lexer = new Lexer(expression);
-        var tokens = lexer.ScanTokens();
-
-        // Check for lexer errors
-        var errorToken = tokens.FirstOrDefault(t => t.Type == TokenType.Error);
-        if (errorToken != null)
+        // Step 1: Detect inputs using Roslyn
+        var detector = new InputDetector();
+        DetectionResult detection;
+        try
         {
-            return new PipelineResult(false, null, $"Lexer error: {errorToken.Lexeme}", null);
+            detection = detector.Detect(expression);
         }
-
-        // Step 2: Parse (pass source for statement lambda support)
-        var parser = new Parser(tokens, expression);
-        var ast = parser.Parse();
-
-        if (ast == null || parser.Errors.Count > 0)
+        catch (Exception ex)
         {
-            var errorMsg = parser.Errors.Count > 0
-                ? string.Join("; ", parser.Errors)
-                : "Unknown parse error";
-            return new PipelineResult(false, null, $"Parse error: {errorMsg}", null);
+            return new PipelineResult(false, null, $"Detection error: {ex.Message}", null);
         }
 
-        // Step 3: Transpile (pass preferred name and column bindings if provided)
-        // Check for name collisions and generate unique name if needed
-        var transpiler = new CSharpTranspiler();
+        // Step 2: Emit code
+        var emitter = new CodeEmitter();
         TranspileResult transpileResult;
         try
         {
@@ -119,11 +105,11 @@ public class FormulaPipeline
                 preferredName = GetUniqueUdfName(preferredName, expression);
             }
 
-            transpileResult = transpiler.Transpile(ast, expression, preferredName, context?.ColumnBindings);
+            transpileResult = emitter.Emit(detection, expression, preferredName);
         }
         catch (Exception ex)
         {
-            return new PipelineResult(false, null, $"Transpile error: {ex.Message}", null);
+            return new PipelineResult(false, null, $"Emit error: {ex.Message}", null);
         }
 
         // Debug: Output the generated source code
@@ -169,12 +155,18 @@ public class FormulaPipeline
             }
         }
 
+        // Extract input parameter from detection result
+        var inputParameter = detection.Inputs.Count > 0 ? detection.Inputs[0] : null;
+        // Map range ref placeholders back to original range refs
+        if (inputParameter != null && detection.RangeRefMap.TryGetValue(inputParameter, out var originalRef))
+        {
+            inputParameter = originalRef;
+        }
+
         // Cache the result
         _udfCache[cacheKey] = transpileResult.MethodName;
         _columnParamsCache[cacheKey] = columnParameters;
-
-        // Extract input parameter from the expression
-        var inputParameter = ExtractInputParameter(expression);
+        _inputParamCache[cacheKey] = inputParameter;
 
         return new PipelineResult(true, transpileResult.MethodName, null, inputParameter, columnParameters);
     }
@@ -206,55 +198,9 @@ public class FormulaPipeline
     }
 
     /// <summary>
-    ///     Sanitizes a name to match what CSharpTranspiler.SanitizeUdfName produces.
+    ///     Sanitizes a name to match what CodeEmitter.SanitizeName produces.
     /// </summary>
-    private static string SanitizeName(string name)
-    {
-        var upper = name.ToUpperInvariant();
-        var result = new StringBuilder();
-
-        foreach (var c in upper)
-        {
-            if (char.IsLetterOrDigit(c) || c == '_')
-            {
-                result.Append(c);
-            }
-        }
-
-        var str = result.ToString();
-        if (str.Length == 0)
-        {
-            return "_UDF";
-        }
-
-        if (char.IsDigit(str[0]))
-        {
-            str = "_" + str;
-        }
-
-        // Must match CSharpTranspiler.SanitizeUdfName reserved name handling
-        if (CSharpTranspiler.IsReservedExcelName(str))
-        {
-            str = "_" + str;
-        }
-
-        return str;
-    }
-
-    /// <summary>
-    ///     Extracts the input parameter (range reference or LET variable) from a DSL expression.
-    /// </summary>
-    /// <param name="expression">The DSL expression.</param>
-    private static string ExtractInputParameter(string expression)
-    {
-        // The input parameter is the first identifier before .cells or .values
-        // e.g., "A1:J10.cells.where(...)" → "A1:J10"
-        // e.g., "data.values.where(...)" → "data"
-        // e.g., "coloredCells.select(...)" → "coloredCells"
-
-        var dotIndex = expression.IndexOf('.');
-        return dotIndex > 0 ? expression[..dotIndex] : expression;
-    }
+    private static string SanitizeName(string name) => CodeEmitter.SanitizeName(name);
 
     /// <summary>
     ///     Checks if an error message contains type-related keywords that suggest
