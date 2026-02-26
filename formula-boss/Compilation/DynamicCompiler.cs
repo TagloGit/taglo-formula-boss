@@ -147,6 +147,9 @@ public class DynamicCompiler
         // Add reference to formula-boss.dll for RuntimeHelpers
         AddFormulaBossReference(references);
 
+        // Add reference to FormulaBoss.Runtime.dll for wrapper types
+        AddRuntimeReference(references);
+
         return references;
     }
 
@@ -182,6 +185,38 @@ public class DynamicCompiler
         }
 
         Debug.WriteLine("WARNING: Could not add FormulaBoss assembly reference - compilation may fail");
+    }
+
+    /// <summary>
+    ///     Adds a reference to the FormulaBoss.Runtime assembly containing wrapper types.
+    /// </summary>
+    private static void AddRuntimeReference(List<MetadataReference> references)
+    {
+        var runtimeAssembly = typeof(Runtime.ExcelValue).Assembly;
+
+        if (!string.IsNullOrEmpty(runtimeAssembly.Location))
+        {
+            references.Add(MetadataReference.CreateFromFile(runtimeAssembly.Location));
+            Debug.WriteLine($"Using FormulaBoss.Runtime from Location: {runtimeAssembly.Location}");
+            return;
+        }
+
+        try
+        {
+            var assemblyBytes = GetAssemblyBytesFromMemory(runtimeAssembly);
+            if (assemblyBytes != null)
+            {
+                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
+                Debug.WriteLine("Created FormulaBoss.Runtime reference from memory image");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to get FormulaBoss.Runtime assembly bytes from memory: {ex.Message}");
+        }
+
+        Debug.WriteLine("WARNING: Could not add FormulaBoss.Runtime assembly reference - compilation may fail");
     }
 
     /// <summary>

@@ -174,11 +174,11 @@ public class InterceptionTests
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
 
-        var result = pipeline.Process("data.values.toArray()");
+        var result = pipeline.Process("data.Rows.Count()");
 
         Assert.True(result.Success);
         Assert.NotNull(result.UdfName);
-        Assert.StartsWith("__udf_", result.UdfName);
+        Assert.Equal("DATA", result.UdfName);
     }
 
     [Fact]
@@ -212,12 +212,12 @@ public class InterceptionTests
     }
 
     [Fact]
-    public void Pipeline_ReturnsError_ForInvalidSyntax()
+    public void Pipeline_ReturnsError_WhenCompilerFails()
     {
-        var compiler = new MockDynamicCompiler();
+        var compiler = new MockDynamicCompiler { ShouldFail = true };
         var pipeline = new FormulaPipeline(compiler);
 
-        var result = pipeline.Process("data.");
+        var result = pipeline.Process("data.Rows.Count()");
 
         Assert.False(result.Success);
         Assert.NotNull(result.ErrorMessage);
@@ -271,12 +271,12 @@ public class InterceptionTests
     private sealed class MockDynamicCompiler : Compilation.DynamicCompiler
     {
         public int CompileCount { get; private set; }
+        public bool ShouldFail { get; set; }
 
         public override List<string> CompileAndRegister(string source, bool isMacroType = false)
         {
             CompileCount++;
-            // Return empty list (success) without actually compiling
-            return [];
+            return ShouldFail ? new List<string> { "Mock compilation error" } : new List<string>();
         }
     }
 }

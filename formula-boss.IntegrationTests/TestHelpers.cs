@@ -1,8 +1,7 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text;
 
 using FormulaBoss.Interception;
-using FormulaBoss.Parsing;
 using FormulaBoss.Transpilation;
 
 using Microsoft.CodeAnalysis;
@@ -17,30 +16,15 @@ public static class TestHelpers
 {
     /// <summary>
     ///     Transpiles a DSL expression and compiles it to an assembly.
-    ///     Returns the compiled _Core method that can be invoked directly with test data.
+    ///     Returns the compiled method that can be invoked directly with test data.
     /// </summary>
-    /// <param name="dslExpression">The DSL expression (e.g., "data.cells.select(c => c.value).toArray()")</param>
-    /// <returns>A TestCompilationResult containing the compiled method and metadata</returns>
     public static TestCompilationResult CompileExpression(string dslExpression)
     {
-        // Parse
-        var lexer = new Lexer(dslExpression);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var expression = parser.Parse();
+        // Detect inputs using Roslyn
+        var detection = InputDetector.Detect(dslExpression);
 
-        if (expression == null || parser.Errors.Count > 0)
-        {
-            return new TestCompilationResult
-            {
-                Success = false,
-                ErrorMessage = $"Parse error: {string.Join(", ", parser.Errors)}"
-            };
-        }
-
-        // Transpile
-        var transpiler = new CSharpTranspiler();
-        var transpileResult = transpiler.Transpile(expression, dslExpression);
+        // Emit code
+        var transpileResult = CodeEmitter.Emit(detection, dslExpression, dslExpression);
 
         // Compile
         var (assembly, errors) = CompileSource(transpileResult.SourceCode);
@@ -55,27 +39,25 @@ public static class TestHelpers
             };
         }
 
-        // Find the _Core method
-        var generatedType = assembly.GetType("GeneratedUdf");
+        // Find the generated method
+        var generatedType = FindGeneratedType(assembly);
         if (generatedType == null)
         {
             return new TestCompilationResult
             {
                 Success = false,
-                ErrorMessage = "Could not find GeneratedUdf type in compiled assembly",
+                ErrorMessage = "Could not find generated type in compiled assembly",
                 SourceCode = transpileResult.SourceCode
             };
         }
 
-        var coreMethodName = $"{transpileResult.MethodName}_Core";
-        var coreMethod = generatedType.GetMethod(coreMethodName, BindingFlags.Public | BindingFlags.Static);
-
-        if (coreMethod == null)
+        var method = generatedType.GetMethod(transpileResult.MethodName, BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
         {
             return new TestCompilationResult
             {
                 Success = false,
-                ErrorMessage = $"Could not find {coreMethodName} method in compiled assembly",
+                ErrorMessage = $"Could not find {transpileResult.MethodName} method in compiled assembly",
                 SourceCode = transpileResult.SourceCode
             };
         }
@@ -83,7 +65,7 @@ public static class TestHelpers
         return new TestCompilationResult
         {
             Success = true,
-            CoreMethod = coreMethod,
+            CoreMethod = method,
             MethodName = transpileResult.MethodName,
             RequiresObjectModel = transpileResult.RequiresObjectModel,
             SourceCode = transpileResult.SourceCode
@@ -106,8 +88,8 @@ public static class TestHelpers
             MetadataReference.CreateFromFile(Assembly.Load("System.Collections").Location),
             MetadataReference.CreateFromFile(Assembly.Load("System.Linq.Expressions").Location),
             MetadataReference.CreateFromFile(Assembly.Load("Microsoft.CSharp").Location),
-            // Add reference to FormulaBoss for RuntimeHelpers
-            MetadataReference.CreateFromFile(typeof(RuntimeHelpers).Assembly.Location)
+            MetadataReference.CreateFromFile(typeof(RuntimeHelpers).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(Runtime.ExcelValue).Assembly.Location)
         };
 
         // Add netstandard reference if available
@@ -150,19 +132,18 @@ public static class TestHelpers
     }
 
     /// <summary>
-    ///     Executes a compiled _Core method with the given range (for object model path).
+    ///     Executes a compiled method with the given range (for object model path).
     /// </summary>
     public static object? ExecuteWithRange(MethodInfo coreMethod, dynamic range) => coreMethod.Invoke(null, [range]);
 
     /// <summary>
-    ///     Executes a compiled _Core method with the given values array (for value-only path).
+    ///     Executes a compiled method with the given values array (for value-only path).
     /// </summary>
     public static object? ExecuteWithValues(MethodInfo coreMethod, object[,] values) =>
         coreMethod.Invoke(null, [values]);
 
     /// <summary>
-    ///     Executes a compiled _Core method with the given values array and additional column name parameters.
-    ///     Used for testing dynamic column name resolution.
+    ///     Executes a compiled method with the given values array and additional column name parameters.
     /// </summary>
     public static object? ExecuteWithValuesAndColumnNames(MethodInfo coreMethod, object[,] values,
         params string[] columnNames)
@@ -179,35 +160,15 @@ public static class TestHelpers
 
     /// <summary>
     ///     Transpiles a DSL expression with column bindings and compiles it to an assembly.
-    ///     Returns the compiled _Core method that can be invoked directly with test data.
     /// </summary>
-    /// <param name="dslExpression">The DSL expression</param>
-    /// <param name="columnBindings">Column bindings from LET variables (e.g., "price" -> (tblSales, Price))</param>
-    /// <returns>A TestCompilationResult containing the compiled method and metadata</returns>
     public static TestCompilationResult CompileExpressionWithColumnBindings(
         string dslExpression,
         Dictionary<string, ColumnBindingInfo> columnBindings)
     {
-        // Parse
-        var lexer = new Lexer(dslExpression);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var expression = parser.Parse();
+        var knownVars = columnBindings.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var detection = InputDetector.Detect(dslExpression, knownVars);
+        var transpileResult = CodeEmitter.Emit(detection, dslExpression, dslExpression);
 
-        if (expression == null || parser.Errors.Count > 0)
-        {
-            return new TestCompilationResult
-            {
-                Success = false,
-                ErrorMessage = $"Parse error: {string.Join(", ", parser.Errors)}"
-            };
-        }
-
-        // Transpile with column bindings
-        var transpiler = new CSharpTranspiler();
-        var transpileResult = transpiler.Transpile(expression, dslExpression, null, columnBindings);
-
-        // Compile
         var (assembly, errors) = CompileSource(transpileResult.SourceCode);
 
         if (assembly == null)
@@ -220,27 +181,24 @@ public static class TestHelpers
             };
         }
 
-        // Find the _Core method
-        var generatedType = assembly.GetType("GeneratedUdf");
+        var generatedType = FindGeneratedType(assembly);
         if (generatedType == null)
         {
             return new TestCompilationResult
             {
                 Success = false,
-                ErrorMessage = "Could not find GeneratedUdf type in compiled assembly",
+                ErrorMessage = "Could not find generated type in compiled assembly",
                 SourceCode = transpileResult.SourceCode
             };
         }
 
-        var coreMethodName = $"{transpileResult.MethodName}_Core";
-        var coreMethod = generatedType.GetMethod(coreMethodName, BindingFlags.Public | BindingFlags.Static);
-
-        if (coreMethod == null)
+        var method = generatedType.GetMethod(transpileResult.MethodName, BindingFlags.Public | BindingFlags.Static);
+        if (method == null)
         {
             return new TestCompilationResult
             {
                 Success = false,
-                ErrorMessage = $"Could not find {coreMethodName} method in compiled assembly",
+                ErrorMessage = $"Could not find {transpileResult.MethodName} method in compiled assembly",
                 SourceCode = transpileResult.SourceCode
             };
         }
@@ -248,12 +206,17 @@ public static class TestHelpers
         return new TestCompilationResult
         {
             Success = true,
-            CoreMethod = coreMethod,
+            CoreMethod = method,
             MethodName = transpileResult.MethodName,
             RequiresObjectModel = transpileResult.RequiresObjectModel,
             SourceCode = transpileResult.SourceCode,
             UsedColumnBindings = transpileResult.UsedColumnBindings
         };
+    }
+
+    private static Type? FindGeneratedType(Assembly assembly)
+    {
+        return assembly.GetExportedTypes().FirstOrDefault();
     }
 }
 
@@ -270,9 +233,6 @@ public class TestCompilationResult
     public string? SourceCode { get; init; }
     public IReadOnlyList<string>? UsedColumnBindings { get; init; }
 
-    /// <summary>
-    ///     Helper to print diagnostic information when a test fails.
-    /// </summary>
     public string GetDiagnostics()
     {
         var sb = new StringBuilder();

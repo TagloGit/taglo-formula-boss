@@ -1,8 +1,7 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 
 using FormulaBoss.Compilation;
-using FormulaBoss.Parsing;
 using FormulaBoss.Transpilation;
 
 namespace FormulaBoss.Interception;
@@ -36,15 +35,12 @@ public record ExpressionContext(
     Dictionary<string, ColumnBindingInfo>? ColumnBindings = null);
 
 /// <summary>
-///     Orchestrates the complete pipeline: parse → transpile → compile → register.
+///     Orchestrates the complete pipeline: detect inputs → emit code → compile → register.
 /// </summary>
 public class FormulaPipeline
 {
-    // Cache for column parameters alongside UDF names
     private readonly Dictionary<string, IReadOnlyList<ColumnParameter>?> _columnParamsCache = new();
     private readonly DynamicCompiler _compiler;
-
-    // Maps UDF names to the expression they were created from, to detect collisions
     private readonly Dictionary<string, string> _registeredUdfExpressions = new();
     private readonly Dictionary<string, string> _udfCache = new();
 
@@ -56,96 +52,66 @@ public class FormulaPipeline
     /// <summary>
     ///     Processes a DSL expression and returns the UDF name to use.
     /// </summary>
-    /// <param name="expression">The DSL expression (without backticks).</param>
-    /// <returns>The pipeline result.</returns>
     public PipelineResult Process(string expression) => Process(expression, null);
 
     /// <summary>
     ///     Processes a DSL expression with optional context for LET integration.
     /// </summary>
-    /// <param name="expression">The DSL expression (without backticks).</param>
-    /// <param name="context">Optional context containing preferred UDF name and known variables.</param>
-    /// <returns>The pipeline result.</returns>
     public PipelineResult Process(string expression, ExpressionContext? context)
     {
-        // For cache key, include preferred name if provided (same expression with different names = different UDFs)
         var cacheKey = context?.PreferredUdfName != null
             ? $"{expression}|{context.PreferredUdfName}"
             : expression;
 
-        // Check cache first
         if (_udfCache.TryGetValue(cacheKey, out var cachedUdfName))
         {
-            // Extract input parameter and column params from cache
             var inputParam = ExtractInputParameter(expression);
             _columnParamsCache.TryGetValue(cacheKey, out var cachedColumnParams);
             return new PipelineResult(true, cachedUdfName, null, inputParam, cachedColumnParams);
         }
 
-        // Step 1: Lex
-        var lexer = new Lexer(expression);
-        var tokens = lexer.ScanTokens();
-
-        // Check for lexer errors
-        var errorToken = tokens.FirstOrDefault(t => t.Type == TokenType.Error);
-        if (errorToken != null)
+        // Step 1: Detect inputs using Roslyn
+        InputDetectionResult detection;
+        try
         {
-            return new PipelineResult(false, null, $"Lexer error: {errorToken.Lexeme}", null);
+            var knownLetVars = context?.ColumnBindings?.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            detection = InputDetector.Detect(expression, knownLetVars);
+        }
+        catch (Exception ex)
+        {
+            return new PipelineResult(false, null, $"Input detection error: {ex.Message}", null);
         }
 
-        // Step 2: Parse (pass source for statement lambda support)
-        var parser = new Parser(tokens, expression);
-        var ast = parser.Parse();
-
-        if (ast == null || parser.Errors.Count > 0)
-        {
-            var errorMsg = parser.Errors.Count > 0
-                ? string.Join("; ", parser.Errors)
-                : "Unknown parse error";
-            return new PipelineResult(false, null, $"Parse error: {errorMsg}", null);
-        }
-
-        // Step 3: Transpile (pass preferred name and column bindings if provided)
-        // Check for name collisions and generate unique name if needed
-        var transpiler = new CSharpTranspiler();
+        // Step 2: Emit C# code
         TranspileResult transpileResult;
         try
         {
             var preferredName = context?.PreferredUdfName;
-
-            // If we have a preferred name, check if it's already registered with a different expression
             if (preferredName != null)
             {
                 preferredName = GetUniqueUdfName(preferredName, expression);
             }
 
-            transpileResult = transpiler.Transpile(ast, expression, preferredName, context?.ColumnBindings);
+            var methodName = preferredName ?? GenerateMethodName(expression);
+            transpileResult = CodeEmitter.Emit(detection, methodName, expression);
         }
         catch (Exception ex)
         {
-            return new PipelineResult(false, null, $"Transpile error: {ex.Message}", null);
+            return new PipelineResult(false, null, $"Code emission error: {ex.Message}", null);
         }
 
-        // Debug: Output the generated source code
         Debug.WriteLine("=== Generated UDF Source Code ===");
         Debug.WriteLine(transpileResult.SourceCode);
         Debug.WriteLine("=== End Generated Code ===");
 
-        // Step 4: Compile and Register
+        // Step 3: Compile and register
         var compileErrors = _compiler.CompileAndRegister(transpileResult.SourceCode, transpileResult.RequiresObjectModel);
-
         if (compileErrors.Count > 0)
         {
             var errorMsg = string.Join("; ", compileErrors);
-            // Add hints for common type-related errors in statement lambdas
-            if (ContainsTypeError(errorMsg))
-            {
-                errorMsg += GetStatementLambdaHint();
-            }
             return new PipelineResult(false, null, $"Compile error: {errorMsg}", null);
         }
 
-        // Track which expression this UDF name was created from
         _registeredUdfExpressions[transpileResult.MethodName] = expression;
 
         // Build column parameters from used column bindings
@@ -169,19 +135,31 @@ public class FormulaPipeline
             }
         }
 
-        // Cache the result
         _udfCache[cacheKey] = transpileResult.MethodName;
         _columnParamsCache[cacheKey] = columnParameters;
 
-        // Extract input parameter from the expression
-        var inputParameter = ExtractInputParameter(expression);
+        var inputParameter = detection.Inputs.Count > 0 ? detection.Inputs[0] : null;
 
         return new PipelineResult(true, transpileResult.MethodName, null, inputParameter, columnParameters);
     }
 
     /// <summary>
-    ///     Gets a unique UDF name, appending a suffix if the preferred name is already taken by a different expression.
+    ///     Generates a method name from the expression when no preferred name is given.
+    ///     Uses the primary input name or a hash-based fallback.
     /// </summary>
+    private static string GenerateMethodName(string expression)
+    {
+        var dotIdx = expression.IndexOf('.');
+        if (dotIdx > 0)
+        {
+            return expression[..dotIdx].Trim();
+        }
+
+        // Fallback: hash-based name
+        var hash = Math.Abs(expression.GetHashCode()).ToString("X8");
+        return $"_UDF_{hash}";
+    }
+
     private string GetUniqueUdfName(string preferredName, string expression)
     {
         var candidateName = preferredName;
@@ -189,13 +167,11 @@ public class FormulaPipeline
 
         while (_registeredUdfExpressions.TryGetValue(SanitizeName(candidateName), out var existingExpression))
         {
-            // If same expression, we can reuse the name (will hit cache anyway)
             if (existingExpression == expression)
             {
                 break;
             }
 
-            // Different expression wants the same name - generate a unique one
             candidateName = $"{preferredName}_{suffix}";
             suffix++;
 
@@ -205,9 +181,6 @@ public class FormulaPipeline
         return candidateName;
     }
 
-    /// <summary>
-    ///     Sanitizes a name to match what CSharpTranspiler.SanitizeUdfName produces.
-    /// </summary>
     private static string SanitizeName(string name)
     {
         var upper = name.ToUpperInvariant();
@@ -232,8 +205,7 @@ public class FormulaPipeline
             str = "_" + str;
         }
 
-        // Must match CSharpTranspiler.SanitizeUdfName reserved name handling
-        if (CSharpTranspiler.IsReservedExcelName(str))
+        if (CodeEmitter.IsReservedExcelName(str))
         {
             str = "_" + str;
         }
@@ -242,50 +214,11 @@ public class FormulaPipeline
     }
 
     /// <summary>
-    ///     Extracts the input parameter (range reference or LET variable) from a DSL expression.
+    ///     Extracts the input parameter from a DSL expression.
     /// </summary>
-    /// <param name="expression">The DSL expression.</param>
     private static string ExtractInputParameter(string expression)
     {
-        // The input parameter is the first identifier before .cells or .values
-        // e.g., "A1:J10.cells.where(...)" → "A1:J10"
-        // e.g., "data.values.where(...)" → "data"
-        // e.g., "coloredCells.select(...)" → "coloredCells"
-
         var dotIndex = expression.IndexOf('.');
         return dotIndex > 0 ? expression[..dotIndex] : expression;
     }
-
-    /// <summary>
-    ///     Checks if an error message contains type-related keywords that suggest
-    ///     the user might need to use helper methods in a statement lambda.
-    /// </summary>
-    private static bool ContainsTypeError(string errorMsg)
-    {
-        var typeKeywords = new[]
-        {
-            "cannot convert",
-            "no implicit conversion",
-            "cannot implicitly convert",
-            "operator",
-            "cannot be applied to operands of type",
-            "does not contain a definition for",
-            "cannot be used as",
-            "cannot assign"
-        };
-
-        return typeKeywords.Any(keyword =>
-            errorMsg.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    ///     Returns a hint message about available helper methods for statement lambdas.
-    /// </summary>
-    private static string GetStatementLambdaHint() =>
-        "\n\nHint: In statement lambdas, use helper methods for type conversion:\n" +
-        "  Num(x) - convert to double\n" +
-        "  Str(x) - convert to string\n" +
-        "  Bool(x) - convert to bool\n" +
-        "  Int(x) - convert to int\n" +
-        "  IsEmpty(x) - check if null/empty";
 }
