@@ -18,7 +18,9 @@ public record PipelineResult(
     string? UdfName,
     string? ErrorMessage,
     string? InputParameter,
-    IReadOnlyList<ColumnParameter>? ColumnParameters = null);
+    IReadOnlyList<ColumnParameter>? ColumnParameters = null,
+    IReadOnlyList<string>? AdditionalInputs = null,
+    IReadOnlyList<string>? FreeVariables = null);
 
 /// <summary>
 ///     Context for processing a DSL expression, used for LET integration.
@@ -38,9 +40,11 @@ public record ExpressionContext(
 /// </summary>
 public class FormulaPipeline
 {
-    // Cache for column parameters and input parameters alongside UDF names
+    // Cache for column parameters, input parameters, additional inputs, and free variables
+    private readonly Dictionary<string, IReadOnlyList<string>?> _additionalInputsCache = new();
     private readonly Dictionary<string, IReadOnlyList<ColumnParameter>?> _columnParamsCache = new();
     private readonly DynamicCompiler _compiler;
+    private readonly Dictionary<string, IReadOnlyList<string>?> _freeVariablesCache = new();
     private readonly Dictionary<string, string?> _inputParamCache = new();
 
     // Maps UDF names to the expression they were created from, to detect collisions
@@ -77,7 +81,10 @@ public class FormulaPipeline
         {
             _inputParamCache.TryGetValue(cacheKey, out var cachedInputParam);
             _columnParamsCache.TryGetValue(cacheKey, out var cachedColumnParams);
-            return new PipelineResult(true, cachedUdfName, null, cachedInputParam, cachedColumnParams);
+            _additionalInputsCache.TryGetValue(cacheKey, out var cachedAdditionalInputs);
+            _freeVariablesCache.TryGetValue(cacheKey, out var cachedFreeVars);
+            return new PipelineResult(true, cachedUdfName, null, cachedInputParam, cachedColumnParams,
+                cachedAdditionalInputs, cachedFreeVars);
         }
 
         // Step 1: Detect inputs using Roslyn
@@ -155,7 +162,7 @@ public class FormulaPipeline
             }
         }
 
-        // Extract input parameter from detection result
+        // Extract input parameters from detection result
         var inputParameter = detection.Inputs.Count > 0 ? detection.Inputs[0] : null;
         // Map range ref placeholders back to original range refs
         if (inputParameter != null && detection.RangeRefMap.TryGetValue(inputParameter, out var originalRef))
@@ -163,12 +170,26 @@ public class FormulaPipeline
             inputParameter = originalRef;
         }
 
+        // Additional inputs beyond the first (for multi-input explicit lambdas)
+        var additionalInputs = detection.Inputs.Count > 1
+            ? detection.Inputs.Skip(1).Select(i =>
+                detection.RangeRefMap.TryGetValue(i, out var orig) ? orig : i).ToList()
+            : null;
+
+        // Free variables that need to be passed as arguments (they reference LET variables)
+        var freeVariables = detection.FreeVariables.Count > 0
+            ? detection.FreeVariables.ToList()
+            : null;
+
         // Cache the result
         _udfCache[cacheKey] = transpileResult.MethodName;
         _columnParamsCache[cacheKey] = columnParameters;
         _inputParamCache[cacheKey] = inputParameter;
+        _additionalInputsCache[cacheKey] = additionalInputs;
+        _freeVariablesCache[cacheKey] = freeVariables;
 
-        return new PipelineResult(true, transpileResult.MethodName, null, inputParameter, columnParameters);
+        return new PipelineResult(true, transpileResult.MethodName, null, inputParameter, columnParameters,
+            additionalInputs, freeVariables);
     }
 
     /// <summary>

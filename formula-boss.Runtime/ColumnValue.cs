@@ -116,12 +116,30 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
     public static ColumnValue operator *(int a, ColumnValue b) => new(a * b.ToDouble());
     public static ColumnValue operator /(int a, ColumnValue b) => new(a / b.ToDouble());
 
-    public int CompareTo(ColumnValue? other) =>
-        other is null ? 1 : ToDouble().CompareTo(other.ToDouble());
+    public int CompareTo(ColumnValue? other)
+    {
+        if (other is null) return 1;
+        // Try numeric comparison first, fall back to string comparison
+        if (Value is double or int or long or float or decimal
+            && other.Value is double or int or long or float or decimal)
+        {
+            return ToDouble().CompareTo(other.ToDouble());
+        }
 
-    public int CompareTo(object? obj) => obj is ColumnValue cv
-        ? CompareTo(cv)
-        : Convert.ToDouble(Value).CompareTo(Convert.ToDouble(obj));
+        return string.Compare(Value?.ToString(), other.Value?.ToString(), StringComparison.Ordinal);
+    }
+
+    public int CompareTo(object? obj)
+    {
+        if (obj is ColumnValue cv) return CompareTo(cv);
+        if (Value is double or int or long or float or decimal)
+        {
+            try { return Convert.ToDouble(Value).CompareTo(Convert.ToDouble(obj)); }
+            catch { /* fall through to string */ }
+        }
+
+        return string.Compare(Value?.ToString(), obj?.ToString(), StringComparison.Ordinal);
+    }
 
     public override bool Equals(object? obj) =>
         obj is ColumnValue other ? Equals(Value, other.Value) : Equals(Value, obj);
