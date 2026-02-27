@@ -27,7 +27,9 @@ public record ProcessedBinding(
     string OriginalExpression,
     string UdfName,
     string InputParameter,
-    IReadOnlyList<ColumnParameter>? ColumnParameters = null);
+    IReadOnlyList<ColumnParameter>? ColumnParameters = null,
+    IReadOnlyList<string>? AdditionalInputs = null,
+    IReadOnlyList<string>? FreeVariables = null);
 
 /// <summary>
 /// Rewrites LET formulas after backtick expressions have been processed.
@@ -148,6 +150,24 @@ public static class LetFormulaRewriter
     private static void AppendUdfCall(StringBuilder sb, ProcessedBinding processed)
     {
         sb.Append(processed.UdfName).Append('(').Append(processed.InputParameter);
+
+        // Additional inputs (for multi-input explicit lambdas like (tbl, maxVal) => ...)
+        if (processed.AdditionalInputs != null)
+        {
+            foreach (var input in processed.AdditionalInputs)
+            {
+                sb.Append(", ").Append(input);
+            }
+        }
+
+        // Free variables (references to LET variables used in the expression)
+        if (processed.FreeVariables != null)
+        {
+            foreach (var freeVar in processed.FreeVariables)
+            {
+                sb.Append(", ").Append(freeVar);
+            }
+        }
 
         if (processed.ColumnParameters != null && processed.ColumnParameters.Count > 0)
         {

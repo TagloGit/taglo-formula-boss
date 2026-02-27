@@ -206,10 +206,12 @@ public class FormulaInterceptor : IDisposable
                         dslExpression,
                         result.UdfName,
                         result.InputParameter ?? variableName,
-                        result.ColumnParameters);
+                        result.ColumnParameters,
+                        result.AdditionalInputs,
+                        result.FreeVariables);
 
                     Debug.WriteLine(
-                        $"LET UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
+                        $"LET UDF generated: {result.UdfName}({result.InputParameter}{(result.AdditionalInputs != null ? ", " + string.Join(", ", result.AdditionalInputs) : "")}) with {result.ColumnParameters?.Count ?? 0} column params, {result.FreeVariables?.Count ?? 0} free vars");
                 }
                 else
                 {
@@ -239,10 +241,12 @@ public class FormulaInterceptor : IDisposable
                         dslExpression,
                         result.UdfName,
                         result.InputParameter ?? "_result",
-                        result.ColumnParameters);
+                        result.ColumnParameters,
+                        result.AdditionalInputs,
+                        result.FreeVariables);
 
                     Debug.WriteLine(
-                        $"LET result UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params");
+                        $"LET result UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params, {result.FreeVariables?.Count ?? 0} free vars");
                 }
                 else
                 {

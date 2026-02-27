@@ -317,4 +317,44 @@ public class LetFormulaRewriterTests
     }
 
     #endregion
+
+    #region Multi-Input Lambdas
+
+    [Fact]
+    public void Rewrite_MultiInput_PassesAdditionalInputsToUdf()
+    {
+        var formula = "=LET(data, A1:A10, maxVal, 10, filtered, `(data, maxVal) => data.Rows.Where(r => r[0] > maxVal)`, filtered)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["filtered"] = new("filtered", "(data, maxVal) => data.Rows.Where(r => r[0] > maxVal)",
+                "FILTERED", "data", null, new List<string> { "maxVal" })
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
+
+        // UDF call should include both inputs
+        Assert.Contains("FILTERED(data, maxVal)", result);
+    }
+
+    [Fact]
+    public void Rewrite_FreeVariables_PassedAsUdfArguments()
+    {
+        var formula = "=LET(data, A1:A10, threshold, 50, filtered, `data.Rows.Where(r => r[0] > threshold)`, filtered)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["filtered"] = new("filtered", "data.Rows.Where(r => r[0] > threshold)",
+                "FILTERED", "data", null, null, new List<string> { "threshold" })
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings);
+
+        // UDF call should include the free variable
+        Assert.Contains("FILTERED(data, threshold)", result);
+    }
+
+    #endregion
 }
