@@ -1,5 +1,4 @@
-﻿using FormulaBoss.Interception;
-using FormulaBoss.Transpilation;
+﻿using FormulaBoss.Transpilation;
 
 using Xunit;
 using Xunit.Abstractions;

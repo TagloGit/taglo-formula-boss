@@ -1,9 +1,9 @@
-using System.Text;
+﻿using System.Text;
 
 namespace FormulaBoss.Interception;
 
 /// <summary>
-/// Information about a processed LET binding for rewriting.
+///     Information about a processed LET binding for rewriting.
 /// </summary>
 /// <param name="VariableName">The original LET variable name.</param>
 /// <param name="OriginalExpression">The original DSL expression (without backticks).</param>
@@ -16,8 +16,8 @@ public record ProcessedBinding(
     IReadOnlyList<string> Parameters);
 
 /// <summary>
-/// Rewrites LET formulas after backtick expressions have been processed.
-/// Inserts _src_* documentation variables and replaces backtick expressions with UDF calls.
+///     Rewrites LET formulas after backtick expressions have been processed.
+///     Inserts _src_* documentation variables and replaces backtick expressions with UDF calls.
 /// </summary>
 public static class LetFormulaRewriter
 {
@@ -25,9 +25,9 @@ public static class LetFormulaRewriter
     private const char NewLine = '\n'; // Use LF only - Excel COM doesn't like \r\n
 
     /// <summary>
-    /// Rewrites a LET formula, inserting _src_ documentation variables
-    /// and replacing backtick expressions with UDF calls.
-    /// Formats output with one binding per line for readability.
+    ///     Rewrites a LET formula, inserting _src_ documentation variables
+    ///     and replacing backtick expressions with UDF calls.
+    ///     Formats output with one binding per line for readability.
     /// </summary>
     public static string Rewrite(
         LetStructure original,
@@ -64,7 +64,8 @@ public static class LetFormulaRewriter
         {
             // Result expression had a backtick - add _src_ doc and binding, then reference it
             sb.Append(Indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
-            sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",").Append(NewLine);
+            sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",")
+                .Append(NewLine);
 
             sb.Append(Indent).Append(processedResult.VariableName).Append(", ");
             AppendUdfCall(sb, processedResult);
@@ -83,7 +84,7 @@ public static class LetFormulaRewriter
     }
 
     /// <summary>
-    /// Appends a UDF call with all parameters.
+    ///     Appends a UDF call with all parameters.
     /// </summary>
     private static void AppendUdfCall(StringBuilder sb, ProcessedBinding processed)
     {
@@ -91,15 +92,16 @@ public static class LetFormulaRewriter
 
         for (var i = 0; i < processed.Parameters.Count; i++)
         {
-            if (i > 0) sb.Append(", ");
+            if (i > 0)
+            {
+                sb.Append(", ");
+            }
+
             sb.Append(processed.Parameters[i]);
         }
 
         sb.Append(')');
     }
 
-    private static string EscapeForExcelString(string value)
-    {
-        return value.Replace("\"", "\"\"");
-    }
+    private static string EscapeForExcelString(string value) => value.Replace("\"", "\"\"");
 }
