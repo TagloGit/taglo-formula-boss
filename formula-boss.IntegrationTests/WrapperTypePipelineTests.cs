@@ -45,8 +45,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(3, arr[0, 0]);
+        Assert.Equal(3, result);
     }
 
     [Fact]
@@ -59,8 +58,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(60.0, arr[0, 0]);
+        Assert.Equal(60.0, result);
     }
 
     [Fact]
@@ -74,8 +72,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(2, arr[0, 0]);
+        Assert.Equal(2, result);
     }
 
     #endregion
@@ -163,8 +160,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(3, arr[0, 0]);
+        Assert.Equal(3, result);
     }
 
     #endregion
@@ -181,8 +177,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(20.0, arr[0, 0]);
+        Assert.Equal(20.0, result);
     }
 
     [Fact]
@@ -195,8 +190,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(1.0, arr[0, 0]);
+        Assert.Equal(1.0, result);
     }
 
     [Fact]
@@ -209,8 +203,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(8.0, arr[0, 0]);
+        Assert.Equal(8.0, result);
     }
 
     #endregion
@@ -328,8 +321,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(2, arr[0, 0]); // 15 and 25
+        Assert.Equal(2, result); // 15 and 25
     }
 
     #endregion

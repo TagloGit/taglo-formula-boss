@@ -81,11 +81,11 @@ public static class RuntimeHelpers
     }
 
     /// <summary>
-    ///     Delegate that extracts column headers from an ExcelReference.
-    ///     Reads the first row of the referenced range to get header names.
+    ///     Delegate that extracts column headers from an already-extracted values array.
+    ///     Reads the first row to get header names.
     ///     Initialized by <c>AddIn.AutoOpen</c>.
     /// </summary>
-    public static Func<object, string[]?>? GetHeadersDelegate { get; set; }
+    public static Func<object[,], string[]?>? GetHeadersDelegate { get; set; }
 
     /// <summary>
     ///     Delegate that extracts the origin (sheet name, top row, left col) from an ExcelReference.
