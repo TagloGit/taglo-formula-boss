@@ -1,4 +1,4 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 public class ExcelScalar : ExcelValue, IExcelRange
 {
@@ -31,8 +31,10 @@ public class ExcelScalar : ExcelValue, IExcelRange
         get
         {
             if (_origin == null || RuntimeBridge.GetCell == null)
+            {
                 throw new InvalidOperationException(
                     "Cell access requires a macro-type UDF with range position context.");
+            }
 
             yield return RuntimeBridge.GetCell(_origin.SheetName, _origin.TopRow, _origin.LeftCol);
         }
@@ -45,7 +47,7 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override IExcelRange Select(Func<ExcelValue, ExcelValue> selector)
     {
         var result = selector(this);
-        return result as IExcelRange ?? new ExcelScalar(result.RawValue);
+        return result;
     }
 
     public override IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector)
@@ -53,7 +55,9 @@ public class ExcelScalar : ExcelValue, IExcelRange
         var results = selector(this).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
 
         return new ExcelArray(array);
     }
@@ -76,7 +80,7 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override IExcelRange Map(Func<ExcelValue, ExcelValue> selector)
     {
         var result = selector(this);
-        return result as IExcelRange ?? new ExcelScalar(result.RawValue);
+        return result;
     }
 
     public override IExcelRange OrderBy(Func<ExcelValue, object> keySelector) => this;
@@ -91,6 +95,6 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
     {
         var result = func(seed, this);
-        return result as IExcelRange ?? new ExcelScalar(result.RawValue);
+        return result;
     }
 }

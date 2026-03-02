@@ -1,3 +1,5 @@
+﻿using System.Collections;
+
 namespace FormulaBoss.Runtime;
 
 /// <summary>
@@ -9,8 +11,8 @@ namespace FormulaBoss.Runtime;
 /// </summary>
 public class RowCollection : IEnumerable<Row>
 {
-    private readonly List<Row> _rows;
     private readonly Dictionary<string, int>? _columnMap;
+    private readonly List<Row> _rows;
 
     public RowCollection(IEnumerable<Row> rows, Dictionary<string, int>? columnMap = null)
     {
@@ -19,7 +21,7 @@ public class RowCollection : IEnumerable<Row>
     }
 
     public IEnumerator<Row> GetEnumerator() => _rows.GetEnumerator();
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     public RowCollection Where(Func<dynamic, bool> predicate) =>
         new(_rows.Where(r => predicate(r)), _columnMap);
@@ -28,7 +30,9 @@ public class RowCollection : IEnumerable<Row>
     {
         var rawResults = _rows.Select(r => selector(r)).ToList();
         if (rawResults.Count == 0)
+        {
             return new ExcelArray(new object?[0, 1]);
+        }
 
         // Coerce results to ExcelValue
         var results = rawResults.Select(CoerceToExcelValue).ToList();
@@ -41,10 +45,16 @@ public class RowCollection : IEnumerable<Row>
             for (var r = 0; r < results.Count; r++)
             {
                 if (results[r].RawValue is object?[,] rowArr)
+                {
                     for (var c = 0; c < Math.Min(rowArr.GetLength(1), cols); c++)
+                    {
                         array[r, c] = rowArr[0, c];
+                    }
+                }
                 else
+                {
                     array[r, 0] = results[r].RawValue;
+                }
             }
 
             return new ExcelArray(array, _columnMap);
@@ -52,7 +62,9 @@ public class RowCollection : IEnumerable<Row>
 
         var result = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             result[i, 0] = results[i].RawValue is object?[,] arr ? arr[0, 0] : results[i].RawValue;
+        }
 
         return new ExcelArray(result);
     }
@@ -88,7 +100,9 @@ public class RowCollection : IEnumerable<Row>
         {
             var key = string.Join("|", Enumerable.Range(0, row.ColumnCount).Select(i => row[i].Value));
             if (seen.Add(key))
+            {
                 distinct.Add(row);
+            }
         }
 
         return new RowCollection(distinct, _columnMap);
@@ -100,13 +114,17 @@ public class RowCollection : IEnumerable<Row>
     public IExcelRange ToRange()
     {
         if (_rows.Count == 0)
+        {
             return new ExcelArray(new object?[0, 1], _columnMap);
+        }
 
         var cols = _rows[0].ColumnCount;
         var result = new object?[_rows.Count, cols];
         for (var r = 0; r < _rows.Count; r++)
             for (var c = 0; c < cols; c++)
+            {
                 result[r, c] = _rows[r][c].Value;
+            }
 
         return new ExcelArray(result, _columnMap);
     }

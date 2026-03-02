@@ -1,4 +1,4 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 public class ExcelArray : ExcelValue, IExcelRange
 {
@@ -30,7 +30,9 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var values = new object?[cols];
                 for (var c = 0; c < cols; c++)
+                {
                     values[c] = _data[r, c];
+                }
 
                 var rowIdx = r;
                 Func<int, Cell>? cellResolver = _origin != null && RuntimeBridge.GetCell != null
@@ -49,27 +51,20 @@ public class ExcelArray : ExcelValue, IExcelRange
         get
         {
             if (_origin == null || RuntimeBridge.GetCell == null)
+            {
                 throw new InvalidOperationException(
                     "Cell access requires a macro-type UDF with range position context.");
+            }
 
             var rows = _data.GetLength(0);
             var cols = _data.GetLength(1);
             for (var r = 0; r < rows; r++)
                 for (var c = 0; c < cols; c++)
+                {
                     yield return RuntimeBridge.GetCell(_origin.SheetName,
                         _origin.TopRow + r, _origin.LeftCol + c);
+                }
         }
-    }
-
-    // --- Element-wise operations (iterate cell-by-cell, row-major) ---
-
-    private IEnumerable<ExcelScalar> ElementWise()
-    {
-        var rows = _data.GetLength(0);
-        var cols = _data.GetLength(1);
-        for (var r = 0; r < rows; r++)
-            for (var c = 0; c < cols; c++)
-                yield return new ExcelScalar(_data[r, c]);
     }
 
     public override IExcelRange Where(Func<ExcelValue, bool> predicate)
@@ -77,7 +72,10 @@ public class ExcelArray : ExcelValue, IExcelRange
         var results = ElementWise().Where(e => predicate(e)).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 
@@ -85,11 +83,15 @@ public class ExcelArray : ExcelValue, IExcelRange
     {
         var results = ElementWise().Select(e => selector(e)).ToList();
         if (results.Count == 0)
+        {
             return new ExcelArray(new object?[0, 1]);
+        }
 
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue is object?[,] arr ? arr[0, 0] : results[i].RawValue;
+        }
 
         return new ExcelArray(array);
     }
@@ -99,7 +101,9 @@ public class ExcelArray : ExcelValue, IExcelRange
         var results = ElementWise().SelectMany(e => selector(e)).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
 
         return new ExcelArray(array);
     }
@@ -184,7 +188,9 @@ public class ExcelArray : ExcelValue, IExcelRange
         {
             var key = el.RawValue?.ToString() ?? "";
             if (seen.Add(key))
+            {
                 distinct.Add(el);
+            }
         }
 
         return FromElements(distinct);
@@ -194,7 +200,10 @@ public class ExcelArray : ExcelValue, IExcelRange
     {
         var acc = seed;
         foreach (var el in ElementWise())
+        {
             acc = func(acc, el);
+        }
+
         return acc;
     }
 
@@ -210,16 +219,34 @@ public class ExcelArray : ExcelValue, IExcelRange
 
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
+        {
             array[i, 0] = results[i].RawValue;
+        }
 
         return new ExcelArray(array);
+    }
+
+    // --- Element-wise operations (iterate cell-by-cell, row-major) ---
+
+    private IEnumerable<ExcelScalar> ElementWise()
+    {
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                yield return new ExcelScalar(_data[r, c]);
+            }
     }
 
     private double AggregateNumeric(double seed, Func<double, double, double> func)
     {
         var result = seed;
         foreach (var el in ElementWise())
+        {
             result = func(result, Convert.ToDouble(el.RawValue));
+        }
+
         return result;
     }
 
@@ -227,7 +254,10 @@ public class ExcelArray : ExcelValue, IExcelRange
     {
         var array = new object?[elements.Count, 1];
         for (var i = 0; i < elements.Count; i++)
+        {
             array[i, 0] = elements[i].RawValue;
+        }
+
         return new ExcelArray(array);
     }
 }

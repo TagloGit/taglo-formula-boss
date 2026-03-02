@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -31,7 +31,7 @@ public class ExcelTableTests
     public void Rows_HaveDynamicColumnAccess()
     {
         var table = MakeTable();
-        dynamic row = table.Rows.First(r => true);
+        dynamic row = table.Rows.First(_ => true);
         Assert.Equal("Alice", (ColumnValue)row.Name);
     }
 
