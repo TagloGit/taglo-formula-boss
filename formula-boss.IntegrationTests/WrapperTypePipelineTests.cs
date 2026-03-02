@@ -237,7 +237,7 @@ public class WrapperTypePipelineTests
     {
         var values = new object[,] { { 30.0 }, { 10.0 }, { 20.0 } };
         var compilation = NewPipelineTestHelpers.CompileExpression(
-            "tbl.OrderBy(r => (double)r[0])");
+            "tbl.Rows.OrderBy(r => (double)r[0]).ToRange()");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
