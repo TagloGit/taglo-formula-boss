@@ -150,7 +150,7 @@ public class ExcelScalarTests
         var scalar = new ExcelScalar(5.0);
         var result = scalar.Aggregate(
             new ExcelScalar(10.0),
-            (acc, row) => new ExcelScalar((double)acc + (double)row[0]));
+            (acc, cell) => new ExcelScalar((double)acc + (double)cell));
         Assert.Equal(15.0, (double)result);
     }
 }

@@ -135,6 +135,43 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 }
             };
 
+            // Initialize cell resolver delegate for object model access (formatting, color, etc.)
+            RuntimeBridge.GetCell = (sheetName, row, col) =>
+            {
+                try
+                {
+                    dynamic app = ExcelDnaUtil.Application;
+                    dynamic sheet = app.Sheets[sheetName];
+                    dynamic cell = sheet.Cells[row, col];
+                    dynamic interior = cell.Interior;
+                    dynamic font = cell.Font;
+                    var result = new Cell
+                    {
+                        Value = cell.Value2,
+                        Formula = cell.Formula ?? "",
+                        Format = cell.NumberFormat ?? "",
+                        Address = cell.Address ?? "",
+                        Row = row,
+                        Col = col,
+                        Interior = new Interior(
+                            (int)(interior.ColorIndex ?? 0),
+                            (int)(double)(interior.Color ?? 0.0)),
+                        Font = new CellFont(
+                            (bool)(font.Bold ?? false),
+                            (bool)(font.Italic ?? false),
+                            (double)(font.Size ?? 11.0),
+                            (string)(font.Name ?? "Calibri"),
+                            (int)(double)(font.Color ?? 0.0))
+                    };
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GetCell error: {ex.Message}");
+                    return new Cell { Row = row, Col = col };
+                }
+            };
+
             // Initialize result conversion delegate — delegates to shared ResultConverter.Convert()
             RuntimeHelpers.ToResultDelegate = result => ResultConverter.Convert(result);
 
