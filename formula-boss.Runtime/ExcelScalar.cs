@@ -24,7 +24,9 @@ public class ExcelScalar : ExcelValue, IExcelRange
         }
     }
 
-    public IEnumerable<Cell> Cells
+    public override RowCollection Rows => new(new[] { SingleRow });
+
+    public override IEnumerable<Cell> Cells
     {
         get
         {
@@ -38,23 +40,19 @@ public class ExcelScalar : ExcelValue, IExcelRange
         }
     }
 
-    public IEnumerable<Row> Rows
+    // Element-wise: a scalar is a single element
+    public override IExcelRange Where(Func<ExcelValue, bool> predicate) =>
+        predicate(this) ? this : new ExcelArray(new object[0, 0]);
+
+    public override IExcelRange Select(Func<ExcelValue, ExcelValue> selector)
     {
-        get { yield return SingleRow; }
+        var result = selector(this);
+        return result;
     }
 
-    public IExcelRange Where(Func<Row, bool> predicate) =>
-        predicate(SingleRow) ? this : new ExcelArray(new object[0, 0]);
-
-    public IExcelRange Select(Func<Row, ExcelValue> selector)
+    public override IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector)
     {
-        var result = selector(SingleRow);
-        return result as IExcelRange ?? new ExcelScalar(result.RawValue);
-    }
-
-    public IExcelRange SelectMany(Func<Row, IEnumerable<ExcelValue>> selector)
-    {
-        var results = selector(SingleRow).ToList();
+        var results = selector(this).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
         {
@@ -64,39 +62,39 @@ public class ExcelScalar : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
-    public bool Any(Func<Row, bool> predicate) => predicate(SingleRow);
-    public bool All(Func<Row, bool> predicate) => predicate(SingleRow);
+    public override bool Any(Func<ExcelValue, bool> predicate) => predicate(this);
+    public override bool All(Func<ExcelValue, bool> predicate) => predicate(this);
 
-    public ExcelValue First(Func<Row, bool> predicate) =>
-        predicate(SingleRow) ? this : throw new InvalidOperationException("No matching element.");
+    public override ExcelValue First(Func<ExcelValue, bool> predicate) =>
+        predicate(this) ? this : throw new InvalidOperationException("No matching element.");
 
-    public ExcelValue? FirstOrDefault(Func<Row, bool> predicate) =>
-        predicate(SingleRow) ? this : null;
+    public override ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate) =>
+        predicate(this) ? this : null;
 
-    public int Count() => 1;
-    public ExcelScalar Sum() => new(Convert.ToDouble(_value));
-    public ExcelScalar Min() => new(Convert.ToDouble(_value));
-    public ExcelScalar Max() => new(Convert.ToDouble(_value));
-    public ExcelScalar Average() => new(Convert.ToDouble(_value));
+    public override int Count() => 1;
+    public override ExcelScalar Sum() => new(Convert.ToDouble(_value));
+    public override ExcelScalar Min() => new(Convert.ToDouble(_value));
+    public override ExcelScalar Max() => new(Convert.ToDouble(_value));
+    public override ExcelScalar Average() => new(Convert.ToDouble(_value));
 
-    public IExcelRange Map(Func<Row, ExcelValue> selector)
+    public override IExcelRange Map(Func<ExcelValue, ExcelValue> selector)
     {
-        var result = selector(SingleRow);
-        return result as IExcelRange ?? new ExcelScalar(result.RawValue);
+        var result = selector(this);
+        return result;
     }
 
-    public IExcelRange OrderBy(Func<Row, object> keySelector) => this;
-    public IExcelRange OrderByDescending(Func<Row, object> keySelector) => this;
-    public IExcelRange Take(int count) => count == 0 ? new ExcelArray(new object[0, 0]) : this;
-    public IExcelRange Skip(int count) => count == 0 ? this : new ExcelArray(new object[0, 0]);
-    public IExcelRange Distinct() => this;
+    public override IExcelRange OrderBy(Func<ExcelValue, object> keySelector) => this;
+    public override IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector) => this;
+    public override IExcelRange Take(int count) => count == 0 ? new ExcelArray(new object[0, 0]) : this;
+    public override IExcelRange Skip(int count) => count == 0 ? this : new ExcelArray(new object[0, 0]);
+    public override IExcelRange Distinct() => this;
 
-    public ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func) =>
-        func(seed, SingleRow);
+    public override ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func) =>
+        func(seed, this);
 
-    public IExcelRange Scan(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func)
+    public override IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
     {
-        var result = func(seed, SingleRow);
-        return result as IExcelRange ?? new ExcelScalar(result.RawValue);
+        var result = func(seed, this);
+        return result;
     }
 }

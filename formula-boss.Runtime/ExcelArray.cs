@@ -19,13 +19,14 @@ public class ExcelArray : ExcelValue, IExcelRange
     public int RowCount => _data.GetLength(0);
     public int ColCount => _data.GetLength(1);
 
-    public IEnumerable<Row> Rows
+    public override RowCollection Rows
     {
         get
         {
-            var rows = _data.GetLength(0);
+            var rowCount = _data.GetLength(0);
             var cols = _data.GetLength(1);
-            for (var r = 0; r < rows; r++)
+            var rows = new List<Row>(rowCount);
+            for (var r = 0; r < rowCount; r++)
             {
                 var values = new object?[cols];
                 for (var c = 0; c < cols; c++)
@@ -38,12 +39,14 @@ public class ExcelArray : ExcelValue, IExcelRange
                     ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
                         _origin.TopRow + rowIdx, _origin.LeftCol + colIdx)
                     : null;
-                yield return new Row(values, _columnMap, cellResolver);
+                rows.Add(new Row(values, _columnMap, cellResolver));
             }
+
+            return new RowCollection(rows, _columnMap);
         }
     }
 
-    public IEnumerable<Cell> Cells
+    public override IEnumerable<Cell> Cells
     {
         get
         {
@@ -64,54 +67,9 @@ public class ExcelArray : ExcelValue, IExcelRange
         }
     }
 
-    public IExcelRange Where(Func<Row, bool> predicate) =>
-        FromRows(Rows.Where(predicate));
-
-    // Origin is not propagated — projected values don't map to original cell positions.
-    public IExcelRange Select(Func<Row, ExcelValue> selector)
+    public override IExcelRange Where(Func<ExcelValue, bool> predicate)
     {
-        var results = Rows.Select(selector).ToList();
-        if (results.Count == 0)
-        {
-            return new ExcelArray(new object?[0, ColCount]);
-        }
-
-        // Check if first result is multi-column (e.g., identity select returning full rows)
-        if (results[0].RawValue is object?[,] firstArr && firstArr.GetLength(1) > 1)
-        {
-            var cols = firstArr.GetLength(1);
-            var array = new object?[results.Count, cols];
-            for (var r = 0; r < results.Count; r++)
-            {
-                if (results[r].RawValue is object?[,] rowArr)
-                {
-                    for (var c = 0; c < Math.Min(rowArr.GetLength(1), cols); c++)
-                    {
-                        array[r, c] = rowArr[0, c];
-                    }
-                }
-                else
-                {
-                    array[r, 0] = results[r].RawValue;
-                }
-            }
-
-            return new ExcelArray(array, _columnMap);
-        }
-
-        var result = new object?[results.Count, 1];
-        for (var i = 0; i < results.Count; i++)
-        {
-            result[i, 0] = results[i].RawValue is object?[,] arr ? arr[0, 0] : results[i].RawValue;
-        }
-
-        return new ExcelArray(result);
-    }
-
-    // Origin is not propagated — projected values don't map to original cell positions.
-    public IExcelRange SelectMany(Func<Row, IEnumerable<ExcelValue>> selector)
-    {
-        var results = Rows.SelectMany(selector).ToList();
+        var results = ElementWise().Where(e => predicate(e)).ToList();
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
         {
@@ -121,114 +79,141 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
-    public bool Any(Func<Row, bool> predicate) => Rows.Any(predicate);
-    public bool All(Func<Row, bool> predicate) => Rows.All(predicate);
-
-    public ExcelValue First(Func<Row, bool> predicate)
+    public override IExcelRange Select(Func<ExcelValue, ExcelValue> selector)
     {
-        var row = Rows.First(predicate);
-        return RowToValue(row);
+        var results = ElementWise().Select(e => selector(e)).ToList();
+        if (results.Count == 0)
+        {
+            return new ExcelArray(new object?[0, 1]);
+        }
+
+        var array = new object?[results.Count, 1];
+        for (var i = 0; i < results.Count; i++)
+        {
+            array[i, 0] = results[i].RawValue is object?[,] arr ? arr[0, 0] : results[i].RawValue;
+        }
+
+        return new ExcelArray(array);
     }
 
-    public ExcelValue? FirstOrDefault(Func<Row, bool> predicate)
+    public override IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector)
     {
-        var row = Rows.FirstOrDefault(predicate);
-        return row == null ? null : RowToValue(row);
+        var results = ElementWise().SelectMany(e => selector(e)).ToList();
+        var array = new object?[results.Count, 1];
+        for (var i = 0; i < results.Count; i++)
+        {
+            array[i, 0] = results[i].RawValue;
+        }
+
+        return new ExcelArray(array);
     }
 
-    public int Count() => _data.GetLength(0);
+    public override bool Any(Func<ExcelValue, bool> predicate) =>
+        ElementWise().Any(e => predicate(e));
 
-    public ExcelScalar Sum() => new(AggregateNumeric(0.0, (acc, v) => acc + v));
-    public ExcelScalar Min() => new(AggregateNumeric(double.MaxValue, Math.Min));
-    public ExcelScalar Max() => new(AggregateNumeric(double.MinValue, Math.Max));
+    public override bool All(Func<ExcelValue, bool> predicate) =>
+        ElementWise().All(e => predicate(e));
 
-    public ExcelScalar Average()
+    public override ExcelValue First(Func<ExcelValue, bool> predicate) =>
+        ElementWise().First(e => predicate(e));
+
+    public override ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate) =>
+        ElementWise().FirstOrDefault(e => predicate(e));
+
+    public override int Count() => _data.GetLength(0) * _data.GetLength(1);
+
+    public override ExcelScalar Sum() => new(AggregateNumeric(0.0, (acc, v) => acc + v));
+    public override ExcelScalar Min() => new(AggregateNumeric(double.MaxValue, Math.Min));
+    public override ExcelScalar Max() => new(AggregateNumeric(double.MinValue, Math.Max));
+
+    public override ExcelScalar Average()
     {
         var count = 0;
         var sum = 0.0;
-        foreach (var row in Rows)
+        foreach (var el in ElementWise())
         {
-            for (var c = 0; c < row.ColumnCount; c++)
-            {
-                sum += Convert.ToDouble(row[c].Value);
-                count++;
-            }
+            sum += Convert.ToDouble(el.RawValue);
+            count++;
         }
 
         return new ExcelScalar(count == 0 ? 0.0 : sum / count);
     }
 
-    public IExcelRange Map(Func<Row, ExcelValue> selector)
+    public override IExcelRange Map(Func<ExcelValue, ExcelValue> selector)
     {
-        var rows = Rows.ToList();
-        var result = new object?[rows.Count, ColCount];
-        for (var r = 0; r < rows.Count; r++)
-        {
-            var mapped = selector(rows[r]);
-            if (mapped.RawValue is object?[,] arr)
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        var result = new object?[rows, cols];
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
             {
-                var cols = Math.Min(arr.GetLength(1), ColCount);
-                for (var c = 0; c < cols; c++)
-                {
-                    result[r, c] = arr[0, c];
-                }
+                var mapped = selector(new ExcelScalar(_data[r, c]));
+                result[r, c] = mapped.RawValue is object?[,] arr ? arr[0, 0] : mapped.RawValue;
             }
-            else
-            {
-                result[r, 0] = mapped.RawValue;
-            }
-        }
 
         return new ExcelArray(result, _columnMap);
     }
 
-    public IExcelRange OrderBy(Func<Row, object> keySelector) =>
-        FromRows(Rows.OrderBy(keySelector));
-
-    public IExcelRange OrderByDescending(Func<Row, object> keySelector) =>
-        FromRows(Rows.OrderByDescending(keySelector));
-
-    public IExcelRange Take(int count)
+    public override IExcelRange OrderBy(Func<ExcelValue, object> keySelector)
     {
-        var rows = Rows.ToList();
-        var taken = count >= 0 ? rows.Take(count) : rows.TakeLast(-count);
-        return FromRows(taken);
+        var elements = ElementWise().OrderBy(e => keySelector(e)).ToList();
+        return FromElements(elements);
     }
 
-    public IExcelRange Skip(int count)
+    public override IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector)
     {
-        var rows = Rows.ToList();
-        var skipped = count >= 0 ? rows.Skip(count) : rows.SkipLast(-count);
-        return FromRows(skipped);
+        var elements = ElementWise().OrderByDescending(e => keySelector(e)).ToList();
+        return FromElements(elements);
     }
 
-    public IExcelRange Distinct()
+    public override IExcelRange Take(int count)
+    {
+        var elements = ElementWise().ToList();
+        var taken = count >= 0 ? elements.Take(count) : elements.TakeLast(-count);
+        return FromElements(taken.ToList());
+    }
+
+    public override IExcelRange Skip(int count)
+    {
+        var elements = ElementWise().ToList();
+        var skipped = count >= 0 ? elements.Skip(count) : elements.SkipLast(-count);
+        return FromElements(skipped.ToList());
+    }
+
+    public override IExcelRange Distinct()
     {
         var seen = new HashSet<string>();
-        var distinctRows = new List<Row>();
-        foreach (var row in Rows)
+        var distinct = new List<ExcelScalar>();
+        foreach (var el in ElementWise())
         {
-            var key = string.Join("|", Enumerable.Range(0, row.ColumnCount).Select(i => row[i].Value));
+            var key = el.RawValue?.ToString() ?? "";
             if (seen.Add(key))
             {
-                distinctRows.Add(row);
+                distinct.Add(el);
             }
         }
 
-        return FromRows(distinctRows);
+        return FromElements(distinct);
     }
 
-    public ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func) =>
-        Rows.Aggregate(seed, (acc, row) => func(acc, row));
+    public override ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
+    {
+        var acc = seed;
+        foreach (var el in ElementWise())
+        {
+            acc = func(acc, el);
+        }
 
-    // Origin is not propagated — accumulated values don't map to original cell positions.
-    public IExcelRange Scan(ExcelValue seed, Func<ExcelValue, Row, ExcelValue> func)
+        return acc;
+    }
+
+    public override IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
     {
         var results = new List<ExcelValue>();
         var acc = seed;
-        foreach (var row in Rows)
+        foreach (var el in ElementWise())
         {
-            acc = func(acc, row);
+            acc = func(acc, el);
             results.Add(acc);
         }
 
@@ -241,54 +226,38 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
+    // --- Element-wise operations (iterate cell-by-cell, row-major) ---
+
+    private IEnumerable<ExcelScalar> ElementWise()
+    {
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                yield return new ExcelScalar(_data[r, c]);
+            }
+    }
+
     private double AggregateNumeric(double seed, Func<double, double, double> func)
     {
         var result = seed;
-        foreach (var row in Rows)
+        foreach (var el in ElementWise())
         {
-            for (var c = 0; c < row.ColumnCount; c++)
-            {
-                result = func(result, Convert.ToDouble(row[c].Value));
-            }
+            result = func(result, Convert.ToDouble(el.RawValue));
         }
 
         return result;
     }
 
-    // Origin is intentionally not propagated — after filtering/sorting, row positions no longer
-    // correspond to original worksheet cells, so cell escalation (.Cell, .Cells) is unavailable.
-    private ExcelArray FromRows(IEnumerable<Row> rows)
+    private static ExcelArray FromElements(List<ExcelScalar> elements)
     {
-        var list = rows.ToList();
-        if (list.Count == 0)
+        var array = new object?[elements.Count, 1];
+        for (var i = 0; i < elements.Count; i++)
         {
-            return new ExcelArray(new object?[0, ColCount], _columnMap);
+            array[i, 0] = elements[i].RawValue;
         }
 
-        var cols = list[0].ColumnCount;
-        var result = new object?[list.Count, cols];
-        for (var r = 0; r < list.Count; r++)
-            for (var c = 0; c < cols; c++)
-            {
-                result[r, c] = list[r][c].Value;
-            }
-
-        return new ExcelArray(result, _columnMap);
-    }
-
-    private static ExcelValue RowToValue(Row row)
-    {
-        if (row.ColumnCount == 1)
-        {
-            return new ExcelScalar(row[0].Value);
-        }
-
-        var arr = new object?[1, row.ColumnCount];
-        for (var c = 0; c < row.ColumnCount; c++)
-        {
-            arr[0, c] = row[c].Value;
-        }
-
-        return new ExcelArray(arr);
+        return new ExcelArray(array);
     }
 }
