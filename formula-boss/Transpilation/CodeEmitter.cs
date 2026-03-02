@@ -153,11 +153,10 @@ public class CodeEmitter
         if (extractHeaders)
         {
             // Get headers from first row (only when expression uses r["Col"] syntax)
-            sb.AppendLine($"        var {input}__headers = {input}__isRef == true");
-            sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
-            sb.AppendLine($"            : ({input}__raw is object[,] {input}__arr && {input}__arr.GetLength(0) > 0");
-            sb.AppendLine($"                ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__raw)");
-            sb.AppendLine($"                : null);");
+            // GetHeadersDelegate accepts object[,] (already-extracted values), not raw ExcelReference
+            sb.AppendLine($"        var {input}__headers = {input}__values is object[,] {input}__arr && {input}__arr.GetLength(0) > 0");
+            sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__arr)");
+            sb.AppendLine($"            : null;");
 
             // Strip header row from values when headers are present
             sb.AppendLine($"        if ({input}__headers != null && {input}__values is object[,] {input}__valArr)");

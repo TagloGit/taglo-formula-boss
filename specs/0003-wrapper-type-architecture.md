@@ -14,11 +14,11 @@ These issues share a root cause: the transpiler generates code by string manipul
 
 ## Proposed Solution
 
-Replace DSL syntax transformation with a **pre-compiled type-safe wrapper library**. Formula Boss expressions become standard C# lambdas operating on typed facades (`ExcelTable`, `ExcelArray`, `ExcelScalar`) that wrap Excel's raw `object`/`object[,]` values.
+Replace DSL syntax transformation with a **pre-compiled type-safe wrapper library**. Formula Boss expressions become standard C# operating on typed facades (`ExcelTable`, `ExcelArray`, `ExcelScalar`) that wrap Excel's raw `object`/`object[,]` values.
 
 The transpiler's role simplifies to:
-1. Identify inputs (from the expression and/or LET context)
-2. Emit a C# lambda with typed wrapper parameters
+1. Detect all external identifiers via free variable analysis
+2. Emit a C# method with typed wrapper parameters
 3. Pass the user's code through mostly as-is
 
 The DSL vs C# boundary disappears. Users write C# everywhere. The magic is in the types they operate on, not in syntax transformation.
@@ -38,79 +38,86 @@ The DSL vs C# boundary disappears. Users write C# everywhere. The magic is in th
 
 ### Expression Model
 
-A Formula Boss expression is a **C# lambda that takes named Excel values as inputs and returns a result.**
+A Formula Boss expression is a **C# expression or statement block that references named Excel values.** All external identifiers are detected automatically via free variable analysis — there is no explicit parameter syntax.
 
-#### Single-input (sugar syntax — the 95% case)
-
-```
-`tblCountries.Rows.Where(r => r.Population > 1000)`
-```
-
-The transpiler infers a single input (`tblCountries`) and wraps it. Equivalent to:
+#### Method chain (the 95% case)
 
 ```
-`(tblCountries) => tblCountries.Rows.Where(r => r.Population > 1000)`
+`tblCountries.Rows.Where(r => r["Population"] > 1000)`
 ```
 
-#### Multi-input (explicit lambda)
+The transpiler detects `tblCountries` as a free variable (the only unaccounted-for identifier) and makes it a UDF parameter.
+
+#### Multiple inputs
 
 ```
-`(tblCountries, maxPop) => tblCountries.Rows.Where(r => r.Population < maxPop)`
+`tblCountries.Rows.Where(r => r["Population"] < maxPop)`
 ```
 
-Each identifier in the lambda parameter list becomes a UDF parameter, wrapped in the appropriate typed facade at runtime.
+Both `tblCountries` and `maxPop` are detected as free variables. Both become UDF parameters. There is no distinction between "primary" and "secondary" inputs — all parameters are equal.
 
-#### Multi-input with statement block
+#### Statement block
 
 ```
-`(tblCountries, someOtherTable) => {
-    if (tblCountries.Rows.Count() > 0)
-        return "Countries!";
-    return "Nothing";
+`{
+    var count = tblCountries.Rows.Count();
+    if (count > someThreshold)
+        return tblCountries.Rows.Where(r => r["Price"] > 5).ToResult();
+    return someOtherTable.Sum();
 }`
 ```
 
+`tblCountries`, `someThreshold`, and `someOtherTable` are all detected as free variables.
+
 #### Automatic LET variable capture
 
-In a LET formula, non-lambda identifiers used inside the expression are automatically detected and added as UDF parameters:
+In a LET formula, free variables are resolved by Excel in the LET scope:
 
 ```
 =LET(
     maxPop, XLOOKUP(...),
     pConts, TEXTSPLIT(...),
     result, `tblCountries.Rows.Where(r =>
-        r.Population < maxPop
-        && pConts.Any(c => c == r.Continent))`,
+        r["Population"] < maxPop
+        && pConts.Any(c => c == r["Continent"]))`,
     result)
 ```
 
-Here `tblCountries` is the primary input, and `maxPop` and `pConts` are automatically captured — no explicit multi-input syntax needed. The multi-input syntax is only required when the expression isn't a method chain on a single primary input.
+`tblCountries`, `maxPop`, and `pConts` are all detected as free variables and become UDF parameters. The LET formula rewriter wires each LET variable to the corresponding UDF argument.
+
+**No explicit lambda input syntax.** The `(input1, input2) => expression` form is not supported. All inputs are detected via free variable analysis. This eliminates the confusing requirement that parameter names must match LET variable names exactly.
 
 ### Type System
 
 #### Wrapper Type Hierarchy
 
 ```
-ExcelValue                            — base wrapper for any Excel value
-  ├─ ExcelTable : IExcelRange         — named table (ListObject), has column metadata
-  ├─ ExcelArray : IExcelRange         — raw object[,], always 2D (from TEXTSPLIT, SORT, ranges, etc.)
-  └─ ExcelScalar : IExcelRange        — single value with single-element collection semantics
+ExcelValue : IExcelRange                — base wrapper for any Excel value
+  ├─ ExcelTable                         — named table (ListObject), has column metadata
+  ├─ ExcelArray                         — raw object[,], always 2D (from TEXTSPLIT, SORT, ranges, etc.)
+  └─ ExcelScalar                        — single value with single-element collection semantics
 ```
 
-`ExcelScalar` implements `IExcelRange` with single-element semantics: `.Any()` tests the one value, `.Where()` returns 0 or 1 elements, `.Count()` returns 1, etc. This means users never hit a type boundary when a formula sometimes returns a scalar and sometimes an array.
+`ExcelValue` itself implements `IExcelRange`. This means every parameter — regardless of whether it wraps a table, array, or scalar — supports the full range API without casting. The concrete subclasses override the `IExcelRange` methods with type-appropriate behaviour:
+
+- `ExcelScalar` has single-element semantics: `.Any()` tests the one value, `.Where()` returns 0 or 1 elements, `.Count()` returns 1, etc.
+- `ExcelArray` iterates element-wise over the 2D array in row-major order.
+- `ExcelTable` inherits from `ExcelArray`, adding column metadata.
+
+Because `ExcelValue` implements `IExcelRange`, generated code never needs an `(IExcelRange)` cast. `ExcelValue.Wrap()` returns an `ExcelValue`, and all range methods are available directly.
 
 #### IExcelRange Interface
 
-Shared by `ExcelTable` and `ExcelArray`:
+Methods directly on `IExcelRange` iterate **element-wise** over all values (row-major: left-to-right, top-to-bottom). The lambda parameter is `ExcelValue`, not `Row`:
 
 ```csharp
 public interface IExcelRange
 {
-    RowCollection Rows { get; }       // iterate as typed rows
+    RowCollection Rows { get; }       // iterate as typed rows (see RowCollection below)
     ColumnCollection Cols { get; }    // iterate as columns
     CellCollection Cells { get; }     // iterate as COM cells (forces IsMacroType)
 
-    // Element-wise operations on values (row-major iteration: left-to-right, top-to-bottom)
+    // Element-wise operations (lambda receives each cell as ExcelValue)
     IExcelRange Where(Func<ExcelValue, bool> predicate);
     IExcelRange Select(Func<ExcelValue, ExcelValue> selector);
     IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector);
@@ -147,30 +154,80 @@ public interface IExcelRange
 }
 ```
 
-**Note:** The exact generic signatures above are illustrative. The actual implementation will need to balance type safety with the `dynamic`/`object` nature of Excel data. For example, `Where` on `Rows` takes `Func<Row, bool>`, not `Func<ExcelValue, bool>`. The implementation will use appropriate generic type parameters or overloads per collection type.
+**Element-wise vs row-based iteration:** Methods directly on `IExcelRange` (`.Where()`, `.Any()`, `.Select()`, etc.) iterate over individual cell values as `ExcelValue`. To iterate row-by-row, use `.Rows` which returns a `RowCollection` with its own set of methods that take `Func<dynamic, ...>` (see RowCollection below).
 
-#### Row Type
+Example:
+- `pConts.Any(c => c == r["Continent"])` — `c` is an `ExcelValue`, iterates all cells
+- `tbl.Where(v => v > 5)` — `v` is an `ExcelValue`, iterates all cells element-wise
+- `tbl.Rows.Where(r => r["Price"] > 5)` — `r` is a `Row` (via `dynamic`), iterates row-by-row
 
-When iterating via `.Rows`, each element is a `Row` with named and indexed column access:
+#### RowCollection
+
+`.Rows` returns a `RowCollection` — a custom collection type with **instance methods** that accept `Func<dynamic, ...>` parameters. This is necessary because:
+
+1. LINQ extension methods cannot accept `Func<dynamic, ...>` (CS1977)
+2. Instance methods can — the lambda parameter `r` is typed as `dynamic`
+3. Dynamic dispatch on `Row` (which extends `DynamicObject`) triggers `TryGetMember`, but this only works at runtime, not for intellisense
+
+**Column access uses dot notation with auto-rewrite:** The user types `r.Population2025` in the editor and gets intellisense completions from a synthetic typed Row class. Before compilation, the transpiler rewrites dot access to bracket access: `r.Population2025` → `r["Population 2025"]`. This gives the UX of dot notation (discoverability, no quotes/brackets to type) with the reliability of bracket access at runtime.
+
+**How the dot-notation-to-bracket rewrite works:**
+
+1. **Header extraction:** When table metadata is available (from LET context or structured references), the transpiler knows the column names — e.g. `["Country", "Population 2025", "GDP"]`.
+2. **Sanitised property mapping:** Each column name is sanitised to a valid C# identifier by removing spaces and special characters — e.g. `"Population 2025"` → `Population2025`. A reverse mapping is stored: `{ "Population2025": "Population 2025" }`.
+3. **Synthetic Row class for intellisense:** The Roslyn synthetic document includes a typed Row subclass with real properties:
+   ```csharp
+   class _Row_ {
+       public ColumnValue Country => this["Country"];
+       public ColumnValue Population2025 => this["Population 2025"];
+       public ColumnValue GDP => this["GDP"];
+   }
+   ```
+   This gives full intellisense — the user types `r.P` and sees `Population2025` as a completion.
+4. **Pre-compilation rewrite:** Before Roslyn compiles the expression, a rewrite pass uses the mapping to convert all `r.SanitisedName` accesses to `r["Original Name"]`. The compiled code only uses the `Row.this[string]` indexer.
+5. **Conflict detection:** If two columns sanitise to the same identifier (e.g. `Foo Bar` and `FooBar` both → `FooBar`), the ambiguous name is excluded from the synthetic class. The user must use bracket access for those columns. This should be rare.
+
+**Bracket access also works directly:** Users can always write `r["Population 2025"]` or `r[0]` without going through dot notation. Bracket access bypasses the rewrite step entirely.
 
 ```csharp
-public class Row
+public class RowCollection
 {
-    // Named access (single-word columns)
-    public ColumnValue Population => this["Population"];
+    // Instance methods — Func<dynamic, ...> enables r.Col and r["Col"] syntax
+    public RowCollection Where(Func<dynamic, bool> predicate);
+    public IExcelRange Select(Func<dynamic, ExcelValue> selector);
+    public bool Any(Func<dynamic, bool> predicate);
+    public bool All(Func<dynamic, bool> predicate);
+    public Row First(Func<dynamic, bool> predicate);
+    public Row? FirstOrDefault(Func<dynamic, bool> predicate);
+    public RowCollection OrderBy(Func<dynamic, object> keySelector);
+    public RowCollection OrderByDescending(Func<dynamic, object> keySelector);
 
-    // Bracket access
-    public ColumnValue this[string columnName] { get; }
-    public ColumnValue this[int index] { get; }     // zero-based, negative for last
+    // Non-lambda methods
+    public int Count();
+    public RowCollection Take(int count);
+    public RowCollection Skip(int count);
+    public RowCollection Distinct();
 
-    // Dynamic member access for dot notation (r.Population)
-    // Implemented via DynamicObject or source generation
+    // Conversion
+    public IExcelRange ToRange();  // convert back to ExcelArray for further element-wise ops
 }
 ```
 
-Named column properties are either:
-- Generated at compile time (if column names are known from table metadata or LET bindings)
-- Resolved dynamically via `DynamicObject` fallback
+#### Row Type
+
+When iterating via `.Rows`, each element is a `Row`:
+
+```csharp
+public class Row : DynamicObject
+{
+    // Bracket access (always works, used at runtime after dot-notation rewrite)
+    public ColumnValue this[string columnName] { get; }
+    public ColumnValue this[int index] { get; }     // zero-based, negative for last
+
+    // Dynamic member access (DynamicObject.TryGetMember)
+    // Enables r.Population at runtime; intellisense provided via synthetic typed Row class
+}
+```
 
 #### ColumnValue Type
 
@@ -189,6 +246,11 @@ public class ColumnValue
     public static bool operator <(ColumnValue a, ColumnValue b);
     // ... ==, !=, >=, <=
 
+    // Cross-type operators (ColumnValue vs ExcelValue)
+    public static bool operator >(ColumnValue a, ExcelValue b);
+    public static bool operator <(ColumnValue a, ExcelValue b);
+    // ... enables r["Price"] > maxPop where maxPop is an ExcelScalar
+
     // Arithmetic operators
     public static ColumnValue operator +(ColumnValue a, ColumnValue b);
     public static ColumnValue operator -(ColumnValue a, ColumnValue b);
@@ -203,7 +265,7 @@ public class ColumnValue
 }
 ```
 
-The user writes `r.Population > 1000` and it works via operator overloading. If they write `r.Population.Cell.Color`, the static analyzer detects `.Cell` usage and sets `IsMacroType = true` on the UDF registration.
+The user writes `r["Population"] > 1000` and it works via operator overloading. If they write `r["Population"].Cell.Color`, the static analyzer detects `.Cell` usage and sets `IsMacroType = true` on the UDF registration.
 
 #### ExcelScalar Type
 
@@ -225,14 +287,15 @@ public class ExcelScalar : ExcelValue
 Wraps `object[,]` from TEXTSPLIT, SORT, spill ranges, etc. **Always 2D** — even a 1×N horizontal or N×1 vertical array is stored as `object[,]`.
 
 ```csharp
-public class ExcelArray : ExcelValue, IExcelRange
+public class ExcelArray : ExcelValue
 {
-    // All IExcelRange methods
+    // All IExcelRange methods (element-wise)
     // Element-wise iteration yields ExcelScalar elements
-    // .Rows iterates row-by-row, .Cols iterates column-by-column
-    // For 1×N or N×1 arrays, all three iteration modes produce equivalent results
+    // .Rows returns RowCollection for row-by-row iteration
+    // .Cols iterates column-by-column
+    // For 1×N or N×1 arrays, all iteration modes produce equivalent results
 
-    // Enables: pConts.Any(c => c == r.Continent)
+    // Enables: pConts.Any(c => c == r["Continent"])
     // where pConts is an ExcelArray from TEXTSPLIT
 
     // .Select() flattens to 1D (maps elements to values)
@@ -263,19 +326,35 @@ public class Cell
 }
 ```
 
+### Comparison Operators
+
+Comparison operators on `ExcelValue` currently return `bool`. This is correct for the common case (`maxPop > 1000`, `r["Price"] > threshold`).
+
+**Future: element-wise array comparison.** In Excel, `A1:A5 > 5` returns a spilled array of TRUE/FALSE. To support `tbl > 5` returning an array of booleans, operators would need to return `ExcelValue` (not `bool`) and delegate to virtual instance methods:
+
+```csharp
+public static ExcelValue operator >(ExcelValue a, double b) => a.CompareGreaterThan(b);
+// ExcelScalar overrides → returns ExcelScalar(bool)
+// ExcelArray overrides → returns ExcelArray of booleans
+```
+
+Plus `operator true`/`operator false` on `ExcelValue` so scalar results still work in `if` conditions. Array results in boolean context should throw.
+
+**This is deferrable.** Changing return type from `bool` to `ExcelValue` later is backwards compatible as long as implicit conversion to `bool` and `operator true`/`false` exist. No blocking dependency on current work. Implement with `bool`-returning operators for now.
+
 ### Value/Cell Access Model
 
 Access to cell formatting (color, bold, etc.) requires COM interop, which is slower and requires `IsMacroType = true`. The wrapper types support **lazy cell escalation**:
 
-- **Default path (fast):** Operations on values. `r.Population > 1000` works via `ColumnValue` operators, no COM needed.
-- **Cell path (when needed):** Access `.Cell` on any `ColumnValue` or use `.Cells` on a range. `r.Population.Cell.Color == 6` escalates to COM.
-- **Static detection:** Before compilation, the transpiler scans for `.Cell` / `.Cells` usage to determine whether `IsMacroType = true` is needed. Same approach as today's `DetectObjectModelUsage()`.
+- **Default path (fast):** Operations on values. `r["Population"] > 1000` works via `ColumnValue` operators, no COM needed.
+- **Cell path (when needed):** Access `.Cell` on any `ColumnValue` or use `.Cells` on a range. `r["Population"].Cell.Color == 6` escalates to COM.
+- **Static detection:** Before compilation, the transpiler scans for `.Cell` / `.Cells` usage to determine whether `IsMacroType = true` is needed.
 
 Shorthand accessors on `IExcelRange`:
-- `.Rows` — iterate as `Row` objects (value access + `.Cell` available)
+- `.Rows` — iterate as `Row` objects via `RowCollection` (value access + `.Cell` available)
 - `.Cols` — iterate as column arrays
 - `.Cells` — iterate as `Cell` objects directly (always COM, forces `IsMacroType`)
-- Implicit (no accessor) — element-wise on values
+- Direct methods (no accessor) — element-wise on values
 
 ### Method Naming
 
@@ -310,26 +389,45 @@ Formula Boss-specific names that have no C# equivalent:
 
 The transpiler simplifies significantly. Its job becomes:
 
-1. **Parse the expression** — identify the lambda signature and body
-2. **Detect inputs:**
-   - Single-input sugar: first identifier before `.` is the input
-   - Explicit lambda: parameter list defines inputs
-   - LET context: additional free variables in the body become inputs
-3. **Detect cell usage** — scan for `.Cell` / `.Cells` to set `IsMacroType`
-4. **Emit C# code:**
+1. **Detect free variables** — parse the expression with Roslyn, identify all unaccounted-for identifiers (not inner lambda params, not C# keywords, not type names, not method names, not locally declared variables). These become UDF parameters in a single flat ordered list.
+2. **Detect cell usage** — scan for `.Cell` / `.Cells` to set `IsMacroType`
+3. **Emit C# code:**
    ```csharp
-   public static object UdfName(object input0, object input1, ..., string[] headers0, ...)
+   public static object UdfName(object tblCountries__raw, object maxPop__raw)
    {
-       var tblCountries = ExcelValue.Wrap(input0, headers0);  // → ExcelTable
-       var maxPop = ExcelValue.Wrap(input1);                  // → ExcelScalar
+       // Every parameter gets the same preamble:
+       // 1. Check for ExcelReference
+       // 2. Extract values if reference
+       // 3. Extract headers if this variable uses string bracket access
+       // 4. Wrap with ExcelValue.Wrap()
+       var tblCountries__isRef = tblCountries__raw?.GetType()?.Name == "ExcelReference";
+       var tblCountries__values = tblCountries__isRef == true
+           ? FormulaBoss.RuntimeHelpers.GetValuesFromReference(tblCountries__raw)
+           : tblCountries__raw;
+       string[]? tblCountries__headers = /* header extraction if tblCountries uses r["Col"] */;
+       var tblCountries = ExcelValue.Wrap(tblCountries__values, tblCountries__headers);
+
+       var maxPop = ExcelValue.Wrap(maxPop__raw);  // no string bracket access → no headers
 
        // User's code, mostly verbatim
-       return tblCountries.Rows.Where(r => r.Population < maxPop).ToResult();
+       var __result = tblCountries.Rows.Where(r => r["Population"] < maxPop);
+       return __result.ToResult();
    }
    ```
-5. **Result conversion** — `.ToResult()` normalizes output to `object[,]` for Excel
+4. **Result conversion** — `.ToResult()` returns `object`: bare scalars for single values, `object[,]` for multi-cell results. The UDF return type is `object`, which ExcelDNA handles correctly for both cases.
 
-The existing parser (lexer, AST) may need moderate changes to support the explicit lambda syntax. The transpiler's AST-walking code generation is largely replaced by wrapper type method calls.
+**Uniform parameter treatment:** Every parameter (regardless of how it was detected) gets the same wrapping preamble. The only per-variable distinction is whether to extract headers — determined by whether **that specific variable** is used with string bracket access in the expression (e.g. `r["Col"]` where `r` comes from that variable's `.Rows`), not a global boolean.
+
+**No "primary input" concept.** All parameters are equal. `table1.Sum() + table2.Sum()` and `table1 + table2` both work — the transpiler doesn't need to find a "primary" input.
+
+### Variable Naming
+
+Formula Boss does not impose any naming restrictions on variables beyond what Excel and C# already require:
+- **External inputs** (LET variables, named ranges, cell references) follow Excel's naming rules. Formula Boss just detects and passes them through.
+- **Local variables** in statement blocks (`var i = 0`) follow C# naming rules. These are excluded from free variable detection.
+- **Inner lambda parameters** (`r` in `.Where(r => ...)`) follow C# naming rules. Excluded from free variable detection.
+
+Single-cell references like `A1` or `B2` are valid C# identifiers, so they pass through as free variables. Excel resolves them as cell references. This works correctly but by design rather than explicit support.
 
 ### Intellisense: Roslyn Completion Service
 
@@ -343,11 +441,13 @@ Replace the custom `CompletionProvider` with Roslyn's `CompletionService`:
    using FormulaBoss.Runtime;  // pre-compiled wrapper types
 
    class _Synthetic_ {
-       void _M_(ExcelTable tblCountries, ExcelArray pConts, ExcelScalar maxPop) {
+       void _M_(ExcelValue tblCountries, ExcelValue pConts, ExcelValue maxPop) {
            /* user's code here, caret position mapped */
        }
    }
    ```
+   All parameters are typed as `ExcelValue` (which implements `IExcelRange`), so all range methods are available. When table metadata is known, the synthetic document includes a typed Row subclass with real properties for dot-notation intellisense (see RowCollection section).
+
 2. **Map the caret position** from the editor to the synthetic document
 3. **Call `CompletionService.GetCompletionsAsync()`** at the mapped position
 4. **Filter and present results** — prioritize Formula Boss types, add descriptions
@@ -359,12 +459,12 @@ This provides:
 - Regex completions
 - Smart parameter info
 - Full context awareness (knows the type at each chain position)
+- Column name completions via dot notation on synthetic typed Row class
 
-**Performance:** Roslyn completion is designed for interactive use in Visual Studio — fast enough for keystroke-by-keystroke completion. The synthetic document is small (just the user's expression with type declarations), so compilation overhead is minimal.
+**Performance:** Roslyn completion is designed for interactive use in Visual Studio — fast enough for keystroke-by-keystroke completion. The synthetic document is small, so compilation overhead is minimal.
 
 **Variable type inference for the synthetic document:**
 - Table-bound LET variables → `ExcelTable` (with column metadata if known)
-- Column-reference LET variables → still passed as header strings (same as today)
 - Array-producing LET variables (TEXTSPLIT, SORT, etc.) → `ExcelArray`
 - Scalar LET variables (XLOOKUP returning single value, literal) → `ExcelScalar`
 - Unknown → `ExcelValue` (base type, all methods available)
@@ -390,15 +490,18 @@ This is a pre-release product. Existing formulas using old DSL syntax (`.some()`
 ## Acceptance Criteria
 
 - [ ] Wrapper types (`ExcelTable`, `ExcelArray`, `ExcelScalar`, `Row`, `ColumnValue`, `Cell`) are pre-compiled and unit-tested
-- [ ] Single-input sugar syntax works: `tblCountries.Rows.Where(r => r.Population > 1000)`
-- [ ] Multi-input explicit lambda works: `(tbl, maxPop) => tbl.Rows.Where(r => r.Population < maxPop)`
+- [ ] `ExcelValue` implements `IExcelRange` — no casting needed in generated code
+- [ ] Free variable detection works for all inputs: `tblCountries.Rows.Where(r => r["Pop"] > maxPop)` detects both `tblCountries` and `maxPop`
 - [ ] LET variable capture works automatically for scalars, arrays, and tables
-- [ ] Nested lambdas resolve correctly: `pConts.Any(c => c == r.Continent)` where `pConts` is an `ExcelArray`
-- [ ] Cell escalation works: `r.Population.Cell.Color` triggers `IsMacroType` and returns formatting data
+- [ ] Nested lambdas resolve correctly: `pConts.Any(c => c == r["Continent"])` where `pConts` is an `ExcelArray`
+- [ ] Cell escalation works: `r["Population"].Cell.Color` triggers `IsMacroType` and returns formatting data
 - [ ] Method naming is C# convention everywhere (`.Any()`, `.Where()`, `.All()`, etc.)
+- [ ] `IExcelRange` methods iterate element-wise with `Func<ExcelValue, ...>`; `.Rows` returns `RowCollection` with `Func<dynamic, ...>`
+- [ ] `ToResult()` returns bare scalars for single values, `object[,]` for multi-cell results
+- [ ] Dot notation with intellisense: `r.P` offers `Population2025`, rewritten to `r["Population 2025"]` before compilation
 - [ ] Roslyn-powered intellisense provides completions for wrapper types AND standard C# methods
 - [ ] The target formula from #59 compiles and returns correct results
-- [ ] Existing features (LET column bindings, source preservation, error reporting) continue to work
+- [ ] Source preservation and error reporting continue to work
 
 ## Out of Scope
 
@@ -406,13 +509,23 @@ This is a pre-release product. Existing formulas using old DSL syntax (`.some()`
 - Built-in algorithm library (#22) — future work, but wrapper types provide the foundation
 - Case-tolerant method names — rely on intellisense to prevent casing errors
 - GroupBy detailed design — noted as TBD in the type system, will be designed during implementation
+- Element-wise array comparison operators — deferrable, approach documented in Comparison Operators section
+- Old column binding mechanism (`ColumnParameter`, header injection) — replaced by dot notation with auto-rewrite and bracket access
 
 ## Design Decisions (Resolved)
 
 1. **ExcelValue.Wrap() factory** — **Runtime type detection.** `Wrap()` inspects the runtime value and returns the appropriate type: `ExcelTable` for ListObject references, `ExcelArray` for `object[,]`, `ExcelScalar` for scalars. This is the safest approach as it handles Excel's inconsistencies (e.g. a formula sometimes returning a scalar, sometimes an array). `ExcelScalar` implements `IExcelRange` with single-element semantics so that calling `.Any()` on a scalar works naturally rather than throwing.
 
-2. **Row dynamic member access** — **Generated TypedRow class** (as today). Concrete typed properties enable Roslyn intellisense for column names at edit time, which is a significant UX win over `DynamicObject` (which would require runtime resolution and provide no completions).
+2. **Row column access** — **Dot notation with auto-rewrite.** Users type `r.Population2025` and get intellisense from a synthetic typed Row class built from table headers. Before compilation, the transpiler rewrites dot access to bracket access (`r.Population2025` → `r["Population 2025"]`) using a sanitised-name-to-original mapping. Bracket access (`r["Col"]`, `r[0]`) also works directly. Conflicts (two columns sanitising to the same identifier) are detected and those columns fall back to bracket-only access.
 
 3. **Roslyn workspace management** — **Persistent `AdhocWorkspace`** created at add-in startup, reused across all completion requests. The workspace holds one project with wrapper type references. Each completion request updates only the synthetic document. Memory footprint is small (~few MB). Disposed on shutdown.
 
 4. **ExcelArray shape** — **Always 2D.** `ExcelArray` wraps `object[,]` and preserves its shape. All arrays are conceptually 2D. For a 1×N or N×1 array, element-wise iteration (`.Where()` directly), `.Rows` iteration, and `.Cols` iteration produce equivalent results. `.Select()` flattens to 1D (mapping elements to values). `.Map()` preserves 2D shape.
+
+5. **ExcelValue implements IExcelRange** — Eliminates the need for `(IExcelRange)` casts in generated code. Every `ExcelValue` supports the full range API. Concrete subclasses override with type-appropriate behaviour.
+
+6. **All parameters are equal** — No "primary input" concept. All external identifiers detected via free variable analysis become UDF parameters in a single flat ordered list. The transpiler treats every parameter identically: check for ExcelReference, extract values, optionally extract headers (per-variable, based on whether that variable's rows use string bracket access), wrap with `ExcelValue.Wrap()`.
+
+7. **Result conversion returns `object`** — `ToResult()` returns bare scalars for single values, `object[,]` for multi-cell results. The UDF return type is `object`. ExcelDNA handles both correctly — bare scalars display as single-cell values, `object[,]` spills as arrays.
+
+8. **Header extraction is per-variable** — The transpiler tracks which specific variables are used with string bracket access (e.g. `tbl.Rows.Where(r => r["Col"])`) and only extracts headers for those variables. This replaces the previous global `HasStringBracketAccess` boolean.
