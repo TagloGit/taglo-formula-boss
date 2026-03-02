@@ -1,3 +1,5 @@
+﻿using System.Diagnostics;
+
 using Xunit;
 using Xunit.Abstractions;
 
@@ -148,7 +150,7 @@ public class PipelineTests
 
             EnterBacktickFormula(ws, "B1", "=`A1:A3.orderBy(x => x).toArray()`");
 
-            var result = WaitForResult(ws, "B1");
+            WaitForResult(ws, "B1");
 
             _output.WriteLine($"B1={ws.Range["B1"].Value}, B2={ws.Range["B2"].Value}, B3={ws.Range["B3"].Value}");
 
@@ -221,13 +223,13 @@ public class PipelineTests
         int timeoutMs = 15000, int pollIntervalMs = 250)
     {
         var cell = ws.Range[cellAddress];
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
 
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             try
             {
-                string? formula = cell.Formula2 as string;
+                var formula = cell.Formula2 as string;
                 object? value = cell.Value;
 
                 if (formula != null && formula.StartsWith('=') && !formula.Contains('`'))
