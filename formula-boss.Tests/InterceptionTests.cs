@@ -224,7 +224,7 @@ public class InterceptionTests
     }
 
     [Fact]
-    public void Pipeline_ExtractsInputParameter()
+    public void Pipeline_ExtractsFlatParameters()
     {
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
@@ -232,7 +232,8 @@ public class InterceptionTests
         var result = pipeline.Process("myRange.cells.toArray()");
 
         Assert.True(result.Success);
-        Assert.Equal("myRange", result.InputParameter);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("myRange", result.Parameters);
     }
 
     [Fact]

@@ -46,12 +46,13 @@ public class CodeEmitterTests
     }
 
     [Fact]
-    public void Emit_MultiInput_AllParametersPresent()
+    public void Emit_MultipleParams_AllParametersPresent()
     {
-        var result = EmitFromExpression("(tbl, maxVal) => tbl.Rows.Where(r => (double)r[0] < (double)maxVal)");
+        // Both tbl and maxVal are free variables, detected as flat parameters
+        var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[0] < (double)maxVal)");
 
-        Assert.Contains("object tbl__raw", result.SourceCode);
         Assert.Contains("object maxVal__raw", result.SourceCode);
+        Assert.Contains("object tbl__raw", result.SourceCode);
     }
 
     [Fact]
@@ -103,7 +104,6 @@ public class CodeEmitterTests
     [Fact]
     public void Emit_ReservedExcelName_Prefixed()
     {
-        // "SUM" is a reserved Excel name
         var result = EmitFromExpression("tbl.Rows.Count()", "sum");
 
         Assert.Equal("__udf__SUM", result.MethodName);
@@ -111,7 +111,7 @@ public class CodeEmitterTests
 
     #endregion
 
-    #region Input Wrapping
+    #region Parameter Wrapping
 
     [Fact]
     public void Emit_ContainsExcelReferenceCheck()
@@ -154,12 +154,37 @@ public class CodeEmitterTests
         Assert.DoesNotContain("GetHeadersDelegate", result.SourceCode);
     }
 
+    [Fact]
+    public void Emit_UniformPreamble_AllParamsGetWrapping()
+    {
+        // Both tbl and threshold get the same wrapping treatment
+        var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[0] < threshold)");
+
+        Assert.Contains("tbl__isRef", result.SourceCode);
+        Assert.Contains("threshold__isRef", result.SourceCode);
+        Assert.Contains("ExcelValue.Wrap(tbl__values", result.SourceCode);
+        Assert.Contains("ExcelValue.Wrap(threshold__values", result.SourceCode);
+    }
+
+    [Fact]
+    public void Emit_PerVariableHeaders_OnlyRelevantParamGetsHeaders()
+    {
+        // tbl uses r["Price"] so needs headers; threshold doesn't
+        var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[\"Price\"] > threshold)");
+
+        // tbl should have header extraction
+        Assert.Contains("tbl__headers = tbl__values is object[,]", result.SourceCode);
+        Assert.Contains("GetHeadersDelegate", result.SourceCode);
+        // threshold should NOT have header extraction
+        Assert.Contains("string[]? threshold__headers = null;", result.SourceCode);
+    }
+
     #endregion
 
     #region Expression Body
 
     [Fact]
-    public void Emit_SugarSyntax_ExpressionPassedThrough()
+    public void Emit_ExpressionPassedThrough()
     {
         var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[0] > 5)");
 
@@ -167,20 +192,12 @@ public class CodeEmitterTests
     }
 
     [Fact]
-    public void Emit_ExplicitLambda_BodyExtracted()
+    public void Emit_NoIExcelRangeCast()
     {
-        var result = EmitFromExpression("(tbl) => tbl.Rows.Count()");
+        // IExcelRange cast has been removed — all params wrapped uniformly
+        var result = EmitFromExpression("tbl.Rows.Count()");
 
-        Assert.Contains("var __result = tbl.Rows.Count()", result.SourceCode);
-    }
-
-    [Fact]
-    public void Emit_StatementBody_WrappedInLocalFunction()
-    {
-        var result = EmitFromExpression("(tbl) => { var c = tbl.Rows.Count(); return c; }");
-
-        Assert.Contains("__Execute()", result.SourceCode);
-        Assert.Contains("var c = tbl.Rows.Count(); return c;", result.SourceCode);
+        Assert.DoesNotContain("(IExcelRange)", result.SourceCode);
     }
 
     #endregion
@@ -225,22 +242,22 @@ public class CodeEmitterTests
 
     #endregion
 
-    #region Free Variables
+    #region Free Variables as Parameters
 
     [Fact]
     public void Emit_FreeVariable_BecomesParameter()
     {
-        var result = EmitFromExpression("(tbl) => tbl.Rows.Where(r => (double)r[0] < threshold)");
+        var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[0] < threshold)");
 
         Assert.Contains("object threshold__raw", result.SourceCode);
     }
 
     [Fact]
-    public void Emit_FreeVariable_WrappedAsScalar()
+    public void Emit_FreeVariable_WrappedUniformly()
     {
-        var result = EmitFromExpression("(tbl) => tbl.Rows.Where(r => (double)r[0] < threshold)");
+        var result = EmitFromExpression("tbl.Rows.Where(r => (double)r[0] < threshold)");
 
-        Assert.Contains("ExcelValue.Wrap(threshold__raw)", result.SourceCode);
+        Assert.Contains("ExcelValue.Wrap(threshold__values", result.SourceCode);
     }
 
     #endregion

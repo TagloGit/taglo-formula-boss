@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 using ExcelDna.Integration;
 
@@ -126,10 +126,8 @@ public class FormulaInterceptor : IDisposable
     {
         try
         {
-            // Get the cell's text (what the user typed, shown as text due to quote prefix)
             var cellText = cell.Formula as string;
 
-            // Check if it's a backtick formula
             if (!BacktickExtractor.IsBacktickFormula(cellText))
             {
                 return;
@@ -137,8 +135,6 @@ public class FormulaInterceptor : IDisposable
 
             Debug.WriteLine($"Found backtick formula: {cellText}");
 
-            // The cell shows as text because of the leading apostrophe
-            // Get the actual value which includes the apostrophe
             var originalFormula = cell.Value2 as string ?? cellText;
             if (originalFormula == null)
             {
@@ -170,22 +166,12 @@ public class FormulaInterceptor : IDisposable
         var processedBindings = new Dictionary<string, ProcessedBinding>();
         var errors = new List<string>();
 
-        // Extract column bindings from LET structure (e.g., price, tblSales[Price])
-        // This enables r.price and r[price] to resolve to the actual column name
-        var columnBindings = LetFormulaParser.ExtractColumnBindings(letStructure);
-        if (columnBindings.Count > 0)
-        {
-            Debug.WriteLine(
-                $"Found {columnBindings.Count} column bindings: {string.Join(", ", columnBindings.Select(kv => $"{kv.Key}={kv.Value.TableName}[{kv.Value.ColumnName}]"))}");
-        }
-
         foreach (var binding in letStructure.Bindings)
         {
             var variableName = binding.VariableName.Trim();
 
             if (binding.HasBacktick)
             {
-                // Extract the DSL expression from the backtick value
                 var dslExpression = LetFormulaParser.ExtractBacktickExpression(binding.Value);
                 if (dslExpression == null)
                 {
@@ -195,8 +181,7 @@ public class FormulaInterceptor : IDisposable
 
                 Debug.WriteLine($"Processing LET binding: {variableName} = `{dslExpression}`");
 
-                // Create context with the LET variable name and column bindings
-                var context = new ExpressionContext(variableName, columnBindings);
+                var context = new ExpressionContext(variableName);
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
@@ -205,13 +190,10 @@ public class FormulaInterceptor : IDisposable
                         variableName,
                         dslExpression,
                         result.UdfName,
-                        result.InputParameter ?? variableName,
-                        result.ColumnParameters,
-                        result.AdditionalInputs,
-                        result.FreeVariables);
+                        result.Parameters ?? Array.Empty<string>());
 
                     Debug.WriteLine(
-                        $"LET UDF generated: {result.UdfName}({result.InputParameter}{(result.AdditionalInputs != null ? ", " + string.Join(", ", result.AdditionalInputs) : "")}) with {result.ColumnParameters?.Count ?? 0} column params, {result.FreeVariables?.Count ?? 0} free vars");
+                        $"LET UDF generated: {result.UdfName}({string.Join(", ", result.Parameters ?? Array.Empty<string>())})");
                 }
                 else
                 {
@@ -230,8 +212,7 @@ public class FormulaInterceptor : IDisposable
             {
                 Debug.WriteLine($"Processing LET result expression: `{dslExpression}`");
 
-                // Use "_result" as the variable name for the final expression, with column bindings
-                var context = new ExpressionContext("_result", columnBindings);
+                var context = new ExpressionContext("_result");
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
@@ -240,13 +221,10 @@ public class FormulaInterceptor : IDisposable
                         "_result",
                         dslExpression,
                         result.UdfName,
-                        result.InputParameter ?? "_result",
-                        result.ColumnParameters,
-                        result.AdditionalInputs,
-                        result.FreeVariables);
+                        result.Parameters ?? Array.Empty<string>());
 
                     Debug.WriteLine(
-                        $"LET result UDF generated: {result.UdfName}({result.InputParameter}) with {result.ColumnParameters?.Count ?? 0} column params, {result.FreeVariables?.Count ?? 0} free vars");
+                        $"LET result UDF generated: {result.UdfName}({string.Join(", ", result.Parameters ?? Array.Empty<string>())})");
                 }
                 else
                 {
@@ -256,34 +234,27 @@ public class FormulaInterceptor : IDisposable
             }
         }
 
-        // If there were errors, add a comment and leave the cell as-is
         if (errors.Count > 0)
         {
             SetCellError(cell, string.Join("\n", errors));
             return;
         }
 
-        // Rewrite the LET formula with _src_ documentation variables
         var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResult);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
-        // Set the cell formula using Formula2 to enable dynamic array spilling
         cell.Formula2 = newFormula;
-
-        // Clear any previous error comment
         ClearCellComment(cell);
     }
 
     private void ProcessBacktickFormula(dynamic cell, string originalFormula)
     {
-        // Extract backtick expressions
         var expressions = BacktickExtractor.Extract(originalFormula);
         if (expressions.Count == 0)
         {
             return;
         }
 
-        // Process each expression and build replacements
         var replacements = new Dictionary<string, string>();
         var errors = new List<string>();
 
@@ -294,8 +265,11 @@ public class FormulaInterceptor : IDisposable
 
             if (result.Success && result.UdfName != null)
             {
-                // Build the UDF call with the input parameter
-                var udfCall = $"{result.UdfName}({result.InputParameter})";
+                // Build UDF call with all parameters
+                var paramStr = result.Parameters != null && result.Parameters.Count > 0
+                    ? string.Join(", ", result.Parameters)
+                    : "";
+                var udfCall = $"{result.UdfName}({paramStr})";
                 replacements[expr.Expression] = udfCall;
                 Debug.WriteLine($"UDF generated: {udfCall}");
             }
@@ -306,22 +280,16 @@ public class FormulaInterceptor : IDisposable
             }
         }
 
-        // If there were errors, add a comment and leave the cell as-is
         if (errors.Count > 0)
         {
             SetCellError(cell, string.Join("\n", errors));
             return;
         }
 
-        // Rewrite the formula
         var newFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
         Debug.WriteLine($"Rewriting formula to: {newFormula}");
 
-        // Set the cell formula using Formula2 to enable dynamic array spilling
-        // (Formula would add implicit intersection @ operator, preventing spill)
         cell.Formula2 = newFormula;
-
-        // Clear any previous error comment
         ClearCellComment(cell);
     }
 
@@ -329,10 +297,7 @@ public class FormulaInterceptor : IDisposable
     {
         try
         {
-            // Clear existing comment
             ClearCellComment(cell);
-
-            // Add error comment
             cell.AddComment($"Formula Boss Error:\n{errorMessage}");
         }
         catch

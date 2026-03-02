@@ -1,4 +1,4 @@
-﻿using FormulaBoss.Interception;
+﻿using FormulaBoss.Transpilation;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -781,12 +781,6 @@ public class ValuePathTests
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
-
-        // Verify that column bindings were detected and used
-        Assert.NotNull(compilation.UsedColumnBindings);
-        Assert.Equal(2, compilation.UsedColumnBindings.Count);
-        Assert.Contains("p", compilation.UsedColumnBindings);
-        Assert.Contains("q", compilation.UsedColumnBindings);
 
         // Act: Call _Core with column names passed as parameters (simulating Excel passing INDEX() results)
         var result = TestHelpers.ExecuteWithValuesAndColumnNames(
