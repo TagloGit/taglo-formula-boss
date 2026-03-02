@@ -4,4 +4,5 @@
   <Project Path="..\formula-boss.IntegrationTests\formula-boss.IntegrationTests.csproj" />
   <Project Path="..\formula-boss.Runtime\FormulaBoss.Runtime.csproj" />
   <Project Path="..\formula-boss.Runtime.Tests\FormulaBoss.Runtime.Tests.csproj" />
+  <Project Path="..\formula-boss.AddinTests\formula-boss.AddinTests.csproj" />
 </Solution>
