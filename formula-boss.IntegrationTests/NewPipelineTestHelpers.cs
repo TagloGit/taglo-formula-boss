@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
 
 using FormulaBoss.Runtime;
@@ -29,11 +29,7 @@ public static class NewPipelineTestHelpers
         }
         catch (Exception ex)
         {
-            return new NewTestCompilationResult
-            {
-                Success = false,
-                ErrorMessage = $"Detection error: {ex.Message}"
-            };
+            return new NewTestCompilationResult { Success = false, ErrorMessage = $"Detection error: {ex.Message}" };
         }
 
         // Emit
@@ -120,12 +116,16 @@ public static class NewPipelineTestHelpers
         RuntimeHelpers.GetHeadersDelegate ??= values =>
         {
             if (values.GetLength(0) < 1)
+            {
                 return null;
+            }
 
             var cols = values.GetLength(1);
             var headers = new string[cols];
             for (var i = 0; i < cols; i++)
-                headers[i] = values[0, i]?.ToString() ?? "";
+            {
+                headers[i] = values[0, i].ToString() ?? "";
+            }
 
             return headers;
         };

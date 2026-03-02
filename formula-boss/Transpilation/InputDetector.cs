@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -43,17 +43,66 @@ public class InputDetector
     private static readonly HashSet<string> IgnoredIdentifiers = new(StringComparer.Ordinal)
     {
         // C# keywords commonly used in expressions
-        "true", "false", "null", "new", "typeof", "nameof", "default", "is", "as", "in",
-        "var", "return", "if", "else", "for", "foreach", "while", "do", "switch", "case",
-        "break", "continue", "throw", "try", "catch", "finally",
+        "true",
+        "false",
+        "null",
+        "new",
+        "typeof",
+        "nameof",
+        "default",
+        "is",
+        "as",
+        "in",
+        "var",
+        "return",
+        "if",
+        "else",
+        "for",
+        "foreach",
+        "while",
+        "do",
+        "switch",
+        "case",
+        "break",
+        "continue",
+        "throw",
+        "try",
+        "catch",
+        "finally",
         // Common type names
-        "string", "int", "double", "float", "bool", "object", "decimal", "long", "char", "byte",
-        "Convert", "Math", "String", "Int32", "Double", "Boolean",
-        "Enumerable", "System", "Linq",
+        "string",
+        "int",
+        "double",
+        "float",
+        "bool",
+        "object",
+        "decimal",
+        "long",
+        "char",
+        "byte",
+        "Convert",
+        "Math",
+        "String",
+        "Int32",
+        "Double",
+        "Boolean",
+        "Enumerable",
+        "System",
+        "Linq",
         // Runtime type names (these resolve at runtime, not as free vars)
-        "ExcelValue", "ExcelArray", "ExcelTable", "ExcelScalar", "Row", "ColumnValue",
-        "Cell", "Interior", "CellFont", "RangeOrigin", "ResultConverter",
-        "IExcelRange", "RuntimeBridge"
+        "ExcelValue",
+        "ExcelArray",
+        "ExcelTable",
+        "ExcelScalar",
+        "Row",
+        "ColumnValue",
+        "Cell",
+        "Interior",
+        "CellFont",
+        "RangeOrigin",
+        "ResultConverter",
+        "IExcelRange",
+        "RuntimeBridge"
     };
 
     /// <summary>
@@ -87,28 +136,21 @@ public class InputDetector
         // Step 3: Detect sugar vs lambda
         var lambdaParams = new List<string>();
         var isStatementBody = false;
-        ExpressionSyntax bodyExpression;
 
         if (exprBody is ParenthesizedLambdaExpressionSyntax parenLambda)
         {
             // Explicit lambda: (a, b) => ...
             lambdaParams.AddRange(parenLambda.ParameterList.Parameters.Select(p => p.Identifier.Text));
             isStatementBody = parenLambda.Block != null;
-            bodyExpression = exprBody;
         }
         else if (exprBody is SimpleLambdaExpressionSyntax simpleLambda)
         {
             // Single-param lambda: x => ...
             lambdaParams.Add(simpleLambda.Parameter.Identifier.Text);
             isStatementBody = simpleLambda.Block != null;
-            bodyExpression = exprBody;
-        }
-        else
-        {
-            // Sugar syntax: tbl.Rows.Where(...)
-            bodyExpression = exprBody;
         }
 
+        // Sugar syntax: tbl.Rows.Where(...)
         var isSugar = lambdaParams.Count == 0;
         List<string> inputs;
 

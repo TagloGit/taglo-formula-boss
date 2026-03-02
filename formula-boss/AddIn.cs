@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using ExcelDna.Integration;
 
@@ -84,7 +84,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                     var headers = new string[cols];
                     for (var i = 0; i < cols; i++)
                     {
-                        headers[i] = values[0, i]?.ToString() ?? "";
+                        headers[i] = values[0, i].ToString() ?? "";
                     }
 
                     return headers;
@@ -101,7 +101,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 try
                 {
-                    if (rangeRef?.GetType().Name != "ExcelReference")
+                    if (rangeRef.GetType().Name != "ExcelReference")
                     {
                         return null;
                     }

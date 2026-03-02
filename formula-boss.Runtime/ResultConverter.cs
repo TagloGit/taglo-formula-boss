@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 
 namespace FormulaBoss.Runtime;
 
@@ -11,28 +11,40 @@ public static class ResultConverter
     public static object Convert(object? result)
     {
         if (result == null)
+        {
             return string.Empty;
+        }
 
         if (result is ExcelValue ev)
+        {
             return ev.ToResult();
+        }
 
         if (result is IExcelRange range)
+        {
             return range.ToResult();
+        }
 
         if (result is bool or int or double or string)
+        {
             return result;
+        }
 
         if (result is IEnumerable<Row> rows)
         {
             var rowList = rows.ToList();
             if (rowList.Count == 0)
+            {
                 return string.Empty;
+            }
 
             var cols = rowList[0].ColumnCount;
             var arr = new object?[rowList.Count, cols];
             for (var r = 0; r < rowList.Count; r++)
-            for (var c = 0; c < cols; c++)
-                arr[r, c] = rowList[r][c].Value;
+                for (var c = 0; c < cols; c++)
+                {
+                    arr[r, c] = rowList[r][c].Value;
+                }
 
             return arr;
         }
@@ -41,11 +53,15 @@ public static class ResultConverter
         {
             var list = colValues.ToList();
             if (list.Count == 0)
+            {
                 return string.Empty;
+            }
 
             var arr = new object?[list.Count, 1];
             for (var r = 0; r < list.Count; r++)
+            {
                 arr[r, 0] = list[r].Value;
+            }
 
             return arr;
         }
@@ -54,11 +70,15 @@ public static class ResultConverter
         {
             var list = enumerable.Cast<object>().ToList();
             if (list.Count == 0)
+            {
                 return string.Empty;
+            }
 
             var arr = new object?[list.Count, 1];
             for (var r = 0; r < list.Count; r++)
+            {
                 arr[r, 0] = list[r] is ColumnValue cv ? cv.Value : list[r];
+            }
 
             return arr;
         }
@@ -78,17 +98,23 @@ public static class ResultConverter
     public static object ToResult(this IExcelRange range)
     {
         if (range is ExcelValue ev)
+        {
             return ev.ToResult();
+        }
 
         var rows = range.Rows.ToList();
         if (rows.Count == 0)
+        {
             return new object?[0, 0];
+        }
 
         var cols = rows[0].ColumnCount;
         var result = new object?[rows.Count, cols];
         for (var r = 0; r < rows.Count; r++)
             for (var c = 0; c < cols; c++)
+            {
                 result[r, c] = rows[r][c].Value;
+            }
 
         return result;
     }
