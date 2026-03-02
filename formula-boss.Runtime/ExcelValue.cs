@@ -96,6 +96,70 @@ public abstract class ExcelValue : IExcelRange
     public static bool operator >=(double a, ExcelValue b) => a >= Convert.ToDouble(b.RawValue);
     public static bool operator <=(double a, ExcelValue b) => a <= Convert.ToDouble(b.RawValue);
 
+    // Arithmetic operators — return ExcelScalar so Select(x => x * 2) works
+    public static ExcelScalar operator +(ExcelValue a, ExcelValue b) =>
+        new(Convert.ToDouble(a.RawValue) + Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator -(ExcelValue a, ExcelValue b) =>
+        new(Convert.ToDouble(a.RawValue) - Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator *(ExcelValue a, ExcelValue b) =>
+        new(Convert.ToDouble(a.RawValue) * Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator /(ExcelValue a, ExcelValue b) =>
+        new(Convert.ToDouble(a.RawValue) / Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator +(ExcelValue a, double b) =>
+        new(Convert.ToDouble(a.RawValue) + b);
+
+    public static ExcelScalar operator -(ExcelValue a, double b) =>
+        new(Convert.ToDouble(a.RawValue) - b);
+
+    public static ExcelScalar operator *(ExcelValue a, double b) =>
+        new(Convert.ToDouble(a.RawValue) * b);
+
+    public static ExcelScalar operator /(ExcelValue a, double b) =>
+        new(Convert.ToDouble(a.RawValue) / b);
+
+    public static ExcelScalar operator +(double a, ExcelValue b) =>
+        new(a + Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator -(double a, ExcelValue b) =>
+        new(a - Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator *(double a, ExcelValue b) =>
+        new(a * Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator /(double a, ExcelValue b) =>
+        new(a / Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator +(ExcelValue a, int b) =>
+        new(Convert.ToDouble(a.RawValue) + b);
+
+    public static ExcelScalar operator -(ExcelValue a, int b) =>
+        new(Convert.ToDouble(a.RawValue) - b);
+
+    public static ExcelScalar operator *(ExcelValue a, int b) =>
+        new(Convert.ToDouble(a.RawValue) * b);
+
+    public static ExcelScalar operator /(ExcelValue a, int b) =>
+        new(Convert.ToDouble(a.RawValue) / b);
+
+    public static ExcelScalar operator +(int a, ExcelValue b) =>
+        new(a + Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator -(int a, ExcelValue b) =>
+        new(a - Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator *(int a, ExcelValue b) =>
+        new(a * Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator /(int a, ExcelValue b) =>
+        new(a / Convert.ToDouble(b.RawValue));
+
+    public static ExcelScalar operator -(ExcelValue a) =>
+        new(-Convert.ToDouble(a.RawValue));
+
     // Int comparison operators (so scalar > 10 works without casting)
     public static bool operator >(ExcelValue a, int b) => Convert.ToDouble(a.RawValue) > b;
     public static bool operator <(ExcelValue a, int b) => Convert.ToDouble(a.RawValue) < b;
