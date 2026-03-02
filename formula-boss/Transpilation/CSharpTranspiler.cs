@@ -3,21 +3,197 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-using FormulaBoss.Interception;
 using FormulaBoss.Parsing;
 
 namespace FormulaBoss.Transpilation;
+
+/// <summary>
+///     Information about a column binding (legacy, used by old transpiler).
+/// </summary>
+public record ColumnBindingInfo(string TableName, string ColumnName);
 
 /// <summary>
 ///     Transpiles DSL AST to C# source code for UDF generation.
 /// </summary>
 public class CSharpTranspiler
 {
+    /// <summary>
+    ///     Sanitizes a name to be a valid Excel UDF name.
+    ///     Converts to uppercase, removes invalid characters, ensures it starts with a letter or underscore.
+    /// </summary>
+    /// <summary>
+    ///     Excel 4.0 XLM macro function names that cannot be used as UDF names.
+    ///     ExcelDNA registers via the C API which shares the XLM namespace,
+    ///     so these names cause 0x800A03EC errors when set via Formula2.
+    /// </summary>
+    private static readonly HashSet<string> ReservedExcelNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // XLM macro functions that conflict with UDF registration
+        "RESULT",
+        "ARGUMENT",
+        "RETURN",
+        "HALT",
+        "GOTO",
+        "SET.NAME",
+        "SET.VALUE",
+        "INPUT",
+        "ALERT",
+        "ERROR",
+        "STEP",
+        "PAUSE",
+        "RESUME",
+        "REGISTER",
+        "UNREGISTER",
+        "CALL",
+        "RUN",
+        "EXEC",
+        // Excel built-in functions
+        "IF",
+        "SUM",
+        "COUNT",
+        "AVERAGE",
+        "MIN",
+        "MAX",
+        "INDEX",
+        "MATCH",
+        "VLOOKUP",
+        "HLOOKUP",
+        "LOOKUP",
+        "OFFSET",
+        "INDIRECT",
+        "ROW",
+        "COLUMN",
+        "LET",
+        "LAMBDA",
+        "SORT",
+        "FILTER",
+        "UNIQUE",
+        "SEQUENCE",
+        "XLOOKUP",
+        "TEXT",
+        "VALUE",
+        "LEFT",
+        "RIGHT",
+        "MID",
+        "LEN",
+        "FIND",
+        "SEARCH",
+        "AND",
+        "OR",
+        "NOT",
+        "TRUE",
+        "FALSE",
+        "TYPE",
+        "N",
+        "T",
+        "ABS",
+        "INT",
+        "MOD",
+        "ROUND",
+        "RAND",
+        "NOW",
+        "TODAY",
+        "DATE",
+        "YEAR",
+        "MONTH",
+        "DAY",
+        "HOUR",
+        "MINUTE",
+        "SECOND",
+        "CHOOSE",
+        "SWITCH",
+        "IFS",
+        "IFERROR",
+        "IFNA",
+        "CONCAT",
+        "TEXTJOIN",
+        "SUBSTITUTE",
+        "REPLACE",
+        "TRIM",
+        "CLEAN",
+        "UPPER",
+        "LOWER",
+        "PROPER",
+        "EXACT",
+        "REPT",
+        "CHAR",
+        "CODE",
+        "ROWS",
+        "COLUMNS",
+        "TRANSPOSE",
+        "AREAS",
+        "SUMIF",
+        "SUMIFS",
+        "COUNTIF",
+        "COUNTIFS",
+        "AVERAGEIF",
+        "AVERAGEIFS",
+        "LARGE",
+        "SMALL",
+        "RANK",
+        "PERCENTILE",
+        "QUARTILE",
+        "COUNTA",
+        "COUNTBLANK",
+        "PRODUCT",
+        "SUMPRODUCT",
+        "LOG",
+        "LOG10",
+        "LN",
+        "EXP",
+        "POWER",
+        "SQRT",
+        "SIGN",
+        "CEILING",
+        "FLOOR",
+        "PI",
+        "FACT",
+        "COMBIN",
+        "PERMUT",
+        "GCD",
+        "LCM",
+        "CONCATENATE",
+        "ADDRESS",
+        "CELL",
+        "INFO",
+        "ISTEXT",
+        "ISNUMBER",
+        "ISBLANK",
+        "ISERROR",
+        "ISNA",
+        "ISLOGICAL",
+        "ISREF",
+        "ISEVEN",
+        "ISODD",
+        "NA",
+        "HYPERLINK",
+        "FORMULATEXT",
+        "AGGREGATE",
+        "SUBTOTAL",
+        "MAP",
+        "REDUCE",
+        "SCAN",
+        "MAKEARRAY",
+        "BYROW",
+        "BYCOL",
+        "TAKE",
+        "DROP",
+        "EXPAND",
+        "WRAPCOLS",
+        "WRAPROWS",
+        "TOCOL",
+        "TOROW",
+        "HSTACK",
+        "VSTACK",
+        "CHOOSEROWS",
+        "CHOOSECOLS"
+    };
+
     private readonly HashSet<string> _accumulatorParameters = []; // Lambda parameters that are accumulators (double)
     private readonly HashSet<string> _lambdaParameters = [];
 
     private readonly Dictionary<string, string>
-        _parameterTypes = new(); // param name -> type (e.g., "Cell", "Interior")
+        _parameterTypes = []; // param name -> type (e.g., "Cell", "Interior")
 
     private readonly HashSet<string> _rowParameters = []; // Lambda parameters that are row objects (object[])
 
@@ -86,12 +262,7 @@ public class CSharpTranspiler
         // Generate the complete UDF class
         var sourceCode = GenerateUdfClass(methodName, expressionCode);
 
-        // Return used column bindings so pipeline can build column parameters
-        var usedBindings = _usedColumnBindings.Count > 0
-            ? _usedColumnBindings.ToList()
-            : null;
-
-        return new TranspileResult(sourceCode, methodName, _requiresObjectModel, originalSource, usedBindings);
+        return new TranspileResult(sourceCode, methodName, _requiresObjectModel, originalSource);
     }
 
     private void DetectObjectModelUsage(Expression expression)
@@ -1715,7 +1886,8 @@ public class CSharpTranspiler
         sb.AppendLine("            var helperType = hostAsm.GetType(\"FormulaBoss.RuntimeHelpers\");");
         sb.AppendLine("            if (helperType == null) return \"ERROR: RuntimeHelpers type not found\";");
         sb.AppendLine("            var getRangeMethod = helperType.GetMethod(\"GetRangeFromReference\");");
-        sb.AppendLine("            if (getRangeMethod == null) return \"ERROR: GetRangeFromReference method not found\";");
+        sb.AppendLine(
+            "            if (getRangeMethod == null) return \"ERROR: GetRangeFromReference method not found\";");
         sb.AppendLine("            var rangeResult = getRangeMethod.Invoke(null, new object[] { rangeRef });");
         sb.AppendLine("            if (rangeResult is string errorMsg) return errorMsg;");
         sb.AppendLine("            dynamic range = rangeResult;");
@@ -1934,7 +2106,7 @@ public class CSharpTranspiler
         // Unwrap TypedRow objects to their underlying value arrays
         if (needsTypedRows && typedRowClassName != null)
         {
-            sb.AppendLine($"                // Unwrap TypedRow objects to value arrays");
+            sb.AppendLine("                // Unwrap TypedRow objects to value arrays");
             sb.AppendLine($"                if (list[0] is {typedRowClassName})");
             sb.AppendLine(
                 $"                    list = list.Cast<{typedRowClassName}>().Select(tr => (object)tr.__values__).ToList();");
@@ -2340,47 +2512,6 @@ public class CSharpTranspiler
         var hashString = Convert.ToHexString(hash)[..8].ToLowerInvariant();
         return $"__udf_{hashString}";
     }
-
-    /// <summary>
-    ///     Sanitizes a name to be a valid Excel UDF name.
-    ///     Converts to uppercase, removes invalid characters, ensures it starts with a letter or underscore.
-    /// </summary>
-    /// <summary>
-    ///     Excel 4.0 XLM macro function names that cannot be used as UDF names.
-    ///     ExcelDNA registers via the C API which shares the XLM namespace,
-    ///     so these names cause 0x800A03EC errors when set via Formula2.
-    /// </summary>
-    private static readonly HashSet<string> ReservedExcelNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // XLM macro functions that conflict with UDF registration
-        "RESULT", "ARGUMENT", "RETURN", "HALT", "GOTO", "SET.NAME", "SET.VALUE",
-        "INPUT", "ALERT", "ERROR", "STEP", "PAUSE", "RESUME",
-        "REGISTER", "UNREGISTER", "CALL", "RUN", "EXEC",
-        // Excel built-in functions
-        "IF", "SUM", "COUNT", "AVERAGE", "MIN", "MAX", "INDEX", "MATCH",
-        "VLOOKUP", "HLOOKUP", "LOOKUP", "OFFSET", "INDIRECT", "ROW", "COLUMN",
-        "LET", "LAMBDA", "SORT", "FILTER", "UNIQUE", "SEQUENCE", "XLOOKUP",
-        "TEXT", "VALUE", "LEFT", "RIGHT", "MID", "LEN", "FIND", "SEARCH",
-        "AND", "OR", "NOT", "TRUE", "FALSE", "TYPE", "N", "T",
-        "ABS", "INT", "MOD", "ROUND", "RAND", "NOW", "TODAY", "DATE",
-        "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
-        "CHOOSE", "SWITCH", "IFS", "IFERROR", "IFNA",
-        "CONCAT", "TEXTJOIN", "SUBSTITUTE", "REPLACE", "TRIM", "CLEAN",
-        "UPPER", "LOWER", "PROPER", "EXACT", "REPT", "CHAR", "CODE",
-        "ROWS", "COLUMNS", "TRANSPOSE", "AREAS",
-        "SUMIF", "SUMIFS", "COUNTIF", "COUNTIFS", "AVERAGEIF", "AVERAGEIFS",
-        "LARGE", "SMALL", "RANK", "PERCENTILE", "QUARTILE",
-        "COUNTA", "COUNTBLANK", "PRODUCT", "SUMPRODUCT",
-        "LOG", "LOG10", "LN", "EXP", "POWER", "SQRT", "SIGN", "CEILING", "FLOOR",
-        "PI", "FACT", "COMBIN", "PERMUT", "GCD", "LCM",
-        "CONCATENATE", "ADDRESS", "CELL", "INFO", "ISTEXT", "ISNUMBER",
-        "ISBLANK", "ISERROR", "ISNA", "ISLOGICAL", "ISREF", "ISEVEN", "ISODD",
-        "NA", "HYPERLINK", "FORMULATEXT",
-        "AGGREGATE", "SUBTOTAL",
-        "MAP", "REDUCE", "SCAN", "MAKEARRAY", "BYROW", "BYCOL",
-        "TAKE", "DROP", "EXPAND", "WRAPCOLS", "WRAPROWS", "TOCOL", "TOROW",
-        "HSTACK", "VSTACK", "CHOOSEROWS", "CHOOSECOLS",
-    };
 
     internal static bool IsReservedExcelName(string name) => ReservedExcelNames.Contains(name);
 

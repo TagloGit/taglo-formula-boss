@@ -122,7 +122,7 @@ public sealed class ExcelAddinFixture : IDisposable
         try
         {
             // Enter a minimal backtick formula
-            cell.Value = "'=`ZZ2:ZZ2.sum()`";
+            cell.Value = "'=`ZZ2:ZZ2.Sum()`";
 
             var sw = Stopwatch.StartNew();
             while (sw.ElapsedMilliseconds < timeoutMs)
