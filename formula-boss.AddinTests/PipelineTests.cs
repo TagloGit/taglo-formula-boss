@@ -150,6 +150,160 @@ public class PipelineTests
         }
     }
 
+    [Fact]
+    public void ValuePath_Select_Multiply()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 3.0);
+            TestUtilities.SetCellValue(ws, "A2", 5.0);
+            TestUtilities.SetCellValue(ws, "A3", 7.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Select(x => x * 2)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 comment: {TestUtilities.GetCellComment(ws, "B1")}");
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(6.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
+            Assert.Equal(10.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B2")));
+            Assert.Equal(14.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B3")));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ValuePath_Any_True()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 5.0);
+            TestUtilities.SetCellValue(ws, "A2", 15.0);
+            TestUtilities.SetCellValue(ws, "A3", 25.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Any(x => x > 20)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.True(Convert.ToBoolean(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ValuePath_Any_False()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 5.0);
+            TestUtilities.SetCellValue(ws, "A2", 10.0);
+            TestUtilities.SetCellValue(ws, "A3", 15.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Any(x => x > 20)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.False(Convert.ToBoolean(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ValuePath_All_True()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 25.0);
+            TestUtilities.SetCellValue(ws, "A2", 30.0);
+            TestUtilities.SetCellValue(ws, "A3", 35.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.All(x => x > 20)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.True(Convert.ToBoolean(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ValuePath_All_False()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 5.0);
+            TestUtilities.SetCellValue(ws, "A2", 30.0);
+            TestUtilities.SetCellValue(ws, "A3", 35.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.All(x => x > 20)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.False(Convert.ToBoolean(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ValuePath_First()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 5.0);
+            TestUtilities.SetCellValue(ws, "A2", 15.0);
+            TestUtilities.SetCellValue(ws, "A3", 25.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.First(x => x > 10)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(15.0, Convert.ToDouble(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
     [Fact(Skip = "Cells.Where().Sum() — Sum not available on IEnumerable<Cell>, needs runtime method")]
     public void ObjectModelPath_WhereColor_Sum()
     {
