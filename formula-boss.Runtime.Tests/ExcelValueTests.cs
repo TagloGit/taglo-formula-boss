@@ -42,6 +42,24 @@ public class ExcelValueTests
     }
 
     [Fact]
+    public void Wrap_SingleCellArray_ReturnsExcelScalar()
+    {
+        // Single-cell ExcelReference values are returned as 1x1 arrays by GetValuesFromReference.
+        // Wrap should unwrap these to ExcelScalar so they work correctly in lambda comparisons.
+        var result = ExcelValue.Wrap(new object[,] { { 15.0 } });
+        Assert.IsType<ExcelScalar>(result);
+        Assert.Equal(15.0, result.RawValue);
+    }
+
+    [Fact]
+    public void Wrap_SingleCellArrayWithHeaders_ReturnsExcelTable()
+    {
+        // 1x1 with headers should still be a table, not unwrapped
+        var result = ExcelValue.Wrap(new object[,] { { "Val" } }, new[] { "Col" });
+        Assert.IsType<ExcelTable>(result);
+    }
+
+    [Fact]
     public void Wrap_ArrayWithHeaders_ReturnsExcelTable()
     {
         var result = ExcelValue.Wrap(

@@ -338,7 +338,7 @@ public class PipelineTests
         }
     }
 
-    [Fact(Skip = "LET variable in lambda returns #VALUE! — see #83")]
+    [Fact]
     public void LetFormula_VariableReusedInLambda()
     {
         var ws = _excel.AddWorksheet();
