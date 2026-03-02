@@ -95,7 +95,7 @@ public class AssemblyIdentitySpikeTests
 
         // Simulate generated code creating types via reflection
         var scalarType = runtimeAssembly.GetType("FormulaBoss.Runtime.ExcelScalar")!;
-        var scalar = Activator.CreateInstance(scalarType, new object?[] { 42.0, null })!;
+        var scalar = Activator.CreateInstance(scalarType, 42.0, null)!;
 
         // Access RawValue via reflection
         var rawValueProp = scalarType.GetProperty("RawValue")!;
