@@ -26,14 +26,63 @@ public class CodeEmitter
     /// <summary>
     ///     Generates a UDF source code string from a detection result and the original expression.
     /// </summary>
+    /// <param name="detection">Detection result from <see cref="InputDetector"/>.</param>
+    /// <param name="originalExpression">The original user expression.</param>
+    /// <param name="preferredName">Optional preferred UDF name.</param>
+    /// <param name="headersByParameter">
+    ///     Optional column headers per parameter name. When provided, dot-notation column access
+    ///     (e.g. <c>r.Population2025</c>) is rewritten to bracket access (<c>r["Population 2025"]</c>).
+    /// </param>
     public TranspileResult Emit(
         DetectionResult detection,
         string originalExpression,
-        string? preferredName = null)
+        string? preferredName = null,
+        Dictionary<string, string[]>? headersByParameter = null)
     {
         var methodName = GenerateMethodName(originalExpression, preferredName);
-        var source = BuildSource(detection, methodName);
+
+        // Apply dot-notation-to-bracket rewrite if headers are available
+        var rewrittenDetection = detection;
+        if (headersByParameter is { Count: > 0 })
+        {
+            rewrittenDetection = ApplyDotNotationRewrite(detection, headersByParameter);
+        }
+
+        var source = BuildSource(rewrittenDetection, methodName);
         return new TranspileResult(source, methodName, detection.RequiresObjectModel, originalExpression);
+    }
+
+    private static DetectionResult ApplyDotNotationRewrite(
+        DetectionResult detection,
+        Dictionary<string, string[]> headersByParameter)
+    {
+        // Build a combined column mapping from all parameters that have headers
+        var combinedMapping = new Dictionary<string, string>();
+        foreach (var (_, headers) in headersByParameter)
+        {
+            var mapping = ColumnMapper.BuildMapping(headers);
+            foreach (var (sanitised, original) in mapping)
+            {
+                // If same sanitised name maps to different originals across params, skip
+                if (combinedMapping.TryGetValue(sanitised, out var existing) && existing != original)
+                {
+                    combinedMapping.Remove(sanitised);
+                }
+                else
+                {
+                    combinedMapping[sanitised] = original;
+                }
+            }
+        }
+
+        if (combinedMapping.Count == 0)
+        {
+            return detection;
+        }
+
+        var rewritten = DotNotationRewriter.Rewrite(detection.NormalizedExpression, combinedMapping);
+
+        return detection with { NormalizedExpression = rewritten };
     }
 
     internal static string GenerateMethodName(string expression, string? preferredName)
