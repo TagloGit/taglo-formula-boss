@@ -8,85 +8,76 @@ public class InputDetectorTests
 {
     private readonly InputDetector _detector = new();
 
-    #region Sugar Syntax Detection
+    #region Free Variable Detection (Parameters)
 
     [Fact]
-    public void Detect_SugarSyntax_SingleInput()
+    public void Detect_SingleFreeVariable()
     {
         var result = _detector.Detect("tbl.Rows.Where(r => r[0] > 5)");
 
-        Assert.True(result.IsSugarSyntax);
-        Assert.Equal(["tbl"], result.Inputs);
+        Assert.Equal(["tbl"], result.Parameters);
     }
 
     [Fact]
-    public void Detect_SugarSyntax_Count()
+    public void Detect_SingleFreeVariable_Count()
     {
         var result = _detector.Detect("tbl.Rows.Count()");
 
-        Assert.True(result.IsSugarSyntax);
-        Assert.Equal(["tbl"], result.Inputs);
+        Assert.Equal(["tbl"], result.Parameters);
     }
 
     [Fact]
-    public void Detect_SugarSyntax_ChainedMethods()
+    public void Detect_SingleFreeVariable_ChainedMethods()
     {
         var result = _detector.Detect("data.Rows.Where(r => (double)r[0] > 10).Select(r => r[1])");
 
-        Assert.True(result.IsSugarSyntax);
-        Assert.Equal(["data"], result.Inputs);
-    }
-
-    #endregion
-
-    #region Explicit Lambda Detection
-
-    [Fact]
-    public void Detect_ExplicitLambda_MultipleInputs()
-    {
-        var result = _detector.Detect("(tbl, maxVal) => tbl.Rows.Where(r => (double)r[0] < (double)maxVal)");
-
-        Assert.False(result.IsSugarSyntax);
-        Assert.Equal(["tbl", "maxVal"], result.Inputs);
+        Assert.Equal(["data"], result.Parameters);
     }
 
     [Fact]
-    public void Detect_ExplicitLambda_SingleInput()
+    public void Detect_MultipleFreeVariables()
     {
-        var result = _detector.Detect("(tbl) => tbl.Rows.Count()");
+        var result = _detector.Detect("tbl.Rows.Where(r => (double)r[0] > minVal && (double)r[0] < maxVal)");
 
-        Assert.False(result.IsSugarSyntax);
-        Assert.Equal(["tbl"], result.Inputs);
+        Assert.Contains("tbl", result.Parameters);
+        Assert.Contains("minVal", result.Parameters);
+        Assert.Contains("maxVal", result.Parameters);
     }
 
     [Fact]
-    public void Detect_SimpleLambda_SingleInput()
+    public void Detect_NoFreeVariables_ThrowsOrEmpty()
     {
-        var result = _detector.Detect("tbl => tbl.Rows.Count()");
+        // An expression with no free variables — all identifiers are lambda params or keywords
+        // This should still work (could be a literal expression)
+        var result = _detector.Detect("1 + 2");
 
-        Assert.False(result.IsSugarSyntax);
-        Assert.Equal(["tbl"], result.Inputs);
-    }
-
-    #endregion
-
-    #region Statement Body Detection
-
-    [Fact]
-    public void Detect_StatementBody_Detected()
-    {
-        var result = _detector.Detect("(tbl) => { var c = tbl.Rows.Count(); return c; }");
-
-        Assert.True(result.IsStatementBody);
-        Assert.Equal(["tbl"], result.Inputs);
+        Assert.Empty(result.Parameters);
     }
 
     [Fact]
-    public void Detect_ExpressionBody_NotStatement()
+    public void Detect_LambdaParams_NotParameters()
     {
-        var result = _detector.Detect("(tbl) => tbl.Rows.Count()");
+        // 'r' is a lambda param inside Where, not a free variable
+        var result = _detector.Detect("tbl.Rows.Where(r => (double)r[0] > 5)");
 
-        Assert.False(result.IsStatementBody);
+        Assert.DoesNotContain("r", result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_FreeVariable_WithThreshold()
+    {
+        var result = _detector.Detect("tbl.Rows.Where(r => (double)r[0] < threshold)");
+
+        Assert.Contains("tbl", result.Parameters);
+        Assert.Contains("threshold", result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_ParametersAreSorted()
+    {
+        var result = _detector.Detect("z.Rows.Where(r => (double)r[0] > a && (double)r[0] < m)");
+
+        Assert.Equal(["a", "m", "z"], result.Parameters);
     }
 
     #endregion
@@ -98,9 +89,8 @@ public class InputDetectorTests
     {
         var result = _detector.Detect("A1:B10.Rows.Count()");
 
-        Assert.True(result.IsSugarSyntax);
-        Assert.Single(result.Inputs);
-        Assert.StartsWith("__range_", result.Inputs[0]);
+        Assert.Single(result.Parameters);
+        Assert.StartsWith("__range_", result.Parameters[0]);
         Assert.Contains("A1:B10", result.RangeRefMap.Values);
     }
 
@@ -109,15 +99,14 @@ public class InputDetectorTests
     {
         var result = _detector.Detect("$A$1:$B$10.Rows.Count()");
 
-        Assert.Single(result.Inputs);
-        Assert.StartsWith("__range_", result.Inputs[0]);
+        Assert.Single(result.Parameters);
+        Assert.StartsWith("__range_", result.Parameters[0]);
         Assert.Contains("$A$1:$B$10", result.RangeRefMap.Values);
     }
 
     [Fact]
     public void Detect_RangeRefNotTruncated()
     {
-        // Ensure "A1:A10" doesn't get truncated to just "A1"
         var result = _detector.Detect("A1:A10.Rows.Count()");
 
         var rangeRef = result.RangeRefMap.Values.Single();
@@ -154,68 +143,40 @@ public class InputDetectorTests
 
     #endregion
 
-    #region Free Variable Detection
+    #region Per-Variable Header Detection
 
     [Fact]
-    public void Detect_FreeVariable_Detected()
-    {
-        var result = _detector.Detect("(tbl) => tbl.Rows.Where(r => (double)r[0] < threshold)");
-
-        Assert.Contains("threshold", result.FreeVariables);
-    }
-
-    [Fact]
-    public void Detect_NoFreeVariables_WhenAllBound()
-    {
-        var result = _detector.Detect("(tbl) => tbl.Rows.Count()");
-
-        Assert.Empty(result.FreeVariables);
-    }
-
-    [Fact]
-    public void Detect_MultipleFreeVariables()
-    {
-        var result = _detector.Detect("(tbl) => tbl.Rows.Where(r => (double)r[0] > minVal && (double)r[0] < maxVal)");
-
-        Assert.Contains("minVal", result.FreeVariables);
-        Assert.Contains("maxVal", result.FreeVariables);
-    }
-
-    [Fact]
-    public void Detect_LambdaParams_NotFreeVariables()
-    {
-        // 'r' is a lambda param inside Where, not a free variable
-        var result = _detector.Detect("(tbl) => tbl.Rows.Where(r => (double)r[0] > 5)");
-
-        Assert.DoesNotContain("r", result.FreeVariables);
-    }
-
-    #endregion
-
-    #region String Bracket Access
-
-    [Fact]
-    public void Detect_StringBracketAccess_Detected()
+    public void Detect_StringBracketAccess_TracksVariable()
     {
         var result = _detector.Detect("tbl.Rows.Where(r => (double)r[\"Price\"] > 10)");
 
-        Assert.True(result.HasStringBracketAccess);
+        Assert.Contains("tbl", result.HeaderVariables);
     }
 
     [Fact]
-    public void Detect_NumericBracketAccess_NotStringBracket()
+    public void Detect_NumericBracketAccess_NoHeaderVariable()
     {
         var result = _detector.Detect("tbl.Rows.Where(r => (double)r[0] > 10)");
 
-        Assert.False(result.HasStringBracketAccess);
+        Assert.Empty(result.HeaderVariables);
     }
 
     [Fact]
-    public void Detect_SpacedColumnName_Detected()
+    public void Detect_SpacedColumnName_TracksVariable()
     {
         var result = _detector.Detect("tbl.Rows.Where(r => (double)r[\"Unit Price\"] > 10)");
 
-        Assert.True(result.HasStringBracketAccess);
+        Assert.Contains("tbl", result.HeaderVariables);
+    }
+
+    [Fact]
+    public void Detect_MultipleVariables_OnlyHeaderOneTracked()
+    {
+        // tbl uses r["Col"] but threshold is just a scalar — only tbl in HeaderVariables
+        var result = _detector.Detect("tbl.Rows.Where(r => (double)r[\"Price\"] > threshold)");
+
+        Assert.Contains("tbl", result.HeaderVariables);
+        Assert.DoesNotContain("threshold", result.HeaderVariables);
     }
 
     #endregion
@@ -245,7 +206,6 @@ public class InputDetectorTests
     [Fact]
     public void PreprocessRangeRefs_SimpleIdentifier_NotReplaced()
     {
-        // "tbl" should not be treated as a range ref even though it has letters
         var (normalized, map) = InputDetector.PreprocessRangeRefs("tbl.Rows");
 
         Assert.Equal("tbl.Rows", normalized);
@@ -255,7 +215,6 @@ public class InputDetectorTests
     [Fact]
     public void PreprocessRangeRefs_SingleCellLikeVar_NotReplaced()
     {
-        // A1 without colon or $ should be treated as a regular identifier
         var (normalized, map) = InputDetector.PreprocessRangeRefs("A1.Rows");
 
         Assert.Equal("A1.Rows", normalized);

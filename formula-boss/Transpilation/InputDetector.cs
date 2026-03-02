@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -7,29 +7,24 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace FormulaBoss.Transpilation;
 
 /// <summary>
-///     Result of analyzing a user expression for inputs, object model usage, and free variables.
+///     Result of analyzing a user expression for parameters, object model usage, and header variables.
 /// </summary>
-/// <param name="IsSugarSyntax">True if the expression is sugar (implicit single input), not an explicit lambda.</param>
-/// <param name="Inputs">Input identifier names (e.g., ["tbl"] or ["tbl", "maxVal"]).</param>
+/// <param name="Parameters">Flat list of all detected parameter names (free variables), in sorted order.</param>
 /// <param name="RequiresObjectModel">True if .Cell or .Cells is used (needs IsMacroType).</param>
-/// <param name="IsStatementBody">True if the expression body is a { ... } block.</param>
-/// <param name="FreeVariables">Identifiers not in Inputs or lambda params — become extra UDF parameters.</param>
-/// <param name="HasStringBracketAccess">True if r["Col Name"] syntax is detected.</param>
+/// <param name="HeaderVariables">Parameter names that need header extraction (use r["Col"] syntax).</param>
 /// <param name="NormalizedExpression">Expression with range refs replaced by valid C# identifiers.</param>
 /// <param name="RangeRefMap">Maps placeholder identifiers back to original range refs (e.g., "__range_A1_B10" → "A1:B10").</param>
 public record DetectionResult(
-    bool IsSugarSyntax,
-    IReadOnlyList<string> Inputs,
+    IReadOnlyList<string> Parameters,
     bool RequiresObjectModel,
-    bool IsStatementBody,
-    IReadOnlyList<string> FreeVariables,
-    bool HasStringBracketAccess,
+    IReadOnlySet<string> HeaderVariables,
     string NormalizedExpression,
     IReadOnlyDictionary<string, string> RangeRefMap);
 
 /// <summary>
-///     Analyzes user expressions using Roslyn syntax trees to detect inputs,
-///     object model usage, free variables, and range references.
+///     Analyzes user expressions using Roslyn syntax trees to detect parameters,
+///     object model usage, header variables, and range references.
+///     All inputs are detected via free variable analysis — no explicit lambda syntax.
 /// </summary>
 public class InputDetector
 {
@@ -107,6 +102,7 @@ public class InputDetector
 
     /// <summary>
     ///     Analyzes a user expression and returns detection results.
+    ///     All inputs are detected as free variables — no explicit outer lambda syntax.
     /// </summary>
     public DetectionResult Detect(string expression)
     {
@@ -118,8 +114,7 @@ public class InputDetector
         // Step 1: Pre-process range references
         var (normalized, rangeRefMap) = PreprocessRangeRefs(expression);
 
-        // Step 2: Determine if this is a lambda or sugar syntax
-        // Wrap in a method body so Roslyn can parse it as an expression
+        // Step 2: Parse with Roslyn
         var wrappedSource = $"class __Wrapper {{ object __M() => {normalized}; }}";
         var tree = CSharpSyntaxTree.ParseText(wrappedSource);
         var root = tree.GetRoot();
@@ -133,60 +128,20 @@ public class InputDetector
             throw new TranspileException($"Failed to parse expression: {expression}");
         }
 
-        // Step 3: Detect sugar vs lambda
-        var lambdaParams = new List<string>();
-        var isStatementBody = false;
-
-        if (exprBody is ParenthesizedLambdaExpressionSyntax parenLambda)
-        {
-            // Explicit lambda: (a, b) => ...
-            lambdaParams.AddRange(parenLambda.ParameterList.Parameters.Select(p => p.Identifier.Text));
-            isStatementBody = parenLambda.Block != null;
-        }
-        else if (exprBody is SimpleLambdaExpressionSyntax simpleLambda)
-        {
-            // Single-param lambda: x => ...
-            lambdaParams.Add(simpleLambda.Parameter.Identifier.Text);
-            isStatementBody = simpleLambda.Block != null;
-        }
-
-        // Sugar syntax: tbl.Rows.Where(...)
-        var isSugar = lambdaParams.Count == 0;
-        List<string> inputs;
-
-        if (isSugar)
-        {
-            // Extract the primary input: leftmost identifier in the leading member-access chain
-            var primaryInput = ExtractPrimaryInput(exprBody);
-            if (primaryInput == null)
-            {
-                throw new TranspileException($"Could not detect input identifier in: {expression}");
-            }
-
-            inputs = [primaryInput];
-        }
-        else
-        {
-            inputs = lambdaParams;
-        }
-
-        // Step 4: Detect object model usage (.Cell, .Cells)
+        // Step 3: Detect object model usage (.Cell, .Cells)
         var requiresObjectModel = DetectObjectModel(root);
 
-        // Step 5: Detect free variables
+        // Step 4: Detect all free variables as parameters
         var allLambdaParams = CollectAllLambdaParameters(root);
-        var freeVars = DetectFreeVariables(root, inputs, allLambdaParams);
+        var parameters = DetectFreeVariables(root, allLambdaParams);
 
-        // Step 6: Detect string bracket access
-        var hasStringBracket = DetectStringBracketAccess(root);
+        // Step 5: Detect per-variable header access
+        var headerVariables = DetectHeaderVariables(root, new HashSet<string>(parameters));
 
         return new DetectionResult(
-            isSugar,
-            inputs,
+            parameters,
             requiresObjectModel,
-            isStatementBody,
-            freeVars,
-            hasStringBracket,
+            headerVariables,
             normalized,
             rangeRefMap);
     }
@@ -218,31 +173,6 @@ public class InputDetector
         });
 
         return (result, map);
-    }
-
-    /// <summary>
-    ///     Extracts the primary input identifier from the leftmost position in a member-access chain.
-    /// </summary>
-    private static string? ExtractPrimaryInput(ExpressionSyntax expr)
-    {
-        // Walk down the left side of member access / invocation chains
-        var current = expr;
-        while (true)
-        {
-            switch (current)
-            {
-                case MemberAccessExpressionSyntax memberAccess:
-                    current = memberAccess.Expression;
-                    continue;
-                case InvocationExpressionSyntax invocation:
-                    current = invocation.Expression;
-                    continue;
-                case IdentifierNameSyntax identifier:
-                    return identifier.Identifier.Text;
-                default:
-                    return null;
-            }
-        }
     }
 
     /// <summary>
@@ -284,15 +214,14 @@ public class InputDetector
     }
 
     /// <summary>
-    ///     Detects free variables — identifiers that are not inputs, lambda parameters,
+    ///     Detects free variables — identifiers that are not lambda parameters,
     ///     C# keywords, known type names, or method names in invocation context.
+    ///     All free variables become UDF parameters.
     /// </summary>
     private static IReadOnlyList<string> DetectFreeVariables(
         SyntaxNode root,
-        List<string> inputs,
         HashSet<string> allLambdaParams)
     {
-        var inputSet = new HashSet<string>(inputs);
         var freeVars = new HashSet<string>();
 
         // Collect all locally declared variable names
@@ -307,14 +236,14 @@ public class InputDetector
             var name = identifier.Identifier.Text;
 
             // Skip if it's a known identifier
-            if (inputSet.Contains(name) || allLambdaParams.Contains(name) ||
+            if (allLambdaParams.Contains(name) ||
                 IgnoredIdentifiers.Contains(name) || declaredLocals.Contains(name))
             {
                 continue;
             }
 
-            // Skip if it starts with __ (internal placeholder)
-            if (name.StartsWith("__"))
+            // Skip if it starts with __ (internal placeholder) but NOT range ref placeholders
+            if (name.StartsWith("__") && !name.StartsWith("__range_"))
             {
                 continue;
             }
@@ -322,13 +251,6 @@ public class InputDetector
             // Skip if it's a method name being invoked (e.g., Where, Select)
             if (identifier.Parent is MemberAccessExpressionSyntax memberAccess &&
                 memberAccess.Name == identifier)
-            {
-                continue;
-            }
-
-            // Skip if it's a member being accessed on something (not standalone)
-            if (identifier.Parent is MemberAccessExpressionSyntax parentMa &&
-                parentMa.Name == identifier)
             {
                 continue;
             }
@@ -346,14 +268,86 @@ public class InputDetector
     }
 
     /// <summary>
-    ///     Detects r["Col Name"] string bracket access patterns.
+    ///     Detects which parameters need header extraction by tracing string bracket
+    ///     accesses (r["Col"]) back to their root parameter identifier.
     /// </summary>
-    private static bool DetectStringBracketAccess(SyntaxNode root)
+    private static IReadOnlySet<string> DetectHeaderVariables(
+        SyntaxNode root,
+        HashSet<string> parameters)
     {
-        return root.DescendantNodes()
+        var result = new HashSet<string>();
+
+        // Find all element accesses with string literal args
+        var stringAccesses = root.DescendantNodes()
             .OfType<ElementAccessExpressionSyntax>()
-            .Any(ea => ea.ArgumentList.Arguments
+            .Where(ea => ea.ArgumentList.Arguments
                 .Any(arg => arg.Expression is LiteralExpressionSyntax lit &&
-                            lit.IsKind(SyntaxKind.StringLiteralExpression)));
+                            lit.IsKind(SyntaxKind.StringLiteralExpression)))
+            .ToList();
+
+        if (stringAccesses.Count == 0)
+        {
+            return result;
+        }
+
+        foreach (var access in stringAccesses)
+        {
+            // The receiver of the bracket access (e.g., `r` in `r["Price"]`) is typically
+            // a lambda param. Find the enclosing lambda, then trace the invocation chain
+            // back to the root parameter.
+            var enclosingLambda = access.Ancestors()
+                .FirstOrDefault(n => n is SimpleLambdaExpressionSyntax or ParenthesizedLambdaExpressionSyntax);
+
+            if (enclosingLambda != null)
+            {
+                // Find the invocation containing this lambda (e.g., `.Where(r => r["Price"] > 5)`)
+                var invocation = enclosingLambda.Ancestors()
+                    .OfType<InvocationExpressionSyntax>().FirstOrDefault();
+
+                if (invocation != null)
+                {
+                    // Trace the method call chain back to root identifier
+                    var rootId = TraceToRootIdentifier(invocation.Expression);
+                    if (rootId != null && parameters.Contains(rootId))
+                    {
+                        result.Add(rootId);
+                    }
+                }
+            }
+            else
+            {
+                // Direct access on a parameter: `tbl["Col"]`
+                if (access.Expression is IdentifierNameSyntax id && parameters.Contains(id.Identifier.Text))
+                {
+                    result.Add(id.Identifier.Text);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Traces a member access / invocation chain to its root identifier.
+    /// </summary>
+    private static string? TraceToRootIdentifier(ExpressionSyntax expr)
+    {
+        var current = expr;
+        while (true)
+        {
+            switch (current)
+            {
+                case MemberAccessExpressionSyntax memberAccess:
+                    current = memberAccess.Expression;
+                    continue;
+                case InvocationExpressionSyntax invocation:
+                    current = invocation.Expression;
+                    continue;
+                case IdentifierNameSyntax identifier:
+                    return identifier.Identifier.Text;
+                default:
+                    return null;
+            }
+        }
     }
 }

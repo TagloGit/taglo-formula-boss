@@ -3,10 +3,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-using FormulaBoss.Interception;
 using FormulaBoss.Parsing;
 
 namespace FormulaBoss.Transpilation;
+
+/// <summary>
+///     Information about a column binding (legacy, used by old transpiler).
+/// </summary>
+public record ColumnBindingInfo(string TableName, string ColumnName);
 
 /// <summary>
 ///     Transpiles DSL AST to C# source code for UDF generation.
@@ -91,7 +95,7 @@ public class CSharpTranspiler
             ? _usedColumnBindings.ToList()
             : null;
 
-        return new TranspileResult(sourceCode, methodName, _requiresObjectModel, originalSource, usedBindings);
+        return new TranspileResult(sourceCode, methodName, _requiresObjectModel, originalSource);
     }
 
     private void DetectObjectModelUsage(Expression expression)

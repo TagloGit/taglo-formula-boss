@@ -251,8 +251,7 @@ public static class TestHelpers
             CoreMethod = coreMethod,
             MethodName = transpileResult.MethodName,
             RequiresObjectModel = transpileResult.RequiresObjectModel,
-            SourceCode = transpileResult.SourceCode,
-            UsedColumnBindings = transpileResult.UsedColumnBindings
+            SourceCode = transpileResult.SourceCode
         };
     }
 }
@@ -268,8 +267,6 @@ public class TestCompilationResult
     public string? MethodName { get; init; }
     public bool RequiresObjectModel { get; init; }
     public string? SourceCode { get; init; }
-    public IReadOnlyList<string>? UsedColumnBindings { get; init; }
-
     /// <summary>
     ///     Helper to print diagnostic information when a test fails.
     /// </summary>

@@ -95,45 +95,30 @@ public class CodeEmitter
         sb.AppendLine($"public static class {methodName}_Class");
         sb.AppendLine("{");
 
-        // Method signature: all inputs + free vars as object parameters
-        var allParams = new List<string>();
-        foreach (var input in detection.Inputs)
-        {
-            allParams.Add($"object {input}__raw");
-        }
-
-        foreach (var freeVar in detection.FreeVariables)
-        {
-            allParams.Add($"object {freeVar}__raw");
-        }
-
+        // Method signature: all parameters as object
+        var allParams = detection.Parameters.Select(p => $"object {p}__raw");
         var paramList = string.Join(", ", allParams);
         sb.AppendLine($"    public static object {methodName}({paramList})");
         sb.AppendLine("    {");
 
-        // Preamble: wrap each input
-        // First input is assumed to be a range (cast to IExcelRange)
-        // Additional inputs in explicit lambdas may be scalars (keep as ExcelValue)
-        for (var i = 0; i < detection.Inputs.Count; i++)
+        // Uniform preamble: wrap each parameter
+        foreach (var param in detection.Parameters)
         {
-            var isFirstInput = i == 0;
-            EmitInputWrapping(sb, detection.Inputs[i], detection.RequiresObjectModel, isFirstInput,
-                detection.HasStringBracketAccess);
+            var extractHeaders = detection.HeaderVariables.Contains(param);
+            EmitParameterWrapping(sb, param, detection.RequiresObjectModel, extractHeaders);
         }
 
-        // Wrap free variables as scalars (keep as ExcelValue, not IExcelRange)
-        foreach (var freeVar in detection.FreeVariables)
-        {
-            sb.AppendLine($"        var {freeVar} = ExcelValue.Wrap({freeVar}__raw);");
-        }
-
-        if (detection.Inputs.Count > 0 || detection.FreeVariables.Count > 0)
+        if (detection.Parameters.Count > 0)
         {
             sb.AppendLine();
         }
 
-        // User expression body
-        EmitExpressionBody(sb, detection);
+        // User expression body — always direct (no lambda stripping)
+        sb.AppendLine($"        var __result = {detection.NormalizedExpression};");
+
+        sb.AppendLine("        return FormulaBoss.RuntimeHelpers.ToResultDelegate != null");
+        sb.AppendLine("            ? FormulaBoss.RuntimeHelpers.ToResultDelegate(__result)");
+        sb.AppendLine("            : __result;");
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -141,131 +126,50 @@ public class CodeEmitter
         return sb.ToString();
     }
 
-    private static void EmitInputWrapping(StringBuilder sb, string input, bool requiresObjectModel,
-        bool castToRange, bool extractHeaders)
+    private static void EmitParameterWrapping(StringBuilder sb, string param, bool requiresObjectModel,
+        bool extractHeaders)
     {
-        // Check if input is an ExcelReference and extract values
-        sb.AppendLine($"        var {input}__isRef = {input}__raw?.GetType()?.Name == \"ExcelReference\";");
-        sb.AppendLine($"        var {input}__values = {input}__isRef == true");
-        sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({input}__raw)");
-        sb.AppendLine($"            : {input}__raw;");
+        // Check if parameter is an ExcelReference and extract values
+        sb.AppendLine($"        var {param}__isRef = {param}__raw?.GetType()?.Name == \"ExcelReference\";");
+        sb.AppendLine($"        var {param}__values = {param}__isRef == true");
+        sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetValuesFromReference({param}__raw)");
+        sb.AppendLine($"            : {param}__raw;");
 
         if (extractHeaders)
         {
-            // Get headers from first row (only when expression uses r["Col"] syntax)
-            // GetHeadersDelegate accepts object[,] (already-extracted values), not raw ExcelReference
-            sb.AppendLine($"        var {input}__headers = {input}__values is object[,] {input}__arr && {input}__arr.GetLength(0) > 0");
-            sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({input}__arr)");
+            // Get headers from first row (only when expression uses r["Col"] syntax for this param)
+            sb.AppendLine($"        var {param}__headers = {param}__values is object[,] {param}__arr && {param}__arr.GetLength(0) > 0");
+            sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({param}__arr)");
             sb.AppendLine($"            : null;");
 
             // Strip header row from values when headers are present
-            sb.AppendLine($"        if ({input}__headers != null && {input}__values is object[,] {input}__valArr)");
+            sb.AppendLine($"        if ({param}__headers != null && {param}__values is object[,] {param}__valArr)");
             sb.AppendLine("        {");
-            sb.AppendLine($"            var __rows = {input}__valArr.GetLength(0) - 1;");
-            sb.AppendLine($"            var __cols = {input}__valArr.GetLength(1);");
+            sb.AppendLine($"            var __rows = {param}__valArr.GetLength(0) - 1;");
+            sb.AppendLine($"            var __cols = {param}__valArr.GetLength(1);");
             sb.AppendLine($"            var __stripped = new object[__rows, __cols];");
             sb.AppendLine($"            for (var __r = 0; __r < __rows; __r++)");
             sb.AppendLine($"                for (var __c = 0; __c < __cols; __c++)");
-            sb.AppendLine($"                    __stripped[__r, __c] = {input}__valArr[__r + 1, __c];");
-            sb.AppendLine($"            {input}__values = __stripped;");
+            sb.AppendLine($"                    __stripped[__r, __c] = {param}__valArr[__r + 1, __c];");
+            sb.AppendLine($"            {param}__values = __stripped;");
             sb.AppendLine("        }");
         }
         else
         {
-            sb.AppendLine($"        string[]? {input}__headers = null;");
+            sb.AppendLine($"        string[]? {param}__headers = null;");
         }
 
         // Get origin if object model is needed
         if (requiresObjectModel)
         {
-            sb.AppendLine($"        var {input}__origin = {input}__isRef == true");
-            sb.AppendLine($"            ? (RangeOrigin?)FormulaBoss.RuntimeHelpers.GetOriginDelegate?.Invoke({input}__raw)");
+            sb.AppendLine($"        var {param}__origin = {param}__isRef == true");
+            sb.AppendLine($"            ? (RangeOrigin?)FormulaBoss.RuntimeHelpers.GetOriginDelegate?.Invoke({param}__raw)");
             sb.AppendLine($"            : null;");
-            var cast = castToRange ? "(IExcelRange)" : "";
-            sb.AppendLine($"        var {input} = {cast}ExcelValue.Wrap({input}__values, {input}__headers, {input}__origin);");
+            sb.AppendLine($"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);");
         }
         else
         {
-            var cast = castToRange ? "(IExcelRange)" : "";
-            sb.AppendLine($"        var {input} = {cast}ExcelValue.Wrap({input}__values, {input}__headers);");
+            sb.AppendLine($"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers);");
         }
-    }
-
-    private static void EmitExpressionBody(StringBuilder sb, DetectionResult detection)
-    {
-        var expr = detection.NormalizedExpression;
-
-        if (detection.IsSugarSyntax)
-        {
-            // Sugar: the expression IS the full chain starting with the input identifier
-            // e.g., "tbl.Rows.Where(r => r[0] > 5)" — tbl is already a local variable
-            sb.AppendLine($"        var __result = {expr};");
-        }
-        else
-        {
-            // Explicit lambda: extract the body
-            // The expression is "(tbl) => body" or "(tbl, maxVal) => body"
-            // We need to emit just the body since parameters are already local variables
-            var arrowIndex = FindArrowIndex(expr);
-            if (arrowIndex >= 0)
-            {
-                var body = expr[(arrowIndex + 2)..].TrimStart();
-                if (detection.IsStatementBody)
-                {
-                    // Statement block: emit the block directly but wrap in a helper
-                    // Remove outer braces
-                    var trimmed = body.Trim();
-                    if (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
-                    {
-                        trimmed = trimmed[1..^1].Trim();
-                    }
-
-                    // Emit the block contents directly
-                    // Replace 'return x;' with assignment to __result
-                    // For simplicity, emit a local function
-                    sb.AppendLine("        object __Execute()");
-                    sb.AppendLine("        {");
-                    sb.AppendLine($"            {trimmed}");
-                    sb.AppendLine("        }");
-                    sb.AppendLine("        var __result = __Execute();");
-                }
-                else
-                {
-                    sb.AppendLine($"        var __result = {body};");
-                }
-            }
-            else
-            {
-                sb.AppendLine($"        var __result = {expr};");
-            }
-        }
-
-        sb.AppendLine("        return FormulaBoss.RuntimeHelpers.ToResultDelegate != null");
-        sb.AppendLine("            ? FormulaBoss.RuntimeHelpers.ToResultDelegate(__result)");
-        sb.AppendLine("            : __result;");
-    }
-
-    /// <summary>
-    ///     Finds the index of the top-level => arrow in an expression, skipping nested lambdas.
-    /// </summary>
-    private static int FindArrowIndex(string expr)
-    {
-        var depth = 0;
-        for (var i = 0; i < expr.Length - 1; i++)
-        {
-            switch (expr[i])
-            {
-                case '(':
-                    depth++;
-                    break;
-                case ')':
-                    depth--;
-                    break;
-                case '=' when depth == 0 && expr[i + 1] == '>':
-                    return i;
-            }
-        }
-
-        return -1;
     }
 }

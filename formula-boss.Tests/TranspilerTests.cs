@@ -934,9 +934,6 @@ public class TranspilerTests
         // Should generate extractColName helper and use it
         Assert.Contains("extractColName", result.SourceCode);
         Assert.Contains("_price_colname_ = extractColName(price_col_param)", result.SourceCode);
-        // Should track used column bindings
-        Assert.NotNull(result.UsedColumnBindings);
-        Assert.Contains("price", result.UsedColumnBindings);
     }
 
     [Fact]
@@ -950,9 +947,6 @@ public class TranspilerTests
         // TypedRow class with LET-bound property
         Assert.Contains("private class TypedRow_", result.SourceCode);
         Assert.Contains("public dynamic price =>", result.SourceCode);
-        // Should track used column bindings
-        Assert.NotNull(result.UsedColumnBindings);
-        Assert.Contains("price", result.UsedColumnBindings);
     }
 
     [Fact]
@@ -973,10 +967,6 @@ public class TranspilerTests
         // Should generate parameters for both column names
         Assert.Contains("object price_col_param", result.SourceCode);
         Assert.Contains("object qty_col_param", result.SourceCode);
-        // Should track both used column bindings
-        Assert.NotNull(result.UsedColumnBindings);
-        Assert.Contains("price", result.UsedColumnBindings);
-        Assert.Contains("qty", result.UsedColumnBindings);
     }
 
     #endregion

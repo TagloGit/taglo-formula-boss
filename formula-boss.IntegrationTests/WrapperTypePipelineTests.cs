@@ -16,24 +16,6 @@ public class WrapperTypePipelineTests
         _output = output;
     }
 
-    #region Statement Block
-
-    [Fact]
-    public void StatementBlock_ReturnsCount()
-    {
-        var values = new object[,] { { 1.0 }, { 2.0 }, { 3.0 } };
-        var compilation = NewPipelineTestHelpers.CompileExpression(
-            "(tbl) => { var c = tbl.Rows.Count(); return c; }");
-
-        _output.WriteLine(compilation.GetDiagnostics());
-        Assert.True(compilation.Success, compilation.ErrorMessage);
-
-        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        Assert.Equal(3, result);
-    }
-
-    #endregion
-
     #region Free Variables
 
     [Fact]
@@ -42,12 +24,12 @@ public class WrapperTypePipelineTests
         var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
         var threshold = 10.0;
         var compilation = NewPipelineTestHelpers.CompileExpression(
-            "(tbl) => tbl.Rows.Where(r => (double)r[0] > (double)threshold)");
+            "tbl.Rows.Where(r => (double)r[0] > (double)threshold)");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
-        // Method should have 2 params: tbl__raw and threshold__raw
+        // Method should have 2 params: tbl__raw and threshold__raw (sorted: tbl < threshold)
         var parameters = compilation.Method!.GetParameters();
         Assert.Equal(2, parameters.Length);
 
@@ -128,7 +110,7 @@ public class WrapperTypePipelineTests
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
-        Assert.True(compilation.Detection!.HasStringBracketAccess);
+        Assert.Contains("tbl", compilation.Detection!.HeaderVariables);
     }
 
     [Fact]
@@ -150,37 +132,40 @@ public class WrapperTypePipelineTests
 
     #endregion
 
-    #region Explicit Lambda — Multi-Input
+    #region Multiple Parameters
 
     [Fact]
-    public void ExplicitLambda_MultiInput()
+    public void MultipleParams_FilterWithThreshold()
     {
         var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
         var maxVal = 10.0;
+        // No explicit lambda — both tbl and maxVal are free variables
         var compilation = NewPipelineTestHelpers.CompileExpression(
-            "(tbl, maxVal) => tbl.Rows.Where(r => (double)r[0] < (double)maxVal)");
+            "tbl.Rows.Where(r => (double)r[0] < (double)maxVal)");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
-        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, values, maxVal);
+        // Parameters are sorted: maxVal, tbl
+        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, maxVal, values);
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(2, arr.GetLength(0)); // 5 and 3
     }
 
     [Fact]
-    public void ExplicitLambda_MultiInput_NoCast()
+    public void MultipleParams_FilterWithThreshold_NoCast()
     {
         // Test that r[0] > maxVal works without explicit casts (ColumnValue > ExcelValue operator)
         var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
         var maxVal = 10.0;
         var compilation = NewPipelineTestHelpers.CompileExpression(
-            "(tbl, maxVal) => tbl.Rows.Where(r => r[0] > maxVal)");
+            "tbl.Rows.Where(r => r[0] > maxVal)");
 
         _output.WriteLine(compilation.GetDiagnostics());
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
-        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, values, maxVal);
+        // Parameters are sorted: maxVal, tbl
+        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, maxVal, values);
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(2, arr.GetLength(0)); // 15 and 20
     }
