@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -136,7 +136,7 @@ public class InputDetector
         var parameters = DetectFreeVariables(root, allLambdaParams);
 
         // Step 5: Detect per-variable header access
-        var headerVariables = DetectHeaderVariables(root, new HashSet<string>(parameters));
+        var headerVariables = DetectHeaderVariables(root, [.. parameters]);
 
         return new DetectionResult(
             parameters,
