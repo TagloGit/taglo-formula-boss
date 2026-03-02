@@ -5,6 +5,8 @@ using System.Runtime.Loader;
 
 using ExcelDna.Integration;
 
+using FormulaBoss.Runtime;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -236,7 +238,7 @@ public class DynamicCompiler
     /// </summary>
     private static void AddRuntimeReference(List<MetadataReference> references)
     {
-        var runtimeAssembly = typeof(FormulaBoss.Runtime.ExcelValue).Assembly;
+        var runtimeAssembly = typeof(ExcelValue).Assembly;
 
         if (!string.IsNullOrEmpty(runtimeAssembly.Location))
         {
@@ -442,7 +444,9 @@ public class DynamicCompiler
         // IsMacroType = true is required for object model UDFs so that xlfReftext works
         var funcAttr = new ExcelFunctionAttribute
         {
-            Name = method.Name, Description = $"Dynamic UDF: {method.Name}", IsMacroType = isMacroType
+            Name = method.Name,
+            Description = $"Dynamic UDF: {method.Name}",
+            IsMacroType = isMacroType
         };
 
         var parameters = method.GetParameters();

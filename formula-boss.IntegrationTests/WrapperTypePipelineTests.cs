@@ -1,6 +1,4 @@
-using FormulaBoss.Runtime;
-
-using Xunit;
+﻿using Xunit;
 using Xunit.Abstractions;
 
 namespace FormulaBoss.IntegrationTests;
@@ -17,6 +15,48 @@ public class WrapperTypePipelineTests
     {
         _output = output;
     }
+
+    #region Statement Block
+
+    [Fact]
+    public void StatementBlock_ReturnsCount()
+    {
+        var values = new object[,] { { 1.0 }, { 2.0 }, { 3.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "(tbl) => { var c = tbl.Rows.Count(); return c; }");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        Assert.Equal(3, result);
+    }
+
+    #endregion
+
+    #region Free Variables
+
+    [Fact]
+    public void FreeVariable_BecomesParameter()
+    {
+        var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
+        var threshold = 10.0;
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "(tbl) => tbl.Rows.Where(r => (double)r[0] > (double)threshold)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // Method should have 2 params: tbl__raw and threshold__raw
+        var parameters = compilation.Method!.GetParameters();
+        Assert.Equal(2, parameters.Length);
+
+        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, values, threshold);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0)); // 15 and 20
+    }
+
+    #endregion
 
     #region Sugar Syntax — Single Input
 
@@ -45,8 +85,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(3, arr[0, 0]);
+        Assert.Equal(3, result);
     }
 
     [Fact]
@@ -59,8 +98,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(60.0, arr[0, 0]);
+        Assert.Equal(60.0, result);
     }
 
     [Fact]
@@ -74,8 +112,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(2, arr[0, 0]);
+        Assert.Equal(2, result);
     }
 
     #endregion
@@ -150,25 +187,6 @@ public class WrapperTypePipelineTests
 
     #endregion
 
-    #region Statement Block
-
-    [Fact]
-    public void StatementBlock_ReturnsCount()
-    {
-        var values = new object[,] { { 1.0 }, { 2.0 }, { 3.0 } };
-        var compilation = NewPipelineTestHelpers.CompileExpression(
-            "(tbl) => { var c = tbl.Rows.Count(); return c; }");
-
-        _output.WriteLine(compilation.GetDiagnostics());
-        Assert.True(compilation.Success, compilation.ErrorMessage);
-
-        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(3, arr[0, 0]);
-    }
-
-    #endregion
-
     #region Aggregation
 
     [Fact]
@@ -181,8 +199,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(20.0, arr[0, 0]);
+        Assert.Equal(20.0, result);
     }
 
     [Fact]
@@ -195,8 +212,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(1.0, arr[0, 0]);
+        Assert.Equal(1.0, result);
     }
 
     [Fact]
@@ -209,8 +225,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(8.0, arr[0, 0]);
+        Assert.Equal(8.0, result);
     }
 
     #endregion
@@ -300,12 +315,7 @@ public class WrapperTypePipelineTests
     [Fact]
     public void Sugar_SelectColumn()
     {
-        var values = new object[,]
-        {
-            { 1.0, 10.0 },
-            { 2.0, 20.0 },
-            { 3.0, 30.0 }
-        };
+        var values = new object[,] { { 1.0, 10.0 }, { 2.0, 20.0 }, { 3.0, 30.0 } };
         var compilation = NewPipelineTestHelpers.CompileExpression(
             "tbl.Rows.Select(r => r[1])");
 
@@ -328,32 +338,7 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
 
         var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(2, arr[0, 0]); // 15 and 25
-    }
-
-    #endregion
-
-    #region Free Variables
-
-    [Fact]
-    public void FreeVariable_BecomesParameter()
-    {
-        var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
-        var threshold = 10.0;
-        var compilation = NewPipelineTestHelpers.CompileExpression(
-            "(tbl) => tbl.Rows.Where(r => (double)r[0] > (double)threshold)");
-
-        _output.WriteLine(compilation.GetDiagnostics());
-        Assert.True(compilation.Success, compilation.ErrorMessage);
-
-        // Method should have 2 params: tbl__raw and threshold__raw
-        var parameters = compilation.Method!.GetParameters();
-        Assert.Equal(2, parameters.Length);
-
-        var result = NewPipelineTestHelpers.ExecuteWithMultipleInputs(compilation.Method!, values, threshold);
-        var arr = Assert.IsType<object?[,]>(result);
-        Assert.Equal(2, arr.GetLength(0)); // 15 and 20
+        Assert.Equal(2, result); // 15 and 25
     }
 
     #endregion

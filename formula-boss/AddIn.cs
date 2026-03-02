@@ -1,5 +1,4 @@
-using System.Collections;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using ExcelDna.Integration;
 
@@ -70,12 +69,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 return app.Range[address];
             };
 
-            // Initialize header extraction delegate for generated code
-            RuntimeHelpers.GetHeadersDelegate = rangeRef =>
+            // Initialize header extraction delegate for generated code.
+            // Accepts already-extracted object[,] values, not raw ExcelReference.
+            RuntimeHelpers.GetHeadersDelegate = values =>
             {
                 try
                 {
-                    var values = RuntimeHelpers.GetValuesFromReference(rangeRef);
                     if (values.GetLength(0) < 1)
                     {
                         return null;
@@ -85,7 +84,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                     var headers = new string[cols];
                     for (var i = 0; i < cols; i++)
                     {
-                        headers[i] = values[0, i]?.ToString() ?? "";
+                        headers[i] = values[0, i].ToString() ?? "";
                     }
 
                     return headers;
@@ -102,7 +101,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 try
                 {
-                    if (rangeRef?.GetType().Name != "ExcelReference")
+                    if (rangeRef.GetType().Name != "ExcelReference")
                     {
                         return null;
                     }
@@ -136,102 +135,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 }
             };
 
-            // Initialize result conversion delegate for generated code
-            RuntimeHelpers.ToResultDelegate = result =>
-            {
-                if (result == null)
-                {
-                    return string.Empty;
-                }
-
-                if (result is ExcelValue ev)
-                {
-                    return ev.ToResult();
-                }
-
-                if (result is IExcelRange range)
-                {
-                    return range.ToResult();
-                }
-
-                if (result is bool b)
-                {
-                    return b.ToResult();
-                }
-
-                if (result is int i)
-                {
-                    return i.ToResult();
-                }
-
-                if (result is double d)
-                {
-                    return d.ToResult();
-                }
-
-                if (result is string s)
-                {
-                    return s.ToResult();
-                }
-
-                // Handle LINQ IEnumerable<Row> results (from .Rows.Where(), etc.)
-                if (result is IEnumerable<Row> rows)
-                {
-                    var rowList = rows.ToList();
-                    if (rowList.Count == 0)
-                    {
-                        return string.Empty;
-                    }
-
-                    var cols = rowList[0].ColumnCount;
-                    var arr = new object?[rowList.Count, cols];
-                    for (var r = 0; r < rowList.Count; r++)
-                    for (var c = 0; c < cols; c++)
-                    {
-                        arr[r, c] = rowList[r][c].Value;
-                    }
-
-                    return arr;
-                }
-
-                // Handle IEnumerable<ColumnValue> results
-                if (result is IEnumerable<ColumnValue> colValues)
-                {
-                    var list = colValues.ToList();
-                    if (list.Count == 0)
-                    {
-                        return string.Empty;
-                    }
-
-                    var arr = new object?[list.Count, 1];
-                    for (var r = 0; r < list.Count; r++)
-                    {
-                        arr[r, 0] = list[r].Value;
-                    }
-
-                    return arr;
-                }
-
-                // Handle generic IEnumerable
-                if (result is IEnumerable enumerable and not string and not object[,])
-                {
-                    var list = enumerable.Cast<object>().ToList();
-                    if (list.Count == 0)
-                    {
-                        return string.Empty;
-                    }
-
-                    var arr = new object?[list.Count, 1];
-                    for (var r = 0; r < list.Count; r++)
-                    {
-                        arr[r, 0] = list[r] is ColumnValue cv ? cv.Value : list[r];
-                    }
-
-                    return arr;
-                }
-
-                return result;
-            };
+            // Initialize result conversion delegate — delegates to shared ResultConverter.Convert()
+            RuntimeHelpers.ToResultDelegate = result => ResultConverter.Convert(result);
 
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
