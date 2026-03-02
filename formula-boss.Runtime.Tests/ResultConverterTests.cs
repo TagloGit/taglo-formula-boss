@@ -53,7 +53,7 @@ public class ResultConverterTests
     public void IExcelRangeToResult_ConvertsFilteredRows()
     {
         var arr = new ExcelArray(new object?[,] { { 1.0 }, { 2.0 }, { 3.0 } });
-        var filtered = arr.Where(r => (double)r[0] > 1.0);
+        var filtered = arr.Where(v => (double)v > 1.0);
         var result = filtered.ToResult();
         var resultArr = Assert.IsType<object?[,]>(result);
         Assert.Equal(2, resultArr.GetLength(0));

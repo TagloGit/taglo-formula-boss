@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -31,23 +31,23 @@ public class ExcelTableTests
     public void Rows_HaveDynamicColumnAccess()
     {
         var table = MakeTable();
-        dynamic row = table.Rows.First();
+        dynamic row = table.Rows.First(r => true);
         Assert.Equal("Alice", (ColumnValue)row.Name);
     }
 
     [Fact]
-    public void Where_FiltersWithNamedAccess()
+    public void Rows_Where_FiltersWithNamedAccess()
     {
         var table = MakeTable();
-        var result = table.Where(r => (string?)r["Department"] == "Engineering");
+        var result = table.Rows.Where(r => (string)r["Department"] == "Engineering");
         Assert.Equal(2, result.Count());
     }
 
     [Fact]
-    public void Where_FilterWithDynamicAccess()
+    public void Rows_Where_FilterWithDynamicAccess()
     {
         var table = MakeTable();
-        var result = table.Where(r => (double)r["Age"] > 28.0);
+        var result = table.Rows.Where(r => (double)r["Age"] > 28.0);
         Assert.Equal(2, result.Count());
     }
 
@@ -55,27 +55,27 @@ public class ExcelTableTests
     public void ColumnAccess_CaseInsensitive()
     {
         var table = MakeTable();
-        var row = table.Rows.First();
-        Assert.Equal("Alice", row["name"]);
-        Assert.Equal("Alice", row["NAME"]);
+        var rows = table.Rows.ToList();
+        Assert.Equal("Alice", rows[0]["name"]);
+        Assert.Equal("Alice", rows[0]["NAME"]);
     }
 
     [Fact]
-    public void Select_MapsRowsToValues()
+    public void Rows_Select_MapsRowsToValues()
     {
         var table = MakeTable();
-        var result = table.Select(r => new ExcelScalar((string?)r["Name"]));
+        var result = table.Rows.Select(r => new ExcelScalar((string)r["Name"]));
         var rows = result.Rows.ToList();
         Assert.Equal(3, rows.Count);
         Assert.Equal("Alice", rows[0][0].Value);
     }
 
     [Fact]
-    public void OrderBy_SortsByColumn()
+    public void Rows_OrderBy_SortsByColumn()
     {
         var table = MakeTable();
-        var result = table.OrderBy(r => (double)r["Age"]);
-        var rows = result.Rows.ToList();
+        var sorted = table.Rows.OrderBy(r => (double)r["Age"]);
+        var rows = sorted.ToList();
         Assert.Equal("Bob", rows[0]["Name"].Value);
         Assert.Equal("Alice", rows[1]["Name"].Value);
         Assert.Equal("Charlie", rows[2]["Name"].Value);
