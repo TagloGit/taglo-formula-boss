@@ -42,6 +42,13 @@ public class ExcelValueTests
     }
 
     [Fact]
+    public void Wrap_MultiRowArray_ReturnsExcelArray()
+    {
+        var result = ExcelValue.Wrap(new object?[,] { { 1.0 }, { 2.0 }, { 3.0 } });
+        Assert.IsType<ExcelArray>(result);
+    }
+
+    [Fact]
     public void Wrap_SingleCellArray_ReturnsExcelScalar()
     {
         // Single-cell ExcelReference values are returned as 1x1 arrays by GetValuesFromReference.
@@ -109,5 +116,30 @@ public class ExcelValueTests
         Assert.True(a < 15.0);
         Assert.True(5.0 < a);
         Assert.True(15.0 > a);
+    }
+
+    [Fact]
+    public void LetScenario_MultiCellRange_WhereWithScalar_Counts()
+    {
+        // Simulates the LET scenario: data=B1:B4 (multi-cell), threshold=A1 (single-cell)
+        // Both arrive via GetValuesFromReference as object[,]
+        var data = ExcelValue.Wrap(new object[,] { { 5.0 }, { 20.0 }, { 10.0 }, { 25.0 } });
+        var threshold = ExcelValue.Wrap(new object[,] { { 15.0 } }); // 1x1 from single-cell ref
+
+        Assert.IsType<ExcelArray>(data);
+        Assert.IsType<ExcelScalar>(threshold); // must unwrap to scalar
+
+        var count = data.Where(x => x > threshold).Count();
+        Assert.Equal(2, count); // 20 and 25
+    }
+
+    [Fact]
+    public void LetScenario_MultiCellRange_WhereWithScalar_Sum()
+    {
+        var data = ExcelValue.Wrap(new object[,] { { 5.0 }, { 20.0 }, { 10.0 }, { 25.0 } });
+        var threshold = ExcelValue.Wrap(new object[,] { { 15.0 } });
+
+        var result = data.Where(x => x > threshold).Sum();
+        Assert.Equal(45.0, (double)result); // 20 + 25
     }
 }
