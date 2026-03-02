@@ -2,7 +2,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 using Xunit;
-using Xunit.Abstractions;
+
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace FormulaBoss.AddinTests;
 
@@ -15,6 +16,7 @@ public sealed class ExcelAddinFixture : IDisposable
 {
     private readonly dynamic _app;
     private readonly dynamic _workbook;
+    private readonly int _excelPid;
     private bool _disposed;
 
     public ExcelAddinFixture()
@@ -22,11 +24,18 @@ public sealed class ExcelAddinFixture : IDisposable
         var excelType = Type.GetTypeFromProgID("Excel.Application")
                         ?? throw new InvalidOperationException("Excel is not installed or not registered.");
 
+        // Snapshot Excel PIDs before launch so we can identify the one we spawned
+        var pidsBefore = new HashSet<int>(
+            Process.GetProcessesByName("EXCEL").Select(p => p.Id));
+
         _app = Activator.CreateInstance(excelType)
                ?? throw new InvalidOperationException("Failed to create Excel.Application instance.");
 
         _app.Visible = false;
         _app.DisplayAlerts = false;
+
+        // Identify the new Excel process by diffing PIDs
+        _excelPid = FindNewExcelPid(pidsBefore);
 
         // Load the Formula Boss XLL
         var xllPath = FindXllPath();
@@ -41,8 +50,8 @@ public sealed class ExcelAddinFixture : IDisposable
         // Create a workbook for tests
         _workbook = _app.Workbooks.Add();
 
-        // Give AutoOpen time to initialize the interceptor and pipeline
-        Thread.Sleep(3000);
+        // Wait for AutoOpen to initialize the interceptor — poll rather than fixed sleep
+        WaitForAddinReady();
     }
 
     /// <summary>
@@ -89,8 +98,8 @@ public sealed class ExcelAddinFixture : IDisposable
             // Ignore cleanup errors
         }
 
-        // Kill any orphaned Excel processes we might have spawned
-        KillOrphanedExcel();
+        // Safety net: kill our specific Excel process if Quit() didn't work
+        KillSpawnedExcel();
     }
 
     /// <summary>
@@ -100,6 +109,58 @@ public sealed class ExcelAddinFixture : IDisposable
     public dynamic AddWorksheet()
     {
         return _workbook.Worksheets.Add();
+    }
+
+    /// <summary>
+    ///     Polls until the add-in's SheetChange event handler is wired up,
+    ///     which we detect by entering a backtick formula and checking if it gets rewritten.
+    /// </summary>
+    private void WaitForAddinReady(int timeoutMs = 10000, int pollIntervalMs = 250)
+    {
+        var ws = _workbook.Worksheets[1];
+        var cell = ws.Range["ZZ1"];
+        try
+        {
+            // Enter a minimal backtick formula
+            cell.Value = "'=`ZZ2:ZZ2.sum()`";
+
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                try
+                {
+                    var formula = cell.Formula2 as string;
+                    // If the interceptor has rewritten it (no more backticks), the add-in is ready
+                    if (formula != null && formula.StartsWith('=') && !formula.Contains('`'))
+                    {
+                        // Clean up the probe cell
+                        cell.ClearContents();
+                        return;
+                    }
+                }
+                catch
+                {
+                    // COM might fail during init
+                }
+
+                Thread.Sleep(pollIntervalMs);
+            }
+
+            // Timed out — clean up and proceed anyway (tests may still work with slight delay)
+            try
+            {
+                cell.ClearContents();
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(cell);
+            Marshal.ReleaseComObject(ws);
+        }
     }
 
     /// <summary>
@@ -126,23 +187,49 @@ public sealed class ExcelAddinFixture : IDisposable
             $"Could not find formula-boss64.xll. Build the formula-boss project first. Searched from: {repoRoot}");
     }
 
-    private static void KillOrphanedExcel()
+    /// <summary>
+    ///     Finds the Excel process we spawned by comparing PIDs before and after launch.
+    /// </summary>
+    private static int FindNewExcelPid(HashSet<int> pidsBefore, int timeoutMs = 5000)
     {
-        // Only kill Excel processes that were started very recently and are hidden
-        // This is a safety net — normally Quit() handles it
-        try
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
         {
             foreach (var proc in Process.GetProcessesByName("EXCEL"))
             {
-                if (proc.MainWindowHandle == IntPtr.Zero) // Hidden instance
+                if (!pidsBefore.Contains(proc.Id))
                 {
-                    proc.Kill();
+                    return proc.Id;
                 }
+            }
+
+            Thread.Sleep(100);
+        }
+
+        return -1; // Couldn't identify — fall back to no-kill behavior
+    }
+
+    /// <summary>
+    ///     Kills only the Excel process we spawned, identified by PID.
+    /// </summary>
+    private void KillSpawnedExcel()
+    {
+        if (_excelPid <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var proc = Process.GetProcessById(_excelPid);
+            if (proc is { HasExited: false, ProcessName: "EXCEL" })
+            {
+                proc.Kill();
             }
         }
         catch
         {
-            // Best effort
+            // Process already exited or access denied — fine
         }
     }
 }

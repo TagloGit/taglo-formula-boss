@@ -1,5 +1,3 @@
-﻿using System.Diagnostics;
-
 using Xunit;
 using Xunit.Abstractions;
 
@@ -28,22 +26,22 @@ public class PipelineTests
         try
         {
             // Set up data with colors
-            ws.Range["A1"].Value = 10.0;
-            ws.Range["A2"].Value = 20.0;
-            ws.Range["A3"].Value = 30.0;
-            ws.Range["A4"].Value = 40.0;
-            ws.Range["A5"].Value = 50.0;
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+            TestUtilities.SetCellValue(ws, "A4", 40.0);
+            TestUtilities.SetCellValue(ws, "A5", 50.0);
 
             // Color cells A2 and A4 yellow (ColorIndex 6)
-            ws.Range["A2"].Interior.ColorIndex = 6;
-            ws.Range["A4"].Interior.ColorIndex = 6;
+            TestUtilities.SetCellColor(ws, "A2", 6);
+            TestUtilities.SetCellColor(ws, "A4", 6);
 
             // Enter expression that filters by color and sums
-            EnterBacktickFormula(ws, "B1", "=`A1:A5.cells.where(c => c.color == 6).sum()`");
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A5.cells.where(c => c.color == 6).sum()`");
 
-            var result = WaitForResult(ws, "B1");
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
 
-            _output.WriteLine($"B1 formula: {ws.Range["B1"].Formula2}");
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
             _output.WriteLine($"B1 value: {result}");
 
             Assert.NotNull(result);
@@ -51,7 +49,7 @@ public class PipelineTests
         }
         finally
         {
-            CleanupWorksheet(ws);
+            TestUtilities.CleanupWorksheet(ws);
         }
     }
 
@@ -61,18 +59,18 @@ public class PipelineTests
         var ws = _excel.AddWorksheet();
         try
         {
-            ws.Range["A1"].Value = 1.0;
-            ws.Range["A2"].Value = 2.0;
-            ws.Range["A3"].Value = 3.0;
-            ws.Range["A4"].Value = 4.0;
+            TestUtilities.SetCellValue(ws, "A1", 1.0);
+            TestUtilities.SetCellValue(ws, "A2", 2.0);
+            TestUtilities.SetCellValue(ws, "A3", 3.0);
+            TestUtilities.SetCellValue(ws, "A4", 4.0);
 
             // Color A1 and A3 red (ColorIndex 3)
-            ws.Range["A1"].Interior.ColorIndex = 3;
-            ws.Range["A3"].Interior.ColorIndex = 3;
+            TestUtilities.SetCellColor(ws, "A1", 3);
+            TestUtilities.SetCellColor(ws, "A3", 3);
 
-            EnterBacktickFormula(ws, "B1", "=`A1:A4.cells.where(c => c.color == 3).count()`");
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A4.cells.where(c => c.color == 3).count()`");
 
-            var result = WaitForResult(ws, "B1");
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
 
             _output.WriteLine($"B1 value: {result}");
 
@@ -81,7 +79,7 @@ public class PipelineTests
         }
         finally
         {
-            CleanupWorksheet(ws);
+            TestUtilities.CleanupWorksheet(ws);
         }
     }
 
@@ -91,13 +89,13 @@ public class PipelineTests
         var ws = _excel.AddWorksheet();
         try
         {
-            ws.Range["A1"].Value = 100.0;
-            ws.Range["A2"].Value = 200.0;
-            ws.Range["A3"].Value = 300.0;
+            TestUtilities.SetCellValue(ws, "A1", 100.0);
+            TestUtilities.SetCellValue(ws, "A2", 200.0);
+            TestUtilities.SetCellValue(ws, "A3", 300.0);
 
-            EnterBacktickFormula(ws, "B1", "=`A1:A3.sum()`");
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.sum()`");
 
-            var result = WaitForResult(ws, "B1");
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
 
             _output.WriteLine($"B1 value: {result}");
 
@@ -106,7 +104,7 @@ public class PipelineTests
         }
         finally
         {
-            CleanupWorksheet(ws);
+            TestUtilities.CleanupWorksheet(ws);
         }
     }
 
@@ -116,25 +114,25 @@ public class PipelineTests
         var ws = _excel.AddWorksheet();
         try
         {
-            ws.Range["A1"].Value = 5.0;
-            ws.Range["A2"].Value = 15.0;
-            ws.Range["A3"].Value = 25.0;
-            ws.Range["A4"].Value = 35.0;
+            TestUtilities.SetCellValue(ws, "A1", 5.0);
+            TestUtilities.SetCellValue(ws, "A2", 15.0);
+            TestUtilities.SetCellValue(ws, "A3", 25.0);
+            TestUtilities.SetCellValue(ws, "A4", 35.0);
 
-            EnterBacktickFormula(ws, "B1", "=`A1:A4.where(x => x > 20).toArray()`");
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A4.where(x => x > 20).toArray()`");
 
-            var result = WaitForResult(ws, "B1");
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
 
             _output.WriteLine($"B1 value: {result}");
-            _output.WriteLine($"B2 value: {ws.Range["B2"].Value}");
+            _output.WriteLine($"B2 value: {TestUtilities.GetCellValue(ws, "B2")}");
 
             Assert.NotNull(result);
-            Assert.Equal(25.0, Convert.ToDouble(ws.Range["B1"].Value));
-            Assert.Equal(35.0, Convert.ToDouble(ws.Range["B2"].Value));
+            Assert.Equal(25.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
+            Assert.Equal(35.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B2")));
         }
         finally
         {
-            CleanupWorksheet(ws);
+            TestUtilities.CleanupWorksheet(ws);
         }
     }
 
@@ -144,23 +142,24 @@ public class PipelineTests
         var ws = _excel.AddWorksheet();
         try
         {
-            ws.Range["A1"].Value = 30.0;
-            ws.Range["A2"].Value = 10.0;
-            ws.Range["A3"].Value = 20.0;
+            TestUtilities.SetCellValue(ws, "A1", 30.0);
+            TestUtilities.SetCellValue(ws, "A2", 10.0);
+            TestUtilities.SetCellValue(ws, "A3", 20.0);
 
-            EnterBacktickFormula(ws, "B1", "=`A1:A3.orderBy(x => x).toArray()`");
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.orderBy(x => x).toArray()`");
 
-            WaitForResult(ws, "B1");
+            TestUtilities.WaitForResult(ws, "B1", _output);
 
-            _output.WriteLine($"B1={ws.Range["B1"].Value}, B2={ws.Range["B2"].Value}, B3={ws.Range["B3"].Value}");
+            _output.WriteLine(
+                $"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
 
-            Assert.Equal(10.0, Convert.ToDouble(ws.Range["B1"].Value));
-            Assert.Equal(20.0, Convert.ToDouble(ws.Range["B2"].Value));
-            Assert.Equal(30.0, Convert.ToDouble(ws.Range["B3"].Value));
+            Assert.Equal(10.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
+            Assert.Equal(20.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B2")));
+            Assert.Equal(30.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B3")));
         }
         finally
         {
-            CleanupWorksheet(ws);
+            TestUtilities.CleanupWorksheet(ws);
         }
     }
 
@@ -170,27 +169,19 @@ public class PipelineTests
         var ws = _excel.AddWorksheet();
         try
         {
-            ws.Range["A1"].Value = 1.0;
+            TestUtilities.SetCellValue(ws, "A1", 1.0);
 
             // Enter an invalid expression — should result in an error comment
-            EnterBacktickFormula(ws, "B1", "=`A1.nonExistentMethod()`");
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1.nonExistentMethod()`");
 
             // Wait a bit for the interceptor to process
             Thread.Sleep(5000);
 
             // The cell should either still contain the original text (interception failed to rewrite)
             // or have an error comment
-            var formula = ws.Range["B1"].Formula2 as string;
-            var value = ws.Range["B1"].Value as string;
-            string? comment = null;
-            try
-            {
-                comment = ws.Range["B1"].Comment?.Text() as string;
-            }
-            catch
-            {
-                // No comment
-            }
+            var formula = TestUtilities.GetCellFormula(ws, "B1");
+            var value = TestUtilities.GetCellValue(ws, "B1") as string;
+            var comment = TestUtilities.GetCellComment(ws, "B1");
 
             _output.WriteLine($"B1 formula: {formula}");
             _output.WriteLine($"B1 value: {value}");
@@ -202,79 +193,7 @@ public class PipelineTests
         }
         finally
         {
-            CleanupWorksheet(ws);
-        }
-    }
-
-    /// <summary>
-    ///     Enters a backtick formula into a cell as text.
-    ///     Prefixes with apostrophe so Excel stores the =... literally as text.
-    /// </summary>
-    private static void EnterBacktickFormula(dynamic ws, string cellAddress, string formula)
-    {
-        var cell = ws.Range[cellAddress];
-        cell.Value = "'" + formula;
-    }
-
-    /// <summary>
-    ///     Polls a cell until the interceptor has rewritten it and the UDF has returned a result.
-    /// </summary>
-    private object? WaitForResult(dynamic ws, string cellAddress,
-        int timeoutMs = 15000, int pollIntervalMs = 250)
-    {
-        var cell = ws.Range[cellAddress];
-        var sw = Stopwatch.StartNew();
-
-        while (sw.ElapsedMilliseconds < timeoutMs)
-        {
-            try
-            {
-                var formula = cell.Formula2 as string;
-                object? value = cell.Value;
-
-                if (formula != null && formula.StartsWith('=') && !formula.Contains('`'))
-                {
-                    if (value != null && value is not string)
-                    {
-                        return value;
-                    }
-
-                    if (value is string strVal && !strVal.StartsWith('#'))
-                    {
-                        return value;
-                    }
-                }
-            }
-            catch
-            {
-                // COM call might fail during transition
-            }
-
-            Thread.Sleep(pollIntervalMs);
-        }
-
-        try
-        {
-            var finalFormula = cell.Formula2 as string;
-            var finalValue = cell.Value;
-            _output.WriteLine($"TIMEOUT for {cellAddress}. Formula2={finalFormula}, Value={finalValue}");
-            return finalValue;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static void CleanupWorksheet(dynamic ws)
-    {
-        try
-        {
-            ws.Delete();
-        }
-        catch
-        {
-            // Ignore
+            TestUtilities.CleanupWorksheet(ws);
         }
     }
 }
