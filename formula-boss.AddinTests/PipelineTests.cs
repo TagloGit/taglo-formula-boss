@@ -338,7 +338,7 @@ public class PipelineTests
         }
     }
 
-    [Fact(Skip = "LET variable in lambda returns #VALUE! — see #84")]
+    [Fact(Skip = "LET variable in lambda returns #VALUE! — see #83")]
     public void LetFormula_VariableReusedInLambda()
     {
         var ws = _excel.AddWorksheet();
@@ -434,7 +434,7 @@ public class PipelineTests
         }
     }
 
-    [Fact(Skip = "Table reference returns #VALUE! — table name passed as string not ExcelReference, see #85")]
+    [Fact(Skip = "Table reference returns #VALUE! — table name passed as string not ExcelReference, see #84")]
     public void Table_BracketColumnAccess()
     {
         var ws = _excel.AddWorksheet();
