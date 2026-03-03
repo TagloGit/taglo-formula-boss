@@ -33,9 +33,10 @@ public abstract class ExcelValue : IExcelRange
     {
         return value switch
         {
-            object[,] array => headers != null
-                ? new ExcelTable(array, headers, origin)
-                : new ExcelArray(array, origin: origin),
+            object[,] array when headers != null => new ExcelTable(array, headers, origin),
+            object[,] array when array.GetLength(0) == 1 && array.GetLength(1) == 1
+                => new ExcelScalar(array[0, 0], origin),
+            object[,] array => new ExcelArray(array, origin: origin),
             ExcelValue ev => ev,
             _ => new ExcelScalar(value, origin)
         };
