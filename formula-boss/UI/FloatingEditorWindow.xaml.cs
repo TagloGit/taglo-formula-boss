@@ -5,6 +5,8 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 
+using FormulaBoss.UI.Completion;
+
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
@@ -19,6 +21,9 @@ public partial class FloatingEditorWindow
     private readonly EditorBehaviorHandler _behaviorHandler;
     private CompletionWindow? _completionWindow;
     private bool _sizeChanged;
+    private RoslynWorkspaceManager? _workspaceManager;
+    private RoslynCompletionProvider? _completionProvider;
+    private CancellationTokenSource? _completionCts;
 
     public FloatingEditorWindow()
     {
@@ -111,7 +116,21 @@ public partial class FloatingEditorWindow
         FormulaEditor.SyntaxHighlighting = HighlightingLoader.Load(reader, HighlightingManager.Instance);
     }
 
-    private void ShowCompletion()
+    private void EnsureWorkspace()
+    {
+        if (_workspaceManager != null)
+        {
+            return;
+        }
+
+        _workspaceManager = new RoslynWorkspaceManager();
+        _completionProvider = new RoslynCompletionProvider(_workspaceManager);
+
+        // Fire-and-forget warm-up
+        _ = _workspaceManager.WarmUpAsync();
+    }
+
+    private async void ShowCompletion()
     {
         // Don't open a second window
         if (_completionWindow != null)
@@ -119,16 +138,42 @@ public partial class FloatingEditorWindow
             return;
         }
 
+        EnsureWorkspace();
+
+        // Cancel any in-flight completion request
+        _completionCts?.Cancel();
+        _completionCts = new CancellationTokenSource();
+        var ct = _completionCts.Token;
+
         var textUpToCaret = FormulaEditor.Document.GetText(0, FormulaEditor.CaretOffset);
         var fullText = FormulaEditor.Text;
-        var items = CompletionProvider.GetCompletions(textUpToCaret, fullText, Metadata, out var isBracketContext);
-        if (items.Count == 0)
+
+        IReadOnlyList<CompletionData> items;
+        bool isBracketContext;
+
+        try
+        {
+            (items, isBracketContext) = await _completionProvider!.GetCompletionsAsync(
+                textUpToCaret, fullText, Metadata, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (ct.IsCancellationRequested || items.Count == 0)
+        {
+            return;
+        }
+
+        // Don't open if another window appeared while we were awaiting
+        if (_completionWindow != null)
         {
             return;
         }
 
         _behaviorHandler.IsBracketContext = isBracketContext;
-        var wordLength = CompletionProvider.GetWordLength(textUpToCaret, isBracketContext);
+        var wordLength = CompletionHelpers.GetWordLength(textUpToCaret, isBracketContext);
 
         // Pre-filter: don't show if the typed prefix doesn't match any item
         if (wordLength > 0)
@@ -214,5 +259,15 @@ public partial class FloatingEditorWindow
         // Don't actually close, just hide - we reuse the window
         e.Cancel = true;
         Hide();
+    }
+
+    internal void DisposeWorkspace()
+    {
+        _completionCts?.Cancel();
+        _completionCts?.Dispose();
+        _completionCts = null;
+        _workspaceManager?.Dispose();
+        _workspaceManager = null;
+        _completionProvider = null;
     }
 }

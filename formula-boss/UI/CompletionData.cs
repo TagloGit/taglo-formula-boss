@@ -62,7 +62,7 @@ public class CompletionData : ICompletionData
 
 /// <summary>
 ///     Completion item for row column names with context-aware insertion.
-///     After a dot: rewrites to bracket syntax if the name contains spaces.
+///     After a dot: always rewrites to bracket syntax ["Column Name"].
 ///     After a bracket: appends closing bracket.
 /// </summary>
 internal sealed class ColumnCompletionData : CompletionData
@@ -78,33 +78,44 @@ internal sealed class ColumnCompletionData : CompletionData
     public override void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
     {
         var doc = textArea.Document;
-        var hasSpace = Text.Contains(' ');
+        var fullText = doc.Text;
+        var (newText, replaceOffset, replaceLength) = ComputeInsertion(
+            Text, _isBracketContext, fullText, completionSegment.Offset, completionSegment.Length);
+        doc.Replace(replaceOffset, replaceLength, newText);
+    }
 
-        if (_isBracketContext)
+    /// <summary>
+    ///     Computes the text to insert and the replacement range for a column completion.
+    ///     Separated from the AvalonEdit <see cref="TextArea"/> for testability.
+    /// </summary>
+    /// <returns>(text to insert, start offset of replacement, length to replace)</returns>
+    internal static (string NewText, int ReplaceOffset, int ReplaceLength) ComputeInsertion(
+        string columnName, bool isBracketContext, string documentText, int segmentOffset, int segmentLength)
+    {
+        var quoted = $"\"{columnName}\"";
+        var segmentEnd = segmentOffset + segmentLength;
+
+        if (isBracketContext)
         {
-            // Inside r[ — insert column name + ], with quotes if it contains spaces
-            var insert = hasSpace ? $"\"{Text}\"]" : Text + "]";
-            doc.Replace(completionSegment, insert);
-        }
-        else if (hasSpace)
-        {
-            // After r. — rewrite the dot to bracket syntax: r["Column Name"]
-            // The dot is the character immediately before the completion segment
-            var dotOffset = completionSegment.Offset - 1;
-            if (dotOffset >= 0 && doc.GetCharAt(dotOffset) == '.')
+            // Check if the auto-closer already placed a ] after the segment
+            var hasClosingBracket = segmentEnd < documentText.Length && documentText[segmentEnd] == ']';
+
+            if (hasClosingBracket)
             {
-                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[\"" + Text + "\"]");
+                // Replace segment + the existing ']' so we don't double it
+                return (quoted + "]", segmentOffset, segmentLength + 1);
             }
-            else
-            {
-                // Fallback: just insert as quoted bracket syntax
-                doc.Replace(completionSegment, "[\"" + Text + "\"]");
-            }
+
+            return (quoted + "]", segmentOffset, segmentLength);
         }
-        else
+
+        // Dot context: rewrite the dot to bracket syntax
+        var dotOffset = segmentOffset - 1;
+        if (dotOffset >= 0 && documentText[dotOffset] == '.')
         {
-            // No space, dot context — normal insertion
-            doc.Replace(completionSegment, Text);
+            return ("[" + quoted + "]", dotOffset, segmentEnd - dotOffset);
         }
+
+        return ("[" + quoted + "]", segmentOffset, segmentLength);
     }
 }
