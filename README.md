@@ -131,16 +131,14 @@ User types formula with backticks
          v
   FormulaPipeline (orchestration)
          |
-    +----+----+
-    |         |
-    v         v
-  Lexer    Parser --> AST
-              |
-              v
-      CSharpTranspiler --> C# source
-              |
-              v
-      DynamicCompiler (Roslyn) --> Assembly
+         v
+  InputDetector (free variables, range refs, object model)
+         |
+         v
+  CodeEmitter --> C# source (wraps expression with Runtime types)
+         |
+         v
+  DynamicCompiler (Roslyn) --> Assembly
               |
               v
       ExcelDNA Registration --> UDF available
