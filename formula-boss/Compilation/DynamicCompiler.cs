@@ -17,13 +17,6 @@ namespace FormulaBoss.Compilation;
 /// </summary>
 public class DynamicCompiler
 {
-    private static readonly string[] RequiredAssemblies =
-    [
-        "System.Runtime",
-        "System.Private.CoreLib",
-        "netstandard"
-    ];
-
     private readonly HashSet<string> _registeredUdfs = [];
 
     /// <summary>
@@ -126,7 +119,7 @@ public class DynamicCompiler
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
 
-        var references = GetMetadataReferences();
+        var references = MetadataReferenceProvider.GetMetadataReferences();
 
         var compilation = CSharpCompilation.Create(
             $"FormulaBoss.Dynamic.{Guid.NewGuid():N}",
@@ -155,73 +148,6 @@ public class DynamicCompiler
         return (assembly, []);
     }
 
-    /// <summary>
-    ///     Gets metadata references for common assemblies needed for compilation.
-    /// </summary>
-    private static List<MetadataReference> GetMetadataReferences()
-    {
-        var references = new List<MetadataReference>();
-
-        // Add reference to the runtime assemblies
-        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string trustedAssemblies)
-        {
-            foreach (var assemblyPath in trustedAssemblies.Split(Path.PathSeparator))
-            {
-                var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
-                if (RequiredAssemblies.Contains(assemblyName) ||
-                    assemblyName.StartsWith("System.", StringComparison.Ordinal) ||
-                    assemblyName.StartsWith("Microsoft.CSharp", StringComparison.Ordinal))
-                {
-                    references.Add(MetadataReference.CreateFromFile(assemblyPath));
-                }
-            }
-        }
-
-        // Add ExcelDNA reference - handle embedded assembly case
-        AddExcelDnaReference(references);
-
-        // Add reference to formula-boss.dll for RuntimeHelpers
-        AddFormulaBossReference(references);
-
-        // Add reference to FormulaBoss.Runtime for wrapper types (ExcelValue, etc.)
-        AddRuntimeReference(references);
-
-        return references;
-    }
-
-    /// <summary>
-    ///     Adds a reference to the formula-boss assembly containing RuntimeHelpers.
-    /// </summary>
-    private static void AddFormulaBossReference(List<MetadataReference> references)
-    {
-        var formulaBossAssembly = typeof(RuntimeHelpers).Assembly;
-
-        // Try using Location first
-        if (!string.IsNullOrEmpty(formulaBossAssembly.Location))
-        {
-            references.Add(MetadataReference.CreateFromFile(formulaBossAssembly.Location));
-            Debug.WriteLine($"Using FormulaBoss from Location: {formulaBossAssembly.Location}");
-            return;
-        }
-
-        // If Location is empty (packed assembly), try to read from memory
-        try
-        {
-            var assemblyBytes = GetAssemblyBytesFromMemory(formulaBossAssembly);
-            if (assemblyBytes != null)
-            {
-                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
-                Debug.WriteLine("Created FormulaBoss reference from memory image");
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to get FormulaBoss assembly bytes from memory: {ex.Message}");
-        }
-
-        Debug.WriteLine("WARNING: Could not add FormulaBoss assembly reference - compilation may fail");
-    }
 
     /// <summary>
     ///     Gets the AssemblyLoadContext used by the host (ExcelDNA) so that generated code
@@ -233,151 +159,6 @@ public class DynamicCompiler
                ?? AssemblyLoadContext.Default;
     }
 
-    /// <summary>
-    ///     Adds a reference to the FormulaBoss.Runtime assembly for wrapper types.
-    /// </summary>
-    private static void AddRuntimeReference(List<MetadataReference> references)
-    {
-        var runtimeAssembly = typeof(ExcelValue).Assembly;
-
-        if (!string.IsNullOrEmpty(runtimeAssembly.Location))
-        {
-            references.Add(MetadataReference.CreateFromFile(runtimeAssembly.Location));
-            Debug.WriteLine($"Using FormulaBoss.Runtime from Location: {runtimeAssembly.Location}");
-            return;
-        }
-
-        try
-        {
-            var assemblyBytes = GetAssemblyBytesFromMemory(runtimeAssembly);
-            if (assemblyBytes != null)
-            {
-                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
-                Debug.WriteLine("Created FormulaBoss.Runtime reference from memory image");
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to get Runtime assembly bytes from memory: {ex.Message}");
-        }
-
-        Debug.WriteLine("WARNING: Could not add FormulaBoss.Runtime assembly reference");
-    }
-
-    /// <summary>
-    ///     Adds ExcelDNA assembly reference, handling the case where it's loaded from embedded resources.
-    /// </summary>
-    private static void AddExcelDnaReference(List<MetadataReference> references)
-    {
-        var excelDnaAssembly = typeof(ExcelFunctionAttribute).Assembly;
-
-        // Try using Location first (works when not packed)
-        if (!string.IsNullOrEmpty(excelDnaAssembly.Location))
-        {
-            references.Add(MetadataReference.CreateFromFile(excelDnaAssembly.Location));
-            Debug.WriteLine($"Using ExcelDNA from Location: {excelDnaAssembly.Location}");
-            return;
-        }
-
-        // When packed into XLL, Location is empty - search for the DLL
-        // Build list of paths to search
-        var searchPaths = new List<string>
-        {
-            AppDomain.CurrentDomain.BaseDirectory,
-            Path.GetDirectoryName(typeof(DynamicCompiler).Assembly.Location) ?? "",
-            Environment.CurrentDirectory
-        };
-
-        // Add NuGet packages cache paths
-        var nugetCache = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "packages", "exceldna.integration");
-
-        if (Directory.Exists(nugetCache))
-        {
-            // Find available versions and search each
-            foreach (var versionDir in Directory.GetDirectories(nugetCache))
-            {
-                // Try common target framework monikers
-                searchPaths.Add(Path.Combine(versionDir, "lib", "net6.0-windows7.0"));
-                searchPaths.Add(Path.Combine(versionDir, "lib", "net6.0"));
-                searchPaths.Add(Path.Combine(versionDir, "lib", "netstandard2.0"));
-            }
-        }
-
-        foreach (var basePath in searchPaths)
-        {
-            if (string.IsNullOrEmpty(basePath))
-            {
-                continue;
-            }
-
-            var dllPath = Path.Combine(basePath, "ExcelDna.Integration.dll");
-            if (File.Exists(dllPath))
-            {
-                references.Add(MetadataReference.CreateFromFile(dllPath));
-                Debug.WriteLine($"Found ExcelDna.Integration.dll at: {dllPath}");
-                return;
-            }
-        }
-
-        // Last resort: read assembly bytes from memory
-        try
-        {
-            var assemblyBytes = GetAssemblyBytesFromMemory(excelDnaAssembly);
-            if (assemblyBytes != null)
-            {
-                references.Add(MetadataReference.CreateFromImage(assemblyBytes));
-                Debug.WriteLine("Created ExcelDNA reference from memory image");
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to get assembly bytes from memory: {ex.Message}");
-        }
-
-        Debug.WriteLine("WARNING: Could not add ExcelDNA assembly reference - compilation may fail");
-    }
-
-    /// <summary>
-    ///     Attempts to read assembly bytes from a loaded assembly using reflection.
-    /// </summary>
-    private static byte[]? GetAssemblyBytesFromMemory(Assembly assembly)
-    {
-        // Try to get the raw assembly image using Module.ResolveSignature trick
-        // or by reading from the ManifestModule
-        try
-        {
-            var module = assembly.ManifestModule;
-
-            // Use reflection to access internal/private methods that can give us the image
-            var fullyQualifiedName = module.FullyQualifiedName;
-
-            // If it's a file path, try reading it
-            if (File.Exists(fullyQualifiedName))
-            {
-                return File.ReadAllBytes(fullyQualifiedName);
-            }
-
-            // Check if the assembly was loaded from a byte array (has no file backing)
-            // In this case, we need to use Marshal to copy from the loaded image
-            var peImageField = typeof(Assembly).GetField("_peImage",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-
-            if (peImageField != null && peImageField.GetValue(assembly) is byte[] peImage)
-            {
-                return peImage;
-            }
-        }
-        catch
-        {
-            // Ignore reflection failures
-        }
-
-        return null;
-    }
 
     /// <summary>
     ///     Registers all public static methods from the compiled assembly as Excel UDFs.

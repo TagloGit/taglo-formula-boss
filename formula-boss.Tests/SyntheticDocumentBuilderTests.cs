@@ -1,0 +1,134 @@
+using FormulaBoss.UI;
+using FormulaBoss.UI.Completion;
+
+using Xunit;
+
+namespace FormulaBoss.Tests;
+
+public class SyntheticDocumentBuilderTests
+{
+    private static readonly WorkbookMetadata TwoTableMetadata = new(
+        new[] { "Sales", "Products" },
+        new[] { "TaxRate" },
+        new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["Sales"] = new[] { "Date", "Amount", "Region" },
+            ["Products"] = new[] { "Name", "Price", "Category" }
+        });
+
+    [Fact]
+    public void Build_ContainsUsings()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("using System;", source);
+        Assert.Contains("using System.Linq;", source);
+        Assert.Contains("using FormulaBoss.Runtime;", source);
+    }
+
+    [Fact]
+    public void Build_GeneratesTypedRowClass_WithColumnProperties()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("class __SalesRow", source);
+        Assert.Contains("public ColumnValue Date", source);
+        Assert.Contains("public ColumnValue Amount", source);
+        Assert.Contains("public ColumnValue Region", source);
+    }
+
+    [Fact]
+    public void Build_GeneratesTypedRowCollection_WithMethods()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("class __SalesRowCollection", source);
+        Assert.Contains("Where(Func<__SalesRow, bool>", source);
+        Assert.Contains("Select(Func<__SalesRow, object>", source);
+        Assert.Contains("OrderBy(Func<__SalesRow, object>", source);
+    }
+
+    [Fact]
+    public void Build_GeneratesTypedTableClass()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("class __SalesTable : ExcelTable", source);
+        Assert.Contains("new __SalesRowCollection Rows", source);
+    }
+
+    [Fact]
+    public void Build_GeneratesMultipleTables()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("class __SalesRow", source);
+        Assert.Contains("class __ProductsRow", source);
+        Assert.Contains("class __SalesTable", source);
+        Assert.Contains("class __ProductsTable", source);
+    }
+
+    [Fact]
+    public void Build_DeclaresLetBindingVariables()
+    {
+        var formula = "=LET(t, Sales, `t.rows.where(r => r.`)";
+        var textUp = "=LET(t, Sales, `t.rows.where(r => r.";
+
+        var (source, _) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
+        Assert.Contains("__SalesTable t = default!", source);
+    }
+
+    [Fact]
+    public void Build_EmbedsDslExpression()
+    {
+        var formula = "=LET(t, Sales, `t.rows.where(r => r.`)";
+        var textUp = "=LET(t, Sales, `t.rows.where(r => r.";
+
+        var (source, _) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
+        Assert.Contains("t.rows.where(r => r.", source);
+    }
+
+    [Fact]
+    public void Build_CaretOffset_IsAtEndOfExpression()
+    {
+        var formula = "=`Sales.`";
+        var textUp = "=`Sales.";
+
+        var (source, offset) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
+        // The caret should be at the end of "Sales." within the synthetic source
+        Assert.True(offset > 0);
+        Assert.True(offset <= source.Length);
+        // The character before the caret should be '.'
+        Assert.Equal('.', source[offset - 1]);
+    }
+
+    [Fact]
+    public void Build_SanitisesColumnNamesWithSpaces()
+    {
+        var metadata = new WorkbookMetadata(
+            new[] { "Data" },
+            Array.Empty<string>(),
+            new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["Data"] = new[] { "First Name", "Last Name", "Age" }
+            });
+
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Data.`", "=`Data.", metadata);
+        Assert.Contains("public ColumnValue FirstName", source);
+        Assert.Contains("public ColumnValue LastName", source);
+        Assert.Contains("public ColumnValue Age", source);
+    }
+
+    [Fact]
+    public void Build_HandlesNullMetadata()
+    {
+        var (source, offset) = SyntheticDocumentBuilder.Build("=`x.`", "=`x.", null);
+        Assert.NotEmpty(source);
+        Assert.True(offset > 0);
+    }
+
+    [Fact]
+    public void Build_NamedRange_DeclaredAsExcelArray()
+    {
+        var formula = "=LET(r, TaxRate, `r.`)";
+        var textUp = "=LET(r, TaxRate, `r.";
+
+        var (source, _) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
+        Assert.Contains("ExcelArray r = default!", source);
+    }
+}

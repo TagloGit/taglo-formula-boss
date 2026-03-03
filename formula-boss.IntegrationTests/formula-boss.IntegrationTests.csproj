@@ -26,7 +26,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Roslyn for code compilation in tests -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.*" />
     <!-- ExcelDNA: only needed for compile-time reference, exclude from runtime -->
     <PackageReference Include="ExcelDna.Integration" Version="1.9.0">
       <ExcludeAssets>runtime</ExcludeAssets>
