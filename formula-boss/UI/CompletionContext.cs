@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 using FormulaBoss.Parsing;
 
@@ -6,19 +6,18 @@ namespace FormulaBoss.UI;
 
 /// <summary>
 ///     The inferred type of the expression to the left of the caret dot.
+///     Used only for routing completions: Row/Cell contexts get column completions,
+///     everything else falls through to Roslyn.
 /// </summary>
 public enum DslType
 {
-    /// <summary>An Excel range, table, or named range — needs an accessor next.</summary>
+    /// <summary>An Excel range, table, or named range.</summary>
     Range,
 
-    /// <summary>A pipeline (range + accessor + optional method chain) — can chain methods.</summary>
-    Pipeline,
-
-    /// <summary>A cell parameter inside a .cells() lambda.</summary>
+    /// <summary>A cell parameter inside a .Cells() lambda.</summary>
     Cell,
 
-    /// <summary>A row parameter inside a .rows() lambda.</summary>
+    /// <summary>A row parameter inside a .Rows() lambda.</summary>
     Row,
 
     /// <summary>A Cell.Interior sub-object.</summary>
@@ -26,9 +25,6 @@ public enum DslType
 
     /// <summary>A Cell.Font sub-object.</summary>
     Font,
-
-    /// <summary>A scalar result (after terminal aggregation or property access).</summary>
-    Scalar,
 
     /// <summary>Could not determine — show fallback completions.</summary>
     Unknown,
@@ -49,44 +45,11 @@ public record CompletionContext(
 
 /// <summary>
 ///     Resolves the DSL type context at the caret position using a token-based backward walk.
-///     Works on incomplete/invalid input since it uses only the lexer, not the parser.
+///     Its only job is to detect Row and Cell contexts for column completions, and
+///     whether the caret is inside a backtick region. All other completions are handled by Roslyn.
 /// </summary>
 public static class ContextResolver
 {
-    private static readonly HashSet<string> Accessors = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "cells", "rows"
-    };
-
-    private static readonly HashSet<string> PipelineMethods = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "where",
-        "select",
-        "selectMany",
-        "map",
-        "any",
-        "all",
-        "orderBy",
-        "orderByDescending",
-        "take",
-        "skip",
-        "distinct",
-        "aggregate",
-        "scan",
-        "toRange"
-    };
-
-    private static readonly HashSet<string> TerminalMethods = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "sum",
-        "average",
-        "min",
-        "max",
-        "count",
-        "first",
-        "firstOrDefault"
-    };
-
     private static readonly HashSet<string> CellProperties = new(StringComparer.OrdinalIgnoreCase)
     {
         "value",
@@ -106,24 +69,6 @@ public static class ContextResolver
         "Address",
         "Formula",
         "NumberFormat"
-    };
-
-    private static readonly HashSet<string> CellContextMethods = new(StringComparer.OrdinalIgnoreCase) { "cells" };
-
-    private static readonly HashSet<string> RowContextMethods = new(StringComparer.OrdinalIgnoreCase) { "rows" };
-
-    // Methods whose lambda parameter inherits the pipeline element type
-    private static readonly HashSet<string> PassthroughMethods = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "where",
-        "any",
-        "all",
-        "select",
-        "selectMany",
-        "map",
-        "orderBy",
-        "orderByDescending",
-        "scan"
     };
 
     private static readonly Regex CellRefPattern = new(
@@ -390,35 +335,31 @@ public static class ContextResolver
         return type;
     }
 
+    /// <summary>
+    ///     Applies a member access to determine the resulting context type.
+    ///     Only tracks transitions that matter for completion routing:
+    ///     .Rows → Row, .Cells → Cell, Cell sub-objects, and cell properties.
+    ///     All other members preserve the current type (Roslyn handles them).
+    /// </summary>
     private static DslType ApplyMember(DslType current, ChainSegment segment)
     {
         var name = segment.Name;
 
         return current switch
         {
-            DslType.Range when Accessors.Contains(name) => DslType.Pipeline,
-            // Pipeline methods work directly on ranges (element-wise operations)
-            DslType.Range when PipelineMethods.Contains(name) => DslType.Pipeline,
-            DslType.Range when TerminalMethods.Contains(name) => DslType.Scalar,
-
-            DslType.Pipeline when PipelineMethods.Contains(name) => DslType.Pipeline,
-            DslType.Pipeline when TerminalMethods.Contains(name) => DslType.Scalar,
+            _ when name.Equals("Rows", StringComparison.OrdinalIgnoreCase) => DslType.Row,
+            _ when name.Equals("Cells", StringComparison.OrdinalIgnoreCase) => DslType.Cell,
 
             DslType.Cell when name.Equals("Interior", StringComparison.OrdinalIgnoreCase) => DslType.Interior,
             DslType.Cell when name.Equals("Font", StringComparison.OrdinalIgnoreCase) => DslType.Font,
-            DslType.Cell when CellProperties.Contains(name) => DslType.Scalar,
+            DslType.Cell when CellProperties.Contains(name) => DslType.Unknown,
 
-            DslType.Row => DslType.Scalar, // Row.ColumnName is a scalar value
+            DslType.Row => DslType.Unknown, // Row.ColumnName — Roslyn takes over from here
 
-            DslType.Interior => DslType.Scalar, // Interior properties are all scalars
-            DslType.Font => DslType.Scalar, // Font properties are all scalars
+            DslType.Interior => DslType.Unknown,
+            DslType.Font => DslType.Unknown,
 
-            // Unknown root + accessor = probably a range we couldn't identify
-            DslType.Unknown when Accessors.Contains(name) => DslType.Pipeline,
-            DslType.Unknown when PipelineMethods.Contains(name) => DslType.Pipeline,
-            DslType.Unknown when TerminalMethods.Contains(name) => DslType.Scalar,
-
-            _ => current // Can't determine further, keep current type
+            _ => current
         };
     }
 
@@ -462,22 +403,19 @@ public static class ContextResolver
                     {
                         var methodName = tokens[i - 1].Lexeme;
 
-                        if (CellContextMethods.Contains(methodName))
+                        if (methodName.Equals("Cells", StringComparison.OrdinalIgnoreCase))
                         {
                             return (DslType.Cell, FindChainRootTable(tokens, i - 2));
                         }
 
-                        if (RowContextMethods.Contains(methodName))
+                        if (methodName.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                         {
                             return (DslType.Row, FindChainRootTable(tokens, i - 2));
                         }
 
-                        // For passthrough methods (where, select, etc.), continue scanning
-                        // backward to find the accessor that determines cell vs row
-                        if (PassthroughMethods.Contains(methodName))
-                        {
-                            return FindPipelineElementTypeWithTable(tokens, i - 2);
-                        }
+                        // Any other method preserves the element type from the chain —
+                        // continue walking backward to find .Rows or .Cells
+                        return FindPipelineElementTypeWithTable(tokens, i - 2);
                     }
 
                     // Unmatched paren but no recognizable method — keep scanning
@@ -516,7 +454,7 @@ public static class ContextResolver
         }
 
         // No arrow found — could be an incomplete lambda; check if paramName is right after paren
-        // e.g., `.where(c =>` where we're inside a statement lambda
+        // e.g., `.Where(c =>` where we're inside a statement lambda
         return false;
     }
 
@@ -526,7 +464,7 @@ public static class ContextResolver
         List<Token> tokens, int dotPos)
     {
         // From the dot before the method, continue walking left through the chain
-        // looking for the accessor (.cells or .rows)
+        // looking for the accessor (.Cells or .Rows)
         var pos = dotPos - 1;
 
         while (pos >= 0)
@@ -542,12 +480,12 @@ public static class ContextResolver
                 if (tokens[pos].Type == TokenType.Identifier)
                 {
                     var name = tokens[pos].Lexeme;
-                    if (CellContextMethods.Contains(name))
+                    if (name.Equals("Cells", StringComparison.OrdinalIgnoreCase))
                     {
                         return (DslType.Cell, FindChainRootTable(tokens, pos));
                     }
 
-                    if (RowContextMethods.Contains(name))
+                    if (name.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                     {
                         return (DslType.Row, FindChainRootTable(tokens, pos));
                     }
@@ -562,12 +500,12 @@ public static class ContextResolver
             else if (tokens[pos].Type == TokenType.Identifier)
             {
                 var name = tokens[pos].Lexeme;
-                if (CellContextMethods.Contains(name))
+                if (name.Equals("Cells", StringComparison.OrdinalIgnoreCase))
                 {
                     return (DslType.Cell, FindChainRootTable(tokens, pos));
                 }
 
-                if (RowContextMethods.Contains(name))
+                if (name.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                 {
                     return (DslType.Row, FindChainRootTable(tokens, pos));
                 }
@@ -588,12 +526,12 @@ public static class ContextResolver
     }
 
     /// <summary>
-    ///     From a position inside a chain (at an accessor like .rows or .cells),
+    ///     From a position inside a chain (at an accessor like .Rows or .Cells),
     ///     walks backward past the dot to find the root identifier (table name).
     /// </summary>
     private static string? FindChainRootTable(List<Token> tokens, int accessorPos)
     {
-        // accessorPos points to "rows" or "cells"; walk left past the dot to find the identifier
+        // accessorPos points to "Rows" or "Cells"; walk left past the dot to find the identifier
         var pos = accessorPos - 1;
 
         // Skip over intermediate chain segments
