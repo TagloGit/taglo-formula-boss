@@ -38,6 +38,23 @@ internal static class CompletionHelpers
     }
 
     /// <summary>
+    ///     Returns column completions for dot access contexts (r.).
+    ///     Displayed as dot notation but inserted as bracket syntax.
+    /// </summary>
+    public static IReadOnlyList<CompletionData> GetDotColumnCompletions(
+        string textUpToCaret, string fullText, WorkbookMetadata? metadata)
+    {
+        var ctx = ContextResolver.Resolve(textUpToCaret, metadata);
+        if (ctx.Type != DslType.Row)
+        {
+            return Array.Empty<CompletionData>();
+        }
+
+        var tableName = ResolveTableName(ctx.TableName, fullText, metadata);
+        return BuildRowCompletions(metadata, false, tableName);
+    }
+
+    /// <summary>
     ///     Returns column completions for bracket access contexts (r[).
     /// </summary>
     public static IReadOnlyList<CompletionData> GetBracketCompletions(

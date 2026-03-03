@@ -62,7 +62,7 @@ public class CompletionData : ICompletionData
 
 /// <summary>
 ///     Completion item for row column names with context-aware insertion.
-///     After a dot: rewrites to bracket syntax if the name contains spaces.
+///     After a dot: always rewrites to bracket syntax ["Column Name"].
 ///     After a bracket: appends closing bracket.
 /// </summary>
 internal sealed class ColumnCompletionData : CompletionData
@@ -79,32 +79,25 @@ internal sealed class ColumnCompletionData : CompletionData
     {
         var doc = textArea.Document;
         var hasSpace = Text.Contains(' ');
+        var quoted = hasSpace ? $"\"{Text}\"" : $"\"{Text}\"";
 
         if (_isBracketContext)
         {
-            // Inside r[ — insert column name + ], with quotes if it contains spaces
-            var insert = hasSpace ? $"\"{Text}\"]" : Text + "]";
-            doc.Replace(completionSegment, insert);
-        }
-        else if (hasSpace)
-        {
-            // After r. — rewrite the dot to bracket syntax: r["Column Name"]
-            // The dot is the character immediately before the completion segment
-            var dotOffset = completionSegment.Offset - 1;
-            if (dotOffset >= 0 && doc.GetCharAt(dotOffset) == '.')
-            {
-                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[\"" + Text + "\"]");
-            }
-            else
-            {
-                // Fallback: just insert as quoted bracket syntax
-                doc.Replace(completionSegment, "[\"" + Text + "\"]");
-            }
+            // Inside r[ — insert column name + ], with quotes
+            doc.Replace(completionSegment, quoted + "]");
         }
         else
         {
-            // No space, dot context — normal insertion
-            doc.Replace(completionSegment, Text);
+            // After r. — rewrite the dot to bracket syntax: r["Column Name"]
+            var dotOffset = completionSegment.Offset - 1;
+            if (dotOffset >= 0 && doc.GetCharAt(dotOffset) == '.')
+            {
+                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[" + quoted + "]");
+            }
+            else
+            {
+                doc.Replace(completionSegment, "[" + quoted + "]");
+            }
         }
     }
 }

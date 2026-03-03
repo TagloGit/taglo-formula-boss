@@ -32,11 +32,18 @@ internal sealed class RoslynCompletionProvider
         // Use the existing context resolver for bracket detection and non-DSL contexts
         var ctx = ContextResolver.Resolve(textUpToCaret, metadata);
 
-        // Bracket context: use legacy column completion (Roslyn can't help with string indexers)
+        // Bracket context: use column completions (Roslyn can't help with string indexers)
         if (ctx.IsBracketContext)
         {
             var items = CompletionHelpers.GetBracketCompletions(textUpToCaret, fullText, metadata);
             return (items, true);
+        }
+
+        // Row dot context: show column names that insert as bracket syntax
+        if (ctx.Type == DslType.Row)
+        {
+            var items = CompletionHelpers.GetDotColumnCompletions(textUpToCaret, fullText, metadata);
+            return (items, false);
         }
 
         // Outside DSL: use legacy top-level completions (table names, LET variables)
