@@ -295,6 +295,94 @@ public class WrapperTypePipelineTests
 
     #endregion
 
+    #region Skip
+
+    [Fact]
+    public void Sugar_Skip()
+    {
+        var values = new object[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression("tbl.Skip(2)");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(3.0, arr[0, 0]);
+    }
+
+    #endregion
+
+    #region Distinct
+
+    [Fact]
+    public void Sugar_Distinct()
+    {
+        var values = new object[,] { { 1.0 }, { 2.0 }, { 1.0 }, { 3.0 }, { 2.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression("tbl.Distinct()");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0)); // 1, 2, 3
+    }
+
+    #endregion
+
+    #region GroupBy
+
+    [Fact]
+    public void Sugar_GroupBy_Compiles()
+    {
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.GroupBy(r => r[0])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+    }
+
+    #endregion
+
+    #region Aggregate
+
+    [Fact]
+    public void Sugar_Aggregate_WithSeed()
+    {
+        var values = new object[,] { { 10.0 }, { 20.0 }, { 30.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.Aggregate(0.0, (acc, r) => acc + (double)r[0])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        Assert.Equal(60.0, result);
+    }
+
+    #endregion
+
+    #region Negative Indexing
+
+    [Fact]
+    public void Sugar_NegativeIndex_LastColumn()
+    {
+        var values = new object[,] { { 1.0, 10.0 }, { 2.0, 20.0 }, { 3.0, 30.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.Select(r => r[-1])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0));
+    }
+
+    #endregion
+
     #region Select and Chaining
 
     [Fact]
