@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using FormulaBoss.Compilation;
 using FormulaBoss.Transpilation;
@@ -31,11 +31,11 @@ public record ExpressionContext(
 public class FormulaPipeline
 {
     private readonly DynamicCompiler _compiler;
-    private readonly Dictionary<string, IReadOnlyList<string>?> _parametersCache = new();
+    private readonly Dictionary<string, IReadOnlyList<string>?> _parametersCache = [];
 
     // Maps UDF names to the expression they were created from, to detect collisions
-    private readonly Dictionary<string, string> _registeredUdfExpressions = new();
-    private readonly Dictionary<string, string> _udfCache = new();
+    private readonly Dictionary<string, string> _registeredUdfExpressions = [];
+    private readonly Dictionary<string, string> _udfCache = [];
 
     public FormulaPipeline(DynamicCompiler compiler)
     {
@@ -102,7 +102,8 @@ public class FormulaPipeline
         Debug.WriteLine("=== End Generated Code ===");
 
         // Step 3: Compile and Register
-        var compileErrors = _compiler.CompileAndRegister(transpileResult.SourceCode, transpileResult.RequiresObjectModel);
+        var compileErrors =
+            _compiler.CompileAndRegister(transpileResult.SourceCode, transpileResult.RequiresObjectModel);
 
         if (compileErrors.Count > 0)
         {
@@ -111,6 +112,7 @@ public class FormulaPipeline
             {
                 errorMsg += GetStatementLambdaHint();
             }
+
             return new PipelineResult(false, null, $"Compile error: {errorMsg}");
         }
 
@@ -122,9 +124,15 @@ public class FormulaPipeline
             .Select(p =>
             {
                 if (detection.RangeRefMap.TryGetValue(p, out var orig))
+                {
                     return orig;
+                }
+
                 if (detection.HeaderVariables.Contains(p))
+                {
                     return p + "[#All]";
+                }
+
                 return p;
             })
             .ToList();
@@ -168,13 +176,8 @@ public class FormulaPipeline
     {
         var typeKeywords = new[]
         {
-            "cannot convert",
-            "no implicit conversion",
-            "cannot implicitly convert",
-            "operator",
-            "cannot be applied to operands of type",
-            "does not contain a definition for",
-            "cannot be used as",
+            "cannot convert", "no implicit conversion", "cannot implicitly convert", "operator",
+            "cannot be applied to operands of type", "does not contain a definition for", "cannot be used as",
             "cannot assign"
         };
 

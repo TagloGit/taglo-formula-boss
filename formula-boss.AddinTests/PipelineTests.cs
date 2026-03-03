@@ -47,7 +47,7 @@ public class PipelineTests
         }
     }
 
-    [Fact(Skip = "OrderBy returns #VALUE! — runtime bug to investigate")]
+    [Fact]
     public void ValuePath_OrderBy()
     {
         var ws = _excel.AddWorksheet();
