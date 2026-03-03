@@ -149,7 +149,7 @@ public class LetFormulaRewriterTests
     {
         var formula = @"=LET(data, A1:F20,
      coloredCells, `data.cells.where(c => c.color != -4142)`,
-     result, `coloredCells.select(c => c.value * 2).toArray()`,
+     result, `coloredCells.Select(c => c.Value * 2)`,
      SUM(result))";
         LetFormulaParser.TryParse(formula, out var structure);
 
@@ -157,7 +157,7 @@ public class LetFormulaRewriterTests
         {
             ["coloredCells"] =
                 new("coloredCells", "data.cells.where(c => c.color != -4142)", "COLOREDCELLS", new[] { "data" }),
-            ["result"] = new("result", "coloredCells.select(c => c.value * 2).toArray()", "RESULT",
+            ["result"] = new("result", "coloredCells.Select(c => c.Value * 2)", "RESULT",
                 new[] { "coloredCells" })
         };
 
@@ -170,7 +170,7 @@ public class LetFormulaRewriterTests
         Assert.Contains("COLOREDCELLS(data)", result);
         Assert.Contains("RESULT(coloredCells)", result);
         Assert.Contains("data.cells.where(c => c.color != -4142)", result);
-        Assert.Contains("coloredCells.select(c => c.value * 2).toArray()", result);
+        Assert.Contains("coloredCells.Select(c => c.Value * 2)", result);
     }
 
     #endregion

@@ -251,7 +251,7 @@ public class LetFormulaParserTests
     {
         var formula = @"=LET(data, A1:F20,
      coloredCells, `data.cells.where(c => c.color != -4142)`,
-     result, `coloredCells.select(c => c.value * 2).toArray()`,
+     result, `coloredCells.Select(c => c.Value * 2)`,
      SUM(result))";
 
         var success = LetFormulaParser.TryParse(formula, out var structure);

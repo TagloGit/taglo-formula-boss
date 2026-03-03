@@ -37,13 +37,13 @@ public class InterceptionTests
     public void IsBacktickFormula_ReturnsTrue_ForFormulaWithBackticks()
     {
         // Excel stores '=SUM(`...`) as =SUM(`...`) - the apostrophe is hidden
-        Assert.True(BacktickExtractor.IsBacktickFormula("=SUM(`data.values`)"));
+        Assert.True(BacktickExtractor.IsBacktickFormula("=SUM(`data.Where(x => x > 0)`)"));
     }
 
     [Fact]
     public void IsBacktickFormula_ReturnsFalse_ForBackticksWithoutEquals()
     {
-        Assert.False(BacktickExtractor.IsBacktickFormula("`data.values`"));
+        Assert.False(BacktickExtractor.IsBacktickFormula("`data.Where(x => x > 0)`"));
     }
 
     #endregion
@@ -61,20 +61,20 @@ public class InterceptionTests
     [Fact]
     public void Extract_ReturnsSingleExpression()
     {
-        var result = BacktickExtractor.Extract("=SUM(`data.values`)");
+        var result = BacktickExtractor.Extract("=SUM(`data.Where(x => x > 0)`)");
 
         Assert.Single(result);
-        Assert.Equal("data.values", result[0].Expression);
+        Assert.Equal("data.Where(x => x > 0)", result[0].Expression);
     }
 
     [Fact]
     public void Extract_ReturnsMultipleExpressions()
     {
-        var result = BacktickExtractor.Extract("=SUM(`a.values`) + SUM(`b.values`)");
+        var result = BacktickExtractor.Extract("=SUM(`a.Sum()`) + SUM(`b.Sum()`)");
 
         Assert.Equal(2, result.Count);
-        Assert.Equal("a.values", result[0].Expression);
-        Assert.Equal("b.values", result[1].Expression);
+        Assert.Equal("a.Sum()", result[0].Expression);
+        Assert.Equal("b.Sum()", result[1].Expression);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class InterceptionTests
     [Fact]
     public void Extract_IgnoresUnclosedBacktick()
     {
-        var result = BacktickExtractor.Extract("=SUM(`data.values)");
+        var result = BacktickExtractor.Extract("=SUM(`data.Where(x => x > 0))");
 
         Assert.Empty(result);
     }
@@ -114,10 +114,10 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["data.values"] = "__udf_abc(data)"
+            ["data.Where(x => x > 0)"] = "__udf_abc(data)"
         };
 
-        var result = BacktickExtractor.RewriteFormula("=SUM(`data.values`)", replacements);
+        var result = BacktickExtractor.RewriteFormula("=SUM(`data.Where(x => x > 0)`)", replacements);
 
         Assert.Equal("=SUM(__udf_abc(data))", result);
     }
@@ -127,11 +127,11 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["a.values"] = "__udf_1(a)",
-            ["b.values"] = "__udf_2(b)"
+            ["a.Sum()"] = "__udf_1(a)",
+            ["b.Sum()"] = "__udf_2(b)"
         };
 
-        var result = BacktickExtractor.RewriteFormula("=SUM(`a.values`) + SUM(`b.values`)", replacements);
+        var result = BacktickExtractor.RewriteFormula("=SUM(`a.Sum()`) + SUM(`b.Sum()`)", replacements);
 
         Assert.Equal("=SUM(__udf_1(a)) + SUM(__udf_2(b))", result);
     }
@@ -156,10 +156,10 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["data.values.toArray()"] = "__udf_abc(data)"
+            ["data.Select(x => x * 2)"] = "__udf_abc(data)"
         };
 
-        var result = BacktickExtractor.RewriteFormula("=`data.values.toArray()`", replacements);
+        var result = BacktickExtractor.RewriteFormula("=`data.Select(x => x * 2)`", replacements);
 
         Assert.Equal("=__udf_abc(data)", result);
     }
@@ -174,7 +174,7 @@ public class InterceptionTests
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
 
-        var result = pipeline.Process("data.values.toArray()");
+        var result = pipeline.Process("data.Select(x => x * 2)");
 
         Assert.True(result.Success);
         Assert.NotNull(result.UdfName);
@@ -188,7 +188,7 @@ public class InterceptionTests
         var pipeline = new FormulaPipeline(compiler);
         var context = new ExpressionContext("filteredData");
 
-        var result = pipeline.Process("data.values.where(v => v > 0)", context);
+        var result = pipeline.Process("data.Where(v => v > 0)", context);
 
         Assert.True(result.Success);
         Assert.Equal("__udf_FILTEREDDATA", result.UdfName);
@@ -201,8 +201,8 @@ public class InterceptionTests
         var pipeline = new FormulaPipeline(compiler);
 
         // Same expression with different preferred names should create different UDFs
-        var result1 = pipeline.Process("data.values.toArray()", new ExpressionContext("firstUdf"));
-        var result2 = pipeline.Process("data.values.toArray()", new ExpressionContext("secondUdf"));
+        var result1 = pipeline.Process("data.Select(x => x * 2)", new ExpressionContext("firstUdf"));
+        var result2 = pipeline.Process("data.Select(x => x * 2)", new ExpressionContext("secondUdf"));
 
         Assert.True(result1.Success);
         Assert.True(result2.Success);
@@ -229,7 +229,7 @@ public class InterceptionTests
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
 
-        var result = pipeline.Process("myRange.cells.toArray()");
+        var result = pipeline.Process("myRange.Cells.Where(c => c.Color == 6)");
 
         Assert.True(result.Success);
         Assert.NotNull(result.Parameters);
@@ -242,8 +242,8 @@ public class InterceptionTests
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
 
-        var result1 = pipeline.Process("data.values.toArray()");
-        var result2 = pipeline.Process("data.values.toArray()");
+        var result1 = pipeline.Process("data.Select(x => x * 2)");
+        var result2 = pipeline.Process("data.Select(x => x * 2)");
 
         Assert.True(result1.Success);
         Assert.True(result2.Success);
@@ -257,7 +257,7 @@ public class InterceptionTests
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
 
-        var result = pipeline.Process("data.cells.where(c => c.color == 6).select(c => c.value).toArray()");
+        var result = pipeline.Process("data.Cells.Where(c => c.Color == 6).Select(c => c.Value)");
 
         Assert.True(result.Success);
         Assert.NotNull(result.UdfName);

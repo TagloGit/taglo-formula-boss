@@ -55,41 +55,36 @@ public static class ContextResolver
 {
     private static readonly HashSet<string> Accessors = new(StringComparer.OrdinalIgnoreCase)
     {
-        "cells", "values", "rows", "cols"
+        "cells", "rows"
     };
 
     private static readonly HashSet<string> PipelineMethods = new(StringComparer.OrdinalIgnoreCase)
     {
         "where",
         "select",
+        "selectMany",
         "map",
-        "find",
-        "some",
-        "every",
+        "any",
+        "all",
         "orderBy",
-        "orderByDesc",
+        "orderByDescending",
         "take",
         "skip",
         "distinct",
-        "groupBy",
-        "reduce",
         "aggregate",
         "scan",
-        "toArray"
+        "toRange"
     };
 
     private static readonly HashSet<string> TerminalMethods = new(StringComparer.OrdinalIgnoreCase)
     {
         "sum",
-        "avg",
         "average",
         "min",
         "max",
         "count",
         "first",
-        "firstOrDefault",
-        "last",
-        "lastOrDefault"
+        "firstOrDefault"
     };
 
     private static readonly HashSet<string> CellProperties = new(StringComparer.OrdinalIgnoreCase)
@@ -121,13 +116,13 @@ public static class ContextResolver
     private static readonly HashSet<string> PassthroughMethods = new(StringComparer.OrdinalIgnoreCase)
     {
         "where",
-        "find",
-        "some",
-        "every",
+        "any",
+        "all",
         "select",
+        "selectMany",
         "map",
         "orderBy",
-        "orderByDesc",
+        "orderByDescending",
         "scan"
     };
 
@@ -402,8 +397,7 @@ public static class ContextResolver
         return current switch
         {
             DslType.Range when Accessors.Contains(name) => DslType.Pipeline,
-            DslType.Range when name.Equals("withHeaders", StringComparison.OrdinalIgnoreCase) => DslType.Range,
-            // Ranges default to .values, so pipeline methods work directly on ranges
+            // Pipeline methods work directly on ranges (element-wise operations)
             DslType.Range when PipelineMethods.Contains(name) => DslType.Pipeline,
             DslType.Range when TerminalMethods.Contains(name) => DslType.Scalar,
 
@@ -602,7 +596,7 @@ public static class ContextResolver
         // accessorPos points to "rows" or "cells"; walk left past the dot to find the identifier
         var pos = accessorPos - 1;
 
-        // Skip over intermediate chain segments (e.g., .withHeaders().rows)
+        // Skip over intermediate chain segments
         while (pos >= 0)
         {
             if (tokens[pos].Type == TokenType.Dot)
