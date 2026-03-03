@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Formula Boss is an Excel add-in that allows power users to write inline expressions using a concise DSL that transpiles to C# UDFs at runtime via ExcelDNA and Roslyn. The primary use case is competitive Excel environments.
+Formula Boss is an Excel add-in that allows power users to write inline C# expressions operating on pre-compiled wrapper types (`ExcelTable`, `ExcelArray`, `ExcelScalar`) that transpile to UDFs at runtime via ExcelDNA and Roslyn. The primary use case is competitive Excel environments.
 
 ## Build Commands
 
@@ -23,7 +23,7 @@ dotnet test formula-boss/formula-boss.slnx
 - ExcelDNA - Native C API integration for high-performance UDFs
 - Roslyn (Microsoft.CodeAnalysis.CSharp) - Runtime C# compilation
 - Microsoft.Office.Interop.Excel - Excel object model access for cell properties (color, formatting)
-- AvalonEdit - Floating editor UI (post-MVP)
+- AvalonEdit - Floating editor UI
 
 ## Code Style
 
@@ -41,8 +41,12 @@ The user monitors warnings using ReSharper in Visual Studio. After significant c
 ## Specifications
 
 Detailed specifications and implementation plans:
-- `specs/0001-excel-udf-addin.md` - Full DSL specification, user journeys, error handling
-- `plans/0001-excel-udf-addin.md` - Technical stack rationale, 14 implementation phases, risk register
+- `specs/0001-excel-udf-addin.md` - Core specification, user journeys, error handling
+- `specs/0003-wrapper-type-architecture.md` - Wrapper type architecture (ExcelValue, ExcelArray, ExcelScalar, RowCollection)
+- `specs/0004-excel-integration-testing.md` - End-to-end testing strategy
+- `plans/0001-excel-udf-addin.md` - Technical stack rationale, 14 implementation phases
+- `plans/0003-wrapper-type-architecture.md` - Architecture refactor implementation plan
+- `plans/0003-architecture-review-notes.md` - Architecture review findings and design decisions
 
 ## Workflow and Skills
 
@@ -112,7 +116,7 @@ When generated code needs to interact with host-loaded assemblies (ExcelDNA, For
 
 ## Object Model UDFs and IsMacroType
 
-UDFs that access cell formatting (color, bold, etc.) via the `.cells` accessor require `IsMacroType = true` in their `ExcelFunctionAttribute`. This is because `xlfReftext` (needed for sheet-qualified range addresses) is a C API function that only works from macro-type UDFs. The `RequiresObjectModel` flag on `TranspileResult` controls this — it flows through `FormulaPipeline` into `DynamicCompiler.CompileAndRegister`.
+UDFs that access cell formatting (color, bold, etc.) via the `.Cells` accessor require `IsMacroType = true` in their `ExcelFunctionAttribute`. This is because `xlfReftext` (needed for sheet-qualified range addresses) is a C API function that only works from macro-type UDFs. The `RequiresObjectModel` flag on `TranspileResult` controls this — it flows through `FormulaPipeline` into `DynamicCompiler.CompileAndRegister`.
 
 ## UDF Registration Context
 
