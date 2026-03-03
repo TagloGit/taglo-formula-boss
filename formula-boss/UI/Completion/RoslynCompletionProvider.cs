@@ -1,4 +1,4 @@
-using FormulaBoss.Interception;
+﻿using FormulaBoss.Interception;
 
 using Microsoft.CodeAnalysis.Completion;
 
@@ -11,11 +11,6 @@ namespace FormulaBoss.UI.Completion;
 internal sealed class RoslynCompletionProvider
 {
     private readonly RoslynWorkspaceManager _workspace;
-
-    /// <summary>
-    ///     Synthetic type name prefixes to filter from Roslyn results.
-    /// </summary>
-    private static readonly HashSet<string> InternalPrefixes = new() { "__" };
 
     public RoslynCompletionProvider(RoslynWorkspaceManager workspace)
     {

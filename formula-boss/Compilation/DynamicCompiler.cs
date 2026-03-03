@@ -5,8 +5,6 @@ using System.Runtime.Loader;
 
 using ExcelDna.Integration;
 
-using FormulaBoss.Runtime;
-
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 

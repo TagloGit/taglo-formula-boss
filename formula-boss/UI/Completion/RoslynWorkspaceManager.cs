@@ -1,9 +1,10 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using FormulaBoss.Compilation;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Text;
 
@@ -15,8 +16,8 @@ namespace FormulaBoss.UI.Completion;
 /// </summary>
 internal sealed class RoslynWorkspaceManager : IDisposable
 {
-    private readonly AdhocWorkspace _workspace;
     private readonly ProjectId _projectId;
+    private readonly AdhocWorkspace _workspace;
     private DocumentId? _documentId;
 
     public RoslynWorkspaceManager()
@@ -33,12 +34,14 @@ internal sealed class RoslynWorkspaceManager : IDisposable
             "FormulaBoss.Intellisense",
             LanguageNames.CSharp,
             metadataReferences: references,
-            compilationOptions: new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
+            compilationOptions: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary));
 
         _workspace.AddProject(projectInfo);
         _projectId = projectInfo.Id;
     }
+
+    public void Dispose() => _workspace.Dispose();
 
     /// <summary>
     ///     Updates the synthetic document and returns Roslyn completions at the given caret offset.
@@ -83,7 +86,7 @@ internal sealed class RoslynWorkspaceManager : IDisposable
             var completions = await completionService.GetCompletionsAsync(
                 document, caretOffset, cancellationToken: cancellationToken);
 
-            return completions?.ItemsList ?? (IReadOnlyList<CompletionItem>)Array.Empty<CompletionItem>();
+            return completions.ItemsList;
         }
         catch (OperationCanceledException)
         {
@@ -112,10 +115,5 @@ internal sealed class RoslynWorkspaceManager : IDisposable
         {
             Debug.WriteLine($"Roslyn warm-up error: {ex.Message}");
         }
-    }
-
-    public void Dispose()
-    {
-        _workspace.Dispose();
     }
 }

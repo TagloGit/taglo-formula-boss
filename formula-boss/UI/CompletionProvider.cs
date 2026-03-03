@@ -1,7 +1,6 @@
-using System.Text;
+﻿using System.Text;
 
 using FormulaBoss.Interception;
-using FormulaBoss.Transpilation;
 
 namespace FormulaBoss.UI;
 
