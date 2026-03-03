@@ -187,10 +187,21 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void Wrap_WithOrigin_PropagatesToArray()
+    public void Wrap_WithOrigin_SingleCell_PropagatesToScalar()
     {
         var origin = new RangeOrigin("Sheet1", 1, 1);
         var data = new object?[,] { { 42.0 } };
+
+        var wrapped = ExcelValue.Wrap(data, origin: origin);
+        var scalar = Assert.IsType<ExcelScalar>(wrapped);
+        Assert.Equal(42.0, scalar.RawValue);
+    }
+
+    [Fact]
+    public void Wrap_WithOrigin_MultiCell_PropagatesToArray()
+    {
+        var origin = new RangeOrigin("Sheet1", 1, 1);
+        var data = new object?[,] { { 42.0 }, { 99.0 } };
 
         var wrapped = ExcelValue.Wrap(data, origin: origin);
         var array = Assert.IsType<ExcelArray>(wrapped);
