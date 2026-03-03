@@ -119,7 +119,14 @@ public class FormulaPipeline
 
         // Build flat parameter list, mapping range ref placeholders back to originals
         var parameters = detection.Parameters
-            .Select(p => detection.RangeRefMap.TryGetValue(p, out var orig) ? orig : p)
+            .Select(p =>
+            {
+                if (detection.RangeRefMap.TryGetValue(p, out var orig))
+                    return orig;
+                if (detection.HeaderVariables.Contains(p))
+                    return p + "[#All]";
+                return p;
+            })
             .ToList();
 
         // Cache the result

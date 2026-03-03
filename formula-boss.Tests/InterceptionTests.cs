@@ -263,6 +263,49 @@ public class InterceptionTests
         Assert.NotNull(result.UdfName);
     }
 
+    [Fact]
+    public void Pipeline_AppendsAllToHeaderVariableTableParameter()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process("tbl.Rows.Where(r => (double)r[\"Amount\"] > 150).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("tbl[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_DoesNotAppendAllToRangeRefHeaderVariable()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process("A1:B10.Rows.Where(r => (double)r[\"Price\"] > 5).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        // Range refs should stay as-is (user controls the range)
+        Assert.Contains("A1:B10", result.Parameters);
+        Assert.DoesNotContain("A1:B10[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_DoesNotAppendAllToNonHeaderVariable()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process("tbl.Rows.Where(r => (double)r[0] > threshold).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        // threshold is not a header variable — no [#All]
+        Assert.Contains("threshold", result.Parameters);
+        Assert.DoesNotContain("threshold[#All]", result.Parameters);
+    }
+
     #endregion
 
     /// <summary>
