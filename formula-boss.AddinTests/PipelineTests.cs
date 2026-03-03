@@ -434,7 +434,7 @@ public class PipelineTests
         }
     }
 
-    [Fact(Skip = "Table reference returns #VALUE! — table name passed as string not ExcelReference, see #84")]
+    [Fact]
     public void Table_BracketColumnAccess()
     {
         var ws = _excel.AddWorksheet();
