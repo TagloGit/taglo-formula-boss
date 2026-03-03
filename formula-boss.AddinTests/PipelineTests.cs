@@ -372,7 +372,7 @@ public class PipelineTests
         }
     }
 
-    [Fact(Skip = "Cells.Where().Sum() — Sum not available on IEnumerable<Cell>, needs runtime method")]
+    [Fact]
     public void ObjectModelPath_WhereColor_Sum()
     {
         var ws = _excel.AddWorksheet();
