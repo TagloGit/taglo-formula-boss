@@ -42,13 +42,14 @@ The user monitors warnings using ReSharper in Visual Studio. After significant c
 
 ## Specifications
 
-Detailed specifications and implementation plans:
-- `specs/0001-excel-udf-addin.md` - Core specification, user journeys, error handling
-- `specs/0003-wrapper-type-architecture.md` - Wrapper type architecture (ExcelValue, ExcelArray, ExcelScalar, RowCollection)
+- `specs/0005-formula-boss-user-spec.md` - User-facing spec: what users can write and expected results (source of truth for AddIn tests)
+- `specs/0006-formula-boss-architecture.md` - Architecture spec: pipeline, type system, ALC loading, delegate bridges, testing
+- `specs/0002-editor-ux-polish.md` - Editor UX behaviours
 - `specs/0004-excel-integration-testing.md` - End-to-end testing strategy
-- `plans/0001-excel-udf-addin.md` - Technical stack rationale, 14 implementation phases
+- `plans/0002-editor-ux-polish.md` - Editor UX implementation plan
 - `plans/0003-wrapper-type-architecture.md` - Architecture refactor implementation plan
 - `plans/0003-architecture-review-notes.md` - Architecture review findings and design decisions
+- `plans/0004-excel-integration-testing.md` - Integration testing implementation plan
 
 ## Workflow and Skills
 
