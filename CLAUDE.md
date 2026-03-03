@@ -14,6 +14,8 @@ dotnet build formula-boss/formula-boss.slnx
 
 # Run tests
 dotnet test formula-boss/formula-boss.slnx
+
+NOTE: formula-boss.AddinTests run tests with the add-in in an actual Excel instance. These are the ultimate proof of correct operation. You can assume that the machine has Excel installed and that you can run these tests freely, unless the User tells you otherwise.
 ```
 
 ## Architecture
