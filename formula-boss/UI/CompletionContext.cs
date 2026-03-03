@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 using FormulaBoss.Parsing;
 
@@ -6,31 +6,15 @@ namespace FormulaBoss.UI;
 
 /// <summary>
 ///     The inferred type of the expression to the left of the caret dot.
+///     Used only for routing completions: Row contexts get column completions,
+///     everything else falls through to Roslyn.
 /// </summary>
 public enum DslType
 {
-    /// <summary>An Excel range, table, or named range — needs an accessor next.</summary>
-    Range,
-
-    /// <summary>A pipeline (range + accessor + optional method chain) — can chain methods.</summary>
-    Pipeline,
-
-    /// <summary>A cell parameter inside a .cells() lambda.</summary>
-    Cell,
-
-    /// <summary>A row parameter inside a .rows() lambda.</summary>
+    /// <summary>A row parameter inside a .Rows() lambda — show column completions.</summary>
     Row,
 
-    /// <summary>A Cell.Interior sub-object.</summary>
-    Interior,
-
-    /// <summary>A Cell.Font sub-object.</summary>
-    Font,
-
-    /// <summary>A scalar result (after terminal aggregation or property access).</summary>
-    Scalar,
-
-    /// <summary>Could not determine — show fallback completions.</summary>
+    /// <summary>Could not determine — delegate to Roslyn.</summary>
     Unknown,
 
     /// <summary>Not after a dot — show top-level items (keywords, variables, tables).</summary>
@@ -49,88 +33,11 @@ public record CompletionContext(
 
 /// <summary>
 ///     Resolves the DSL type context at the caret position using a token-based backward walk.
-///     Works on incomplete/invalid input since it uses only the lexer, not the parser.
+///     Its only job is to detect Row contexts for column completions and whether the caret
+///     is inside a backtick region. All other completions are handled by Roslyn.
 /// </summary>
 public static class ContextResolver
 {
-    private static readonly HashSet<string> Accessors = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "cells", "values", "rows", "cols"
-    };
-
-    private static readonly HashSet<string> PipelineMethods = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "where",
-        "select",
-        "map",
-        "find",
-        "some",
-        "every",
-        "orderBy",
-        "orderByDesc",
-        "take",
-        "skip",
-        "distinct",
-        "groupBy",
-        "reduce",
-        "aggregate",
-        "scan",
-        "toArray"
-    };
-
-    private static readonly HashSet<string> TerminalMethods = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "sum",
-        "avg",
-        "average",
-        "min",
-        "max",
-        "count",
-        "first",
-        "firstOrDefault",
-        "last",
-        "lastOrDefault"
-    };
-
-    private static readonly HashSet<string> CellProperties = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "value",
-        "color",
-        "rgb",
-        "bold",
-        "italic",
-        "fontSize",
-        "format",
-        "formula",
-        "row",
-        "col",
-        "address",
-        "Value",
-        "Row",
-        "Column",
-        "Address",
-        "Formula",
-        "NumberFormat"
-    };
-
-    private static readonly HashSet<string> CellContextMethods = new(StringComparer.OrdinalIgnoreCase) { "cells" };
-
-    private static readonly HashSet<string> RowContextMethods = new(StringComparer.OrdinalIgnoreCase) { "rows" };
-
-    // Methods whose lambda parameter inherits the pipeline element type
-    private static readonly HashSet<string> PassthroughMethods = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "where",
-        "find",
-        "some",
-        "every",
-        "select",
-        "map",
-        "orderBy",
-        "orderByDesc",
-        "scan"
-    };
-
     private static readonly Regex CellRefPattern = new(
         @"^[A-Za-z]{1,3}\d{1,7}$", RegexOptions.Compiled);
 
@@ -200,8 +107,8 @@ public static class ContextResolver
         {
             // Caret is right after "param[" — check if param is a row lambda parameter
             var paramName = tokens[^2].Lexeme;
-            var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, tokens.Count - 2, paramName);
-            if (lambdaType == DslType.Row)
+            var (isRow, tableName) = IsRowContext(tokens, tokens.Count - 2, paramName);
+            if (isRow)
             {
                 return new CompletionContext(DslType.Row, null, insideDsl, true, tableName);
             }
@@ -214,8 +121,8 @@ public static class ContextResolver
         {
             // Caret is after "param[partialWo" — check if it's a row bracket context
             var paramName = tokens[^3].Lexeme;
-            var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, tokens.Count - 3, paramName);
-            if (lambdaType == DslType.Row)
+            var (isRow, tableName) = IsRowContext(tokens, tokens.Count - 3, paramName);
+            if (isRow)
             {
                 return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, true, tableName);
             }
@@ -229,7 +136,7 @@ public static class ContextResolver
         }
 
         // Walk the chain backward from the dot to find the expression root
-        var (chainType, chainTableName) = ResolveChainTypeWithTable(tokens, dotIndex, metadata);
+        var (chainType, chainTableName) = ResolveChainType(tokens, dotIndex, metadata);
         return new CompletionContext(chainType, partialWord, insideDsl, TableName: chainTableName);
     }
 
@@ -251,13 +158,12 @@ public static class ContextResolver
         return count % 2 == 1;
     }
 
-
-    private static (DslType Type, string? TableName) ResolveChainTypeWithTable(
+    private static (DslType Type, string? TableName) ResolveChainType(
         List<Token> tokens, int dotIndex, WorkbookMetadata? metadata)
     {
         // Collect the chain: walk left from dotIndex collecting Identifier, Dot, and method calls
         // Chain is built right-to-left, then reversed
-        var chain = new List<ChainSegment>();
+        var chain = new List<string>();
         var pos = dotIndex - 1;
 
         while (pos >= 0)
@@ -274,7 +180,7 @@ public static class ContextResolver
                 // After skipping parens, expect an identifier (method name)
                 if (tokens[pos].Type == TokenType.Identifier)
                 {
-                    chain.Add(new ChainSegment(tokens[pos].Lexeme));
+                    chain.Add(tokens[pos].Lexeme);
                     pos--;
                 }
                 else
@@ -284,7 +190,7 @@ public static class ContextResolver
             }
             else if (tokens[pos].Type == TokenType.Identifier)
             {
-                chain.Add(new ChainSegment(tokens[pos].Lexeme));
+                chain.Add(tokens[pos].Lexeme);
                 pos--;
             }
             else
@@ -304,19 +210,15 @@ public static class ContextResolver
         }
 
         // Check if chain root starts with a range reference (e.g., A1:B10)
-        // The token before the chain might be Identifier:Identifier pattern
         var hasRangePrefix = false;
         if (pos >= 0 && tokens[pos].Type == TokenType.Colon)
         {
-            // Could be part of range ref like A1:B10 — the "B10" is already in chain
-            // Check that tokens before : is also an identifier that looks like a cell ref
             if (pos >= 1 && tokens[pos - 1].Type == TokenType.Identifier)
             {
                 var startRef = tokens[pos - 1].Lexeme;
-                if (chain.Count > 0 && IsCellReference(startRef) && IsCellReference(chain[^1].Name))
+                if (chain.Count > 0 && IsCellReference(startRef) && IsCellReference(chain[^1]))
                 {
                     hasRangePrefix = true;
-                    // Remove the end-ref identifier from chain, it's part of the range
                     chain.RemoveAt(chain.Count - 1);
                 }
             }
@@ -326,118 +228,72 @@ public static class ContextResolver
 
         if (chain.Count == 0)
         {
-            // Just a dot after something we couldn't parse — could be a range ref
-            // Check the token directly left of the dot
-            if (hasRangePrefix)
-            {
-                return (DslType.Range, null);
-            }
-
-            var leftIdx = dotIndex - 1;
-            if (leftIdx >= 0)
-            {
-                // Check for range ref: Identifier Colon Identifier Dot
-                if (tokens[leftIdx].Type == TokenType.Identifier &&
-                    leftIdx >= 2 &&
-                    tokens[leftIdx - 1].Type == TokenType.Colon &&
-                    tokens[leftIdx - 2].Type == TokenType.Identifier &&
-                    IsCellReference(tokens[leftIdx - 2].Lexeme) &&
-                    IsCellReference(tokens[leftIdx].Lexeme))
-                {
-                    return (DslType.Range, null);
-                }
-            }
-
             return (DslType.Unknown, null);
         }
 
-        // Resolve the root identifier
-        var root = chain[0].Name;
+        // Check if any segment in the chain is ".Rows" — that makes this a Row context
+        var root = chain[0];
+        var startIdx = 0;
 
         if (hasRangePrefix || IsRangeIdentifier(root, metadata))
         {
-            // If hasRangePrefix, the root is the first real member (accessor)
+            // Root is a known range/table — skip it when scanning for .Rows
             if (!hasRangePrefix)
             {
-                // Root is the range name itself, walk from index 1
+                startIdx = 1;
+            }
+        }
+        else
+        {
+            // Check if root is a lambda parameter in a Row context
+            var (isRow, tableName) = IsRowContext(tokens, dotIndex, root);
+            if (isRow)
+            {
+                // If chain is just the param name (e.g. "r."), show column completions
                 if (chain.Count == 1)
                 {
-                    return (DslType.Range, null);
+                    return (DslType.Row, tableName);
                 }
 
-                var type = WalkChain(ApplyMember(DslType.Range, chain[1]), chain, 2);
-                return (type, type == DslType.Row ? root : null);
+                // After a member access on a row param (e.g. r.Price.) — Roslyn handles it
+                return (DslType.Unknown, null);
             }
-
-            var prefixType = WalkChain(ApplyMember(DslType.Range, chain[0]), chain, 1);
-            return (prefixType, null); // Range prefix (A1:B10) — no table name
         }
 
-        // Check if root is a lambda parameter
-        var (lambdaType, tableName) = ResolveLambdaParamTypeWithTable(tokens, dotIndex, root);
-        if (lambdaType != null)
+        // Scan the chain for the last .Rows accessor — if the chain ends with .Rows,
+        // the caret is in a Row context
+        for (var i = chain.Count - 1; i >= startIdx; i--)
         {
-            var type = WalkChain(lambdaType.Value, chain, 1);
-            return (type, type == DslType.Row ? tableName : null);
+            if (chain[i].Equals("Rows", StringComparison.OrdinalIgnoreCase))
+            {
+                // .Rows is the last meaningful segment — Row context
+                if (i == chain.Count - 1)
+                {
+                    // Find root table name for column completions
+                    var tableName = hasRangePrefix ? null : root;
+                    return (DslType.Row, tableName);
+                }
+
+                // Something after .Rows (e.g. .Rows.Where(...).) — still could be Row
+                // if a later lambda parameter is in scope, but for the chain walk
+                // the result is Unknown (Roslyn handles method completions)
+                break;
+            }
         }
 
-        // Unknown root — try to infer from the chain
-        return (WalkChain(DslType.Unknown, chain, 1), null);
-    }
-
-    private static DslType WalkChain(DslType type, List<ChainSegment> chain, int startIndex)
-    {
-        for (var i = startIndex; i < chain.Count; i++)
-        {
-            type = ApplyMember(type, chain[i]);
-        }
-
-        return type;
-    }
-
-    private static DslType ApplyMember(DslType current, ChainSegment segment)
-    {
-        var name = segment.Name;
-
-        return current switch
-        {
-            DslType.Range when Accessors.Contains(name) => DslType.Pipeline,
-            DslType.Range when name.Equals("withHeaders", StringComparison.OrdinalIgnoreCase) => DslType.Range,
-            // Ranges default to .values, so pipeline methods work directly on ranges
-            DslType.Range when PipelineMethods.Contains(name) => DslType.Pipeline,
-            DslType.Range when TerminalMethods.Contains(name) => DslType.Scalar,
-
-            DslType.Pipeline when PipelineMethods.Contains(name) => DslType.Pipeline,
-            DslType.Pipeline when TerminalMethods.Contains(name) => DslType.Scalar,
-
-            DslType.Cell when name.Equals("Interior", StringComparison.OrdinalIgnoreCase) => DslType.Interior,
-            DslType.Cell when name.Equals("Font", StringComparison.OrdinalIgnoreCase) => DslType.Font,
-            DslType.Cell when CellProperties.Contains(name) => DslType.Scalar,
-
-            DslType.Row => DslType.Scalar, // Row.ColumnName is a scalar value
-
-            DslType.Interior => DslType.Scalar, // Interior properties are all scalars
-            DslType.Font => DslType.Scalar, // Font properties are all scalars
-
-            // Unknown root + accessor = probably a range we couldn't identify
-            DslType.Unknown when Accessors.Contains(name) => DslType.Pipeline,
-            DslType.Unknown when PipelineMethods.Contains(name) => DslType.Pipeline,
-            DslType.Unknown when TerminalMethods.Contains(name) => DslType.Scalar,
-
-            _ => current // Can't determine further, keep current type
-        };
+        return (DslType.Unknown, null);
     }
 
     /// <summary>
-    ///     Determines whether a lambda parameter is in a Cell or Row context
-    ///     by scanning backward for the enclosing method call, and also resolves the source table name.
+    ///     Determines whether a lambda parameter is in a Row context
+    ///     by scanning backward for the enclosing .Rows accessor in the chain.
     /// </summary>
-    private static (DslType? Type, string? TableName) ResolveLambdaParamTypeWithTable(
+    private static (bool IsRow, string? TableName) IsRowContext(
         List<Token> tokens, int dotIndex, string paramName)
     {
         // Scan backward from dotIndex looking for an unmatched `(` that belongs to a
         // method call, then check if paramName is declared as a lambda parameter there.
-        var depth = 0; // paren nesting depth
+        var depth = 0;
 
         for (var i = dotIndex - 1; i >= 0; i--)
         {
@@ -458,7 +314,6 @@ public static class ContextResolver
                     // Found unmatched open paren — check if paramName is a lambda param here
                     if (!IsLambdaParamInScope(tokens, i, dotIndex, paramName))
                     {
-                        // Not our lambda — keep scanning outward
                         continue;
                     }
 
@@ -468,31 +323,19 @@ public static class ContextResolver
                     {
                         var methodName = tokens[i - 1].Lexeme;
 
-                        if (CellContextMethods.Contains(methodName))
+                        if (methodName.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                         {
-                            return (DslType.Cell, FindChainRootTable(tokens, i - 2));
+                            return (true, FindChainRootTable(tokens, i - 2));
                         }
 
-                        if (RowContextMethods.Contains(methodName))
-                        {
-                            return (DslType.Row, FindChainRootTable(tokens, i - 2));
-                        }
-
-                        // For passthrough methods (where, select, etc.), continue scanning
-                        // backward to find the accessor that determines cell vs row
-                        if (PassthroughMethods.Contains(methodName))
-                        {
-                            return FindPipelineElementTypeWithTable(tokens, i - 2);
-                        }
+                        // Any other method — continue walking backward to find .Rows
+                        return FindRowsInChain(tokens, i - 2);
                     }
-
-                    // Unmatched paren but no recognizable method — keep scanning
-                    // (could be grouping parens)
                 }
             }
         }
 
-        return (null, null);
+        return (false, null);
     }
 
     /// <summary>
@@ -502,12 +345,10 @@ public static class ContextResolver
     private static bool IsLambdaParamInScope(List<Token> tokens, int leftParenIndex, int dotIndex,
         string paramName)
     {
-        // Look for paramName before the first => after the opening paren
         for (var j = leftParenIndex + 1; j < dotIndex; j++)
         {
             if (tokens[j].Type == TokenType.Arrow)
             {
-                // Found the arrow — check if paramName appeared between paren and arrow
                 for (var k = leftParenIndex + 1; k < j; k++)
                 {
                     if (tokens[k].Type == TokenType.Identifier &&
@@ -521,18 +362,16 @@ public static class ContextResolver
             }
         }
 
-        // No arrow found — could be an incomplete lambda; check if paramName is right after paren
-        // e.g., `.where(c =>` where we're inside a statement lambda
         return false;
     }
 
-
-
-    private static (DslType? Type, string? TableName) FindPipelineElementTypeWithTable(
+    /// <summary>
+    ///     Walks backward through a method chain looking for .Rows to determine
+    ///     if a lambda parameter is in a Row context.
+    /// </summary>
+    private static (bool IsRow, string? TableName) FindRowsInChain(
         List<Token> tokens, int dotPos)
     {
-        // From the dot before the method, continue walking left through the chain
-        // looking for the accessor (.cells or .rows)
         var pos = dotPos - 1;
 
         while (pos >= 0)
@@ -547,15 +386,9 @@ public static class ContextResolver
 
                 if (tokens[pos].Type == TokenType.Identifier)
                 {
-                    var name = tokens[pos].Lexeme;
-                    if (CellContextMethods.Contains(name))
+                    if (tokens[pos].Lexeme.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                     {
-                        return (DslType.Cell, FindChainRootTable(tokens, pos));
-                    }
-
-                    if (RowContextMethods.Contains(name))
-                    {
-                        return (DslType.Row, FindChainRootTable(tokens, pos));
+                        return (true, FindChainRootTable(tokens, pos));
                     }
 
                     pos--;
@@ -567,15 +400,9 @@ public static class ContextResolver
             }
             else if (tokens[pos].Type == TokenType.Identifier)
             {
-                var name = tokens[pos].Lexeme;
-                if (CellContextMethods.Contains(name))
+                if (tokens[pos].Lexeme.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                 {
-                    return (DslType.Cell, FindChainRootTable(tokens, pos));
-                }
-
-                if (RowContextMethods.Contains(name))
-                {
-                    return (DslType.Row, FindChainRootTable(tokens, pos));
+                    return (true, FindChainRootTable(tokens, pos));
                 }
 
                 pos--;
@@ -590,19 +417,17 @@ public static class ContextResolver
             }
         }
 
-        return (null, null);
+        return (false, null);
     }
 
     /// <summary>
-    ///     From a position inside a chain (at an accessor like .rows or .cells),
+    ///     From a position inside a chain (at .Rows),
     ///     walks backward past the dot to find the root identifier (table name).
     /// </summary>
     private static string? FindChainRootTable(List<Token> tokens, int accessorPos)
     {
-        // accessorPos points to "rows" or "cells"; walk left past the dot to find the identifier
         var pos = accessorPos - 1;
 
-        // Skip over intermediate chain segments (e.g., .withHeaders().rows)
         while (pos >= 0)
         {
             if (tokens[pos].Type == TokenType.Dot)
@@ -618,7 +443,6 @@ public static class ContextResolver
 
                     if (tokens[pos].Type == TokenType.Identifier)
                     {
-                        // This is a method name — continue walking left
                         pos--;
                         continue;
                     }
@@ -628,8 +452,6 @@ public static class ContextResolver
 
                 if (pos >= 0 && tokens[pos].Type == TokenType.Identifier)
                 {
-                    // Could be a table name or another chain member — keep walking
-                    // but remember this as a candidate
                     var candidate = tokens[pos].Lexeme;
                     if (pos == 0 || tokens[pos - 1].Type != TokenType.Dot)
                     {
@@ -687,7 +509,6 @@ public static class ContextResolver
             return false;
         }
 
-        // Check table names
         foreach (var t in metadata.TableNames)
         {
             if (t.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -696,7 +517,6 @@ public static class ContextResolver
             }
         }
 
-        // Check named ranges (may contain dots — for now check exact match)
         foreach (var n in metadata.NamedRanges)
         {
             if (n.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -710,7 +530,6 @@ public static class ContextResolver
 
     private static bool IsCellReference(string text)
     {
-        // Match patterns like A1, AB12, $A$1 (strip $ signs first)
         var stripped = text.Replace("$", "");
         return CellRefPattern.IsMatch(stripped);
     }
@@ -724,6 +543,4 @@ public static class ContextResolver
 
         return null;
     }
-
-    private record ChainSegment(string Name);
 }

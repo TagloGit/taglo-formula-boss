@@ -47,7 +47,7 @@ public class LetFormulaReconstructorTests
             data, A1:F20,
             _src_coloredCells, ""data.cells.where(c => c.color != -4142)"",
             coloredCells, COLOREDCELLS(data),
-            _src_result, ""coloredCells.select(c => c.value * 2).toArray()"",
+            _src_result, ""coloredCells.Select(c => c.Value * 2)"",
             result, RESULT(coloredCells),
             SUM(result))";
         Assert.True(LetFormulaReconstructor.IsProcessedFormulaBossLet(formula));
@@ -153,7 +153,7 @@ public class LetFormulaReconstructorTests
         var processed = @"=LET(data, A1:F20,
             _src_coloredCells, ""data.cells.where(c => c.color != -4142)"",
             coloredCells, COLOREDCELLS(data),
-            _src_result, ""coloredCells.select(c => c.value * 2).toArray()"",
+            _src_result, ""coloredCells.Select(c => c.Value * 2)"",
             result, RESULT(coloredCells),
             SUM(result))";
 
@@ -162,7 +162,7 @@ public class LetFormulaReconstructorTests
         Assert.True(result);
         Assert.NotNull(editable);
         Assert.Contains("`data.cells.where(c => c.color != -4142)`", editable);
-        Assert.Contains("`coloredCells.select(c => c.value * 2).toArray()`", editable);
+        Assert.Contains("`coloredCells.Select(c => c.Value * 2)`", editable);
         Assert.DoesNotContain("COLOREDCELLS(data)", editable);
         Assert.DoesNotContain("RESULT(coloredCells)", editable);
     }
@@ -267,7 +267,7 @@ public class LetFormulaReconstructorTests
             qty, tblSales[Qty],
             _price_hdr, INDEX(tblSales[[#Headers],[Price]],1),
             _qty_hdr, INDEX(tblSales[[#Headers],[Qty]],1),
-            _src_result, ""tbl.rows.reduce(0, (acc, r) => acc + r.price * r.qty)"",
+            _src_result, ""tbl.Rows.Select(r => r.Price * r.Qty).Sum()"",
             result, RESULT(tbl, _price_hdr, _qty_hdr),
             result)";
 
@@ -285,7 +285,7 @@ public class LetFormulaReconstructorTests
         Assert.Contains("price, tblSales[Price]", editable);
         Assert.Contains("qty, tblSales[Qty]", editable);
         // Backtick expression should be reconstructed
-        Assert.Contains("`tbl.rows.reduce(0, (acc, r) => acc + r.price * r.qty)`", editable);
+        Assert.Contains("`tbl.Rows.Select(r => r.Price * r.Qty).Sum()`", editable);
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class LetFormulaReconstructorTests
             _name_hdr, INDEX(tblProducts[[#Headers],[Name]],1),
             _price_hdr, INDEX(tblProducts[[#Headers],[Price]],1),
             _qty_hdr, INDEX(tblProducts[[#Headers],[Quantity]],1),
-            _src_total, ""tbl.rows.reduce(0, (acc, r) => acc + r.price * r.qty)"",
+            _src_total, ""tbl.Rows.Select(r => r.Price * r.Qty).Sum()"",
             total, TOTAL(tbl, _name_hdr, _price_hdr, _qty_hdr),
             total)";
 

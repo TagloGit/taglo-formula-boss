@@ -301,16 +301,16 @@ public class ParserTests
     [Fact]
     public void Parser_RangeWithFullDslChain()
     {
-        var expr = Parse("A1:J10.cells.where(c => c.color == 6).values");
+        var expr = Parse("A1:J10.Cells.Where(c => c.Color == 6).Count()");
 
-        var values = Assert.IsType<MemberAccess>(expr);
-        Assert.Equal("values", values.Member);
+        var count = Assert.IsType<MethodCall>(expr);
+        Assert.Equal("Count", count.Method);
 
-        var where = Assert.IsType<MethodCall>(values.Target);
-        Assert.Equal("where", where.Method);
+        var where = Assert.IsType<MethodCall>(count.Target);
+        Assert.Equal("Where", where.Method);
 
         var cells = Assert.IsType<MemberAccess>(where.Target);
-        Assert.Equal("cells", cells.Member);
+        Assert.Equal("Cells", cells.Member);
 
         var range = Assert.IsType<RangeRefExpr>(cells.Target);
         Assert.Equal("A1", range.Start);
@@ -511,10 +511,10 @@ public class ParserTests
     [Fact]
     public void Parser_MethodCallNoArgs()
     {
-        var expr = Parse("data.toArray()");
+        var expr = Parse("data.Sum()");
 
         var call = Assert.IsType<MethodCall>(expr);
-        Assert.Equal("toArray", call.Method);
+        Assert.Equal("Sum", call.Method);
         Assert.Empty(call.Arguments);
     }
 
@@ -534,13 +534,13 @@ public class ParserTests
     [Fact]
     public void Parser_MethodChain()
     {
-        var expr = Parse("data.cells.toArray()");
+        var expr = Parse("data.Cells.Count()");
 
-        var toArray = Assert.IsType<MethodCall>(expr);
-        Assert.Equal("toArray", toArray.Method);
+        var count = Assert.IsType<MethodCall>(expr);
+        Assert.Equal("Count", count.Method);
 
-        var cells = Assert.IsType<MemberAccess>(toArray.Target);
-        Assert.Equal("cells", cells.Member);
+        var cells = Assert.IsType<MemberAccess>(count.Target);
+        Assert.Equal("Cells", cells.Member);
     }
 
     #endregion
@@ -670,20 +670,20 @@ public class ParserTests
     [Fact]
     public void Parser_FullDslExpression()
     {
-        var expr = Parse("data.cells.where(c => c.color == 6).select(c => c.value).toArray()");
+        var expr = Parse("data.Cells.Where(c => c.Color == 6).Select(c => c.Value).Count()");
 
-        // Should parse to: toArray(select(where(data.cells, lambda), lambda))
-        var toArray = Assert.IsType<MethodCall>(expr);
-        Assert.Equal("toArray", toArray.Method);
+        // Should parse to: Count(Select(Where(data.Cells, lambda), lambda))
+        var count = Assert.IsType<MethodCall>(expr);
+        Assert.Equal("Count", count.Method);
 
-        var select = Assert.IsType<MethodCall>(toArray.Target);
-        Assert.Equal("select", select.Method);
+        var select = Assert.IsType<MethodCall>(count.Target);
+        Assert.Equal("Select", select.Method);
 
         var where = Assert.IsType<MethodCall>(select.Target);
-        Assert.Equal("where", where.Method);
+        Assert.Equal("Where", where.Method);
 
         var cells = Assert.IsType<MemberAccess>(where.Target);
-        Assert.Equal("cells", cells.Member);
+        Assert.Equal("Cells", cells.Member);
 
         var data = Assert.IsType<IdentifierExpr>(cells.Target);
         Assert.Equal("data", data.Name);
@@ -740,10 +740,10 @@ public class ParserTests
     [Fact]
     public void Parser_StatementLambda_MultiParam()
     {
-        var expr = Parse("data.reduce((acc, x) => { return acc + x; })");
+        var expr = Parse("data.Aggregate((acc, x) => { return acc + x; })");
 
         var call = Assert.IsType<MethodCall>(expr);
-        Assert.Equal("reduce", call.Method);
+        Assert.Equal("Aggregate", call.Method);
         Assert.Single(call.Arguments);
 
         var lambda = Assert.IsType<StatementLambdaExpr>(call.Arguments[0]);
