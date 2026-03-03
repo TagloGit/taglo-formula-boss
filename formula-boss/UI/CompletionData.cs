@@ -78,26 +78,44 @@ internal sealed class ColumnCompletionData : CompletionData
     public override void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
     {
         var doc = textArea.Document;
-        var hasSpace = Text.Contains(' ');
-        var quoted = hasSpace ? $"\"{Text}\"" : $"\"{Text}\"";
+        var fullText = doc.Text;
+        var (newText, replaceOffset, replaceLength) = ComputeInsertion(
+            Text, _isBracketContext, fullText, completionSegment.Offset, completionSegment.Length);
+        doc.Replace(replaceOffset, replaceLength, newText);
+    }
 
-        if (_isBracketContext)
+    /// <summary>
+    ///     Computes the text to insert and the replacement range for a column completion.
+    ///     Separated from the AvalonEdit <see cref="TextArea"/> for testability.
+    /// </summary>
+    /// <returns>(text to insert, start offset of replacement, length to replace)</returns>
+    internal static (string NewText, int ReplaceOffset, int ReplaceLength) ComputeInsertion(
+        string columnName, bool isBracketContext, string documentText, int segmentOffset, int segmentLength)
+    {
+        var quoted = $"\"{columnName}\"";
+        var segmentEnd = segmentOffset + segmentLength;
+
+        if (isBracketContext)
         {
-            // Inside r[ — insert column name + ], with quotes
-            doc.Replace(completionSegment, quoted + "]");
+            // Check if the auto-closer already placed a ] after the segment
+            var hasClosingBracket = segmentEnd < documentText.Length && documentText[segmentEnd] == ']';
+
+            if (hasClosingBracket)
+            {
+                // Replace segment + the existing ']' so we don't double it
+                return (quoted + "]", segmentOffset, segmentLength + 1);
+            }
+
+            return (quoted + "]", segmentOffset, segmentLength);
         }
-        else
+
+        // Dot context: rewrite the dot to bracket syntax
+        var dotOffset = segmentOffset - 1;
+        if (dotOffset >= 0 && documentText[dotOffset] == '.')
         {
-            // After r. — rewrite the dot to bracket syntax: r["Column Name"]
-            var dotOffset = completionSegment.Offset - 1;
-            if (dotOffset >= 0 && doc.GetCharAt(dotOffset) == '.')
-            {
-                doc.Replace(dotOffset, completionSegment.EndOffset - dotOffset, "[" + quoted + "]");
-            }
-            else
-            {
-                doc.Replace(completionSegment, "[" + quoted + "]");
-            }
+            return ("[" + quoted + "]", dotOffset, segmentEnd - dotOffset);
         }
+
+        return ("[" + quoted + "]", segmentOffset, segmentLength);
     }
 }
