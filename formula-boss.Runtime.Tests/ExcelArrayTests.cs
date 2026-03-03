@@ -107,6 +107,17 @@ public class ExcelArrayTests
     // --- Element-wise OrderBy ---
 
     [Fact]
+    public void OrderBy_IdentitySelector_SortsByComparable()
+    {
+        var arr = new ExcelArray(new object?[,] { { 30.0 }, { 10.0 }, { 20.0 } });
+        var result = arr.OrderBy(x => x);
+        var rows = result.Rows.ToList();
+        Assert.Equal(10.0, (double)rows[0][0]);
+        Assert.Equal(20.0, (double)rows[1][0]);
+        Assert.Equal(30.0, (double)rows[2][0]);
+    }
+
+    [Fact]
     public void OrderBy_SortsCellsElementWise()
     {
         var arr = new ExcelArray(new object?[,] { { 3.0 }, { 1.0 }, { 2.0 } });

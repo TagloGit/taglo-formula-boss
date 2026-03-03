@@ -1,7 +1,20 @@
 namespace FormulaBoss.Runtime;
 
-public abstract class ExcelValue : IExcelRange
+public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, IComparable
 {
+    public int CompareTo(ExcelValue? other)
+    {
+        if (other is null) return 1;
+        var a = RawValue;
+        var b = other.RawValue;
+        if (a is null && b is null) return 0;
+        if (a is null) return -1;
+        if (b is null) return 1;
+        return Comparer<double>.Default.Compare(Convert.ToDouble(a), Convert.ToDouble(b));
+    }
+
+    public int CompareTo(object? obj) => obj is ExcelValue ev ? CompareTo(ev) : 1;
+
     public abstract object? RawValue { get; }
 
     // IExcelRange — abstract, implemented by ExcelArray and ExcelScalar
