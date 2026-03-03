@@ -1,237 +1,114 @@
 # 0003 — Wrapper-Type Architecture — Implementation Plan
 
-## Overview
-
-Replace the current DSL syntax transformation with a pre-compiled type-safe wrapper library. Formula Boss expressions become standard C# lambdas operating on typed facades (`ExcelTable`, `ExcelArray`, `ExcelScalar`). The custom lexer/parser is deleted; Roslyn handles all C# parsing, input detection, compilation, and intellisense.
-
 **Spec:** `specs/0003-wrapper-type-architecture.md`
 **Epic:** #59
+**Review notes:** `plans/0003-architecture-review-notes.md`
 
-## Key Decisions
+## Context
 
-- **Incremental PRs** — each phase is a separate mergeable PR
-- **Separate project** — `FormulaBoss.Runtime` (.csproj) for wrapper types, clean assembly boundary
-- **Roslyn for input detection** — delete custom lexer/parser, use `CSharpSyntaxTree` for everything
-- **COM access strategy** — spike early to determine if wrapper assembly can reference Office interop directly or needs delegate bridges
+The architecture review produced 13 findings from a line-by-line walkthrough of generated UDF code, runtime types, and pipeline components. The spec has been updated to incorporate all design decisions. This plan describes surgical changes to the existing code on branch `62-transpiler-rewrite-v2`, grouped into PR-sized units in dependency order.
 
-## Phase 1: Runtime Assembly Spike + Core Value Types
+## Order of Operations
 
-**Goal:** Create `FormulaBoss.Runtime` project, spike the assembly identity question, implement core value types without COM access.
+### PR 1: Shared ToResult and Fixed GetHeaders Contract
 
-**Files to create:**
-- `formula-boss.Runtime/FormulaBoss.Runtime.csproj` — net6.0-windows, no ExcelDNA reference
-- `formula-boss.Runtime/ExcelValue.cs` — base class + `Wrap()` factory
-- `formula-boss.Runtime/ExcelScalar.cs` — single value wrapper with operators and `IExcelRange` single-element semantics
-- `formula-boss.Runtime/ExcelArray.cs` — `object[,]` wrapper with `IExcelRange` implementation
-- `formula-boss.Runtime/ExcelTable.cs` — table wrapper (ListObject-backed), `IExcelRange`
-- `formula-boss.Runtime/IExcelRange.cs` — shared interface
-- `formula-boss.Runtime/Row.cs` — row access with bracket/index notation
-- `formula-boss.Runtime/ColumnValue.cs` — column value with implicit conversions and operators
-- `formula-boss.Runtime/ResultConverter.cs` — `.ToResult()` extension, normalises output to `object[,]`
+**Issue label:** `refactor`
 
-**Files to create (tests):**
-- `formula-boss.Runtime.Tests/FormulaBoss.Runtime.Tests.csproj`
-- `formula-boss.Runtime.Tests/ExcelScalarTests.cs`
-- `formula-boss.Runtime.Tests/ExcelArrayTests.cs`
-- `formula-boss.Runtime.Tests/ExcelTableTests.cs`
-- `formula-boss.Runtime.Tests/RowTests.cs`
-- `formula-boss.Runtime.Tests/ColumnValueTests.cs`
-- `formula-boss.Runtime.Tests/ResultConverterTests.cs`
+Consolidates duplicate result conversion logic and fixes the GetHeaders contract mismatch (Findings 1, 3, 5).
 
-**Spike:** Add `Microsoft.Office.Interop.Excel` reference to Runtime project. Write a test that loads the Runtime assembly from a simulated "generated code" context (separate `AssemblyLoadContext`) and checks whether Office interop types resolve. This determines whether we need delegate bridges for COM access or can reference interop directly.
+**Files:**
+- `formula-boss.Runtime/ResultConverter.cs` — add `public static object Convert(object? result)` with the full dispatch chain. Change all `ToResult` overloads to return `object` (bare scalars for single values, `object[,]` for multi-cell).
+- `formula-boss/RuntimeHelpers.cs` — change `GetHeadersDelegate` type from `Func<object, string[]?>` to `Func<object[,], string[]?>` (accepts already-extracted values, not raw ExcelReference).
+- `formula-boss/AddIn.cs` — `ToResultDelegate` body becomes `result => ResultConverter.Convert(result)`. Fix `GetHeadersDelegate` to accept `object[,]` (remove internal `GetValuesFromReference` call).
+- `formula-boss/Transpilation/CodeEmitter.cs` — generated header extraction code passes `{input}__values` (cast to `object[,]`) to `GetHeadersDelegate`, not `{input}__raw`.
+- `formula-boss.IntegrationTests/NewPipelineTestHelpers.cs` — replace `ToResultDelegate` and `GetHeadersDelegate` with calls to shared implementations.
 
-**What this PR delivers:**
-- All value-path operations working: `Where`, `Select`, `Any`, `All`, `First`, `FirstOrDefault`, `OrderBy`, `OrderByDescending`, `Take`, `Skip`, `Distinct`, `Count`, `Sum`, `Min`, `Max`, `Average`, `Aggregate`, `Scan`, `Map`, `SelectMany`
-- `ExcelValue.Wrap()` factory with runtime type detection
-- `ColumnValue` with implicit conversions (`double`, `string`, `bool`) and comparison/arithmetic operators
-- `Row` with bracket access (`r[0]`, `r["ColName"]`) and dynamic member access for dot notation
-- `ExcelScalar` implementing `IExcelRange` with single-element semantics
-- Result conversion to `object[,]`
-- Assembly identity spike result documented
+**Verification:** All existing `WrapperTypePipelineTests` pass. Scalar results now return bare values (test assertions updated).
 
-**Not in this PR:** Cell/COM access, transpiler changes, intellisense.
+---
 
-## Phase 2: Cell Escalation and COM Access
+### PR 2: Runtime Types — IExcelRange on ExcelValue, Element-wise Methods, RowCollection
 
-**Goal:** Add `Cell`, `Interior`, `Font` types and the `.Cell` property on `ColumnValue` / `.Cells` accessor on `IExcelRange`.
+**Issue label:** `refactor`
 
-**Depends on Phase 1 spike result:**
-- **If interop loads cleanly:** Wrapper types reference `Microsoft.Office.Interop.Excel` directly. `Cell` wraps a COM `Range` object.
-- **If identity mismatch:** Define `Func<>` delegate fields on a static class in Runtime (e.g. `RuntimeBridge`). Host initialises them at startup with lambdas that do the actual COM calls. `Cell` invokes delegates.
+Core type system changes (Findings 2, 6, 10, 11). This is the largest PR.
 
-**Files to create/modify:**
-- `formula-boss.Runtime/Cell.cs` — cell wrapper with properties (`Color`, `Rgb`, `Bold`, `Italic`, `FontSize`, `Format`, `Formula`, `Row`, `Col`, `Address`, `Value`, `Interior`, `Font`)
-- `formula-boss.Runtime/Interior.cs` — Interior sub-object wrapper
-- `formula-boss.Runtime/Font.cs` — Font sub-object wrapper
-- `formula-boss.Runtime/ColumnValue.cs` — add `.Cell` property
-- `formula-boss.Runtime/IExcelRange.cs` — add `.Cells` accessor
-- `formula-boss.Runtime/ExcelArray.cs` — implement `.Cells` iteration
-- `formula-boss.Runtime/ExcelTable.cs` — implement `.Cells` iteration
+**Files:**
+- `formula-boss.Runtime/IExcelRange.cs` — change all method signatures from `Func<Row, ...>` to `Func<ExcelValue, ...>`. Change `Rows` property type to `RowCollection`.
+- `formula-boss.Runtime/ExcelValue.cs` — add `: IExcelRange` to class declaration. Declare all `IExcelRange` members as `abstract`.
+- `formula-boss.Runtime/ExcelArray.cs` — reimplement all methods for element-wise iteration (cell-by-cell, row-major). `Rows` returns `new RowCollection(...)`. Aggregations iterate cells directly.
+- `formula-boss.Runtime/ExcelScalar.cs` — reimplement with single-element semantics. `Rows` returns single-row `RowCollection`.
+- `formula-boss.Runtime/RowCollection.cs` (**new**) — class with `List<Row>` backing. Instance methods with `Func<dynamic, ...>` parameters: `Where`, `Select`, `Any`, `All`, `First`, `FirstOrDefault`, `OrderBy`, `OrderByDescending`, `Count`, `Take`, `Skip`, `ToRange`.
+- `formula-boss/AddIn.cs` — add `RuntimeBridge.GetCell` initialization (Finding 11).
 
-**Files to create (tests):**
-- `formula-boss.Runtime.Tests/CellTests.cs`
-- `formula-boss.Runtime.Tests/CellEscalationTests.cs`
+**Verification:** Update test assertions for scalar results. Add tests for `RowCollection` operations and element-wise `Any`/`Where`. Test expressions using `.Rows` now go through `RowCollection`.
 
-**If delegate bridge needed:**
-- `formula-boss.Runtime/RuntimeBridge.cs` — static delegate fields for COM operations
-- `formula-boss/AddIn.cs` — initialise bridge delegates in `AutoOpen()`
+---
 
-**What this PR delivers:**
-- `r.Price.Cell.Color` works (cell escalation from ColumnValue)
-- `.Cells` accessor iterates as `Cell` objects
-- All `Cell` properties from the spec
-- `Interior` and `Font` sub-objects
+### PR 3: Pipeline Simplification — Flat Parameters, Free-Variable-Only Detection
 
-## Phase 3: Transpiler Rewrite
+**Issue label:** `refactor`
 
-**Goal:** Replace the DSL transpiler with a Roslyn-based input detector and thin code emitter. Delete the custom lexer, parser, and old transpiler.
+Removes explicit lambda syntax, primary input concept, old column binding mechanism, and three-category parameter model (Findings 6, 7, 8, 9, 12).
 
-**Files to delete:**
-- `formula-boss/Parsing/Lexer.cs`
-- `formula-boss/Parsing/Parser.cs`
-- `formula-boss/Parsing/Ast.cs`
-- `formula-boss/Transpilation/CSharpTranspiler.cs`
-- `formula-boss/Transpilation/ExcelTypeSystem.cs`
-- `formula-boss.Tests/TranspilerTests.cs`
-- `formula-boss.Tests/ParserTests.cs`
+**Files:**
+- `formula-boss/Transpilation/InputDetector.cs` — remove outer-lambda detection, `ExtractPrimaryInput`, `IsSugarSyntax`. All inputs via free variable analysis. `DetectionResult` changes: remove `IsSugarSyntax`, `Inputs`, `FreeVariables`, `HasStringBracketAccess`; add `Parameters: IReadOnlyList<string>` (flat ordered list) and `HeaderVariables: IReadOnlySet<string>` (per-variable tracking of which vars need header extraction).
+- `formula-boss/Transpilation/CodeEmitter.cs` — remove `FindArrowIndex`. Uniform preamble for every parameter. Header extraction conditioned on `detection.HeaderVariables.Contains(param)`. Remove `(IExcelRange)` cast (ExcelValue now implements IExcelRange).
+- `formula-boss/Interception/FormulaPipeline.cs` — `PipelineResult`: remove `InputParameter`, `ColumnParameters`, `AdditionalInputs`, `FreeVariables`; add `Parameters: IReadOnlyList<string>?`. Remove `_columnParamsCache`, `_additionalInputsCache`.
+- `formula-boss/Interception/LetFormulaRewriter.cs` — delete `InjectHeaderBindings`, `ColumnParameter` record. `ProcessedBinding`: flatten to `Parameters`. `AppendUdfCall`: single `string.Join(", ", processed.Parameters)`.
+- `formula-boss/Interception/FormulaInterceptor.cs` — update `ProcessLetFormula` to use flat `Parameters`. Remove `columnBindings` extraction. Update `ProcessBacktickFormula` UDF call construction. Simplify `ExpressionContext`.
 
-**Files to create:**
-- `formula-boss/Transpilation/InputDetector.cs` — uses Roslyn `CSharpSyntaxTree.ParseText()` to:
-  - Detect single-input sugar vs explicit lambda
-  - Extract input identifier names
-  - Detect `.Cell`/`.Cells` usage for `IsMacroType`
-  - Detect free variables (for LET capture)
-- `formula-boss/Transpilation/CodeEmitter.cs` — generates the UDF method:
-  - `ExcelValue.Wrap()` calls for each input
-  - User's code passed through mostly verbatim
-  - `.ToResult()` on the return value
-  - Wrapping in a static class
+**Verification:** Update test expressions (remove `(tbl) =>` prefixes). Add tests for per-variable header extraction. Verify LET formula wiring with flat parameter list.
 
-**Files to modify:**
-- `formula-boss/Interception/FormulaPipeline.cs` — replace lexer→parser→transpiler pipeline with `InputDetector` → `CodeEmitter` → `DynamicCompiler`
-- `formula-boss/Compilation/DynamicCompiler.cs` — add `FormulaBoss.Runtime.dll` to `MetadataReference` list
-- `formula-boss/Transpilation/TranspileResult.cs` — simplify if needed (may keep as-is)
+---
 
-**Files to create (tests):**
-- `formula-boss.Tests/InputDetectorTests.cs` — test input detection for all expression forms
-- `formula-boss.Tests/CodeEmitterTests.cs` — test generated code structure
-- `formula-boss.Tests/PipelineIntegrationTests.cs` — end-to-end: expression → generated C# → compiles
+### PR 4: Dot-Notation-to-Bracket Rewrite
 
-**What this PR delivers:**
-- Single-input sugar: `` `tbl.Rows.Where(r => r.X > 0)` `` works
-- Explicit lambda: `` `(tbl, maxPop) => tbl.Rows.Where(r => r.X < maxPop)` `` works
-- Statement blocks: `` `(tbl) => { return tbl.Rows.Count(); }` `` works
-- LET variable capture: free variables detected and added as UDF parameters
-- `.Cell`/`.Cells` detection sets `IsMacroType`
-- Old lexer/parser/transpiler deleted
-- All method names are C# convention (`.Any()`, `.Where()`, etc.)
+**Issue label:** `enhancement`
 
-## Phase 4: TypedRow Generation and Column Intellisense Support
+Implements the dot notation intellisense and auto-rewrite (spec "RowCollection" section). Users type `r.Population2025`, get intellisense from a synthetic typed Row class, and the transpiler rewrites to `r["Population 2025"]` before compilation.
 
-**Goal:** Generate `TypedRow` classes with concrete properties for known columns, enabling Roslyn intellisense for `r.Population` etc.
+**Files:**
+- `formula-boss/Transpilation/ColumnMapper.cs` (**new**) — builds sanitised→original mapping from column headers. `Sanitise(string columnName) → string` removes spaces/special chars. `BuildMapping(string[] headers) → Dictionary<string, string>`. Detects conflicts (two columns → same sanitised name) and excludes those.
+- `formula-boss/Transpilation/DotNotationRewriter.cs` (**new**) — Roslyn syntax rewriter. Walks the expression AST, finds `MemberAccessExpressionSyntax` where the identifier matches a sanitised column name, rewrites to `ElementAccessExpressionSyntax` with the original column name as a string literal.
+- `formula-boss/Transpilation/CodeEmitter.cs` — after detecting free variables and before emitting the method body, run `DotNotationRewriter` on the expression using the column mapping from headers of each `HeaderVariable`.
+- Intellisense synthetic document builder (future, but `ColumnMapper` provides the foundation) — synthetic Row class with real properties generated from the mapping.
 
-**Files to create/modify:**
-- `formula-boss/Transpilation/TypedRowGenerator.cs` — given column names, generates a class inheriting from `Row` with typed properties returning `ColumnValue`
-- `formula-boss/Transpilation/CodeEmitter.cs` — when column metadata is available, emit `TypedRow` class and use it in generated code
-- `formula-boss.Runtime/Row.cs` — ensure it's designed for inheritance (virtual/protected as needed)
+**Verification:** Test `r.Population2025` → `r["Population 2025"]` rewrite. Test conflict detection. Test mixed dot and bracket access in same expression.
 
-**Files to create (tests):**
-- `formula-boss.Tests/TypedRowGeneratorTests.cs`
+---
 
-**What this PR delivers:**
-- `r.Population`, `r.Continent` etc. work with Roslyn providing completions
-- Bracket access (`r["Column Name"]`, `r[0]`) continues to work as fallback
-- Column metadata flows from LET bindings through to TypedRow generation
+### PR 5: Test Cleanup and Acceptance Tests
 
-## Phase 5: Roslyn Intellisense
+**Issue label:** `enhancement`
 
-**Goal:** Replace the custom `CompletionProvider` with Roslyn's `CompletionService` operating on a synthetic C# document.
+Final test updates and spec acceptance criteria coverage.
 
-**Files to delete:**
-- `formula-boss/UI/CompletionProvider.cs` (or heavily rewrite)
-- `formula-boss.Tests/CompletionScopingTests.cs` (replace with new tests)
+**Files:**
+- `formula-boss.IntegrationTests/NewPipelineTestHelpers.cs` — final cleanup, ensure all helpers use shared implementations.
+- `formula-boss.IntegrationTests/WrapperTypePipelineTests.cs` — add acceptance criteria tests:
+  - Multi-input population filter with maxPop
+  - Nested lambda: `pConts.Any(c => c == r["Continent"])` inside `.Rows.Where()`
+  - Scalar return is bare value (not 1x1 array)
+  - Dot notation rewrite with column containing spaces
+  - Statement block with multiple free variables
 
-**Files to create:**
-- `formula-boss/UI/RoslynCompletionProvider.cs` — builds synthetic document, calls `CompletionService.GetCompletionsAsync()`, maps results back
-- `formula-boss/UI/SyntheticDocumentBuilder.cs` — constructs the synthetic C# document with wrapper type variable declarations from context
-- `formula-boss/UI/RoslynWorkspaceManager.cs` — persistent `AdhocWorkspace` lifecycle, project with Runtime assembly reference
+**Verification:** Full test suite green. All spec acceptance criteria covered.
 
-**Files to modify:**
-- `formula-boss/UI/FloatingEditorWindow.xaml.cs` — wire up new completion provider
-- `formula-boss/UI/CompletionData.cs` — may need adaptation for Roslyn completion items
+## Critical Files Summary
 
-**NuGet additions:**
-- `Microsoft.CodeAnalysis.Features` (or `Microsoft.CodeAnalysis.CSharp.Features`) — for `CompletionService`
-- `Microsoft.CodeAnalysis.Workspaces.Common` — for `AdhocWorkspace`
-
-**Files to create (tests):**
-- `formula-boss.Tests/RoslynCompletionTests.cs` — test completions for wrapper types, string methods, LINQ
-- `formula-boss.Tests/SyntheticDocumentTests.cs` — test document construction from various contexts
-
-**What this PR delivers:**
-- Completions for all wrapper type methods and properties
-- Completions for C# string methods, LINQ, regex
-- Column name completions on Row types (from TypedRow)
-- Context-aware: knows type at caret position
-- Persistent workspace, fast per-keystroke performance
-
-## Phase 6: Syntax Highlighting and Error Diagnostics Update
-
-**Goal:** Update the floating editor's syntax highlighting for the new C# method names and integrate Roslyn diagnostics for real-time error squiggles.
-
-**Files to modify:**
-- `formula-boss/UI/SyntaxHighlighting.xshd` (or equivalent) — update method/property names to PascalCase C# convention
-- `formula-boss/UI/ErrorHighlighter.cs` — integrate Roslyn diagnostics instead of custom parser errors
-- `formula-boss/UI/FloatingEditorWindow.xaml.cs` — wire up real-time Roslyn diagnostics (debounced)
-
-**What this PR delivers:**
-- Syntax highlighting matches new API (`.Where`, `.Any`, `.Cells`, etc.)
-- Real-time Roslyn compile errors shown as squiggles
-- Error messages are standard Roslyn/C# errors (more familiar to users)
-
-## Phase 7: Integration Testing and Cleanup
-
-**Goal:** End-to-end validation against the target formula from #59, cleanup dead code, update documentation.
-
-**Files to modify:**
-- `formula-boss.IntegrationTests/` — add integration tests for the full pipeline with wrapper types
-- `specs/0001-excel-udf-addin.md` — final pass to ensure consistency with implementation
-- `CLAUDE.md` — update architecture section to reflect wrapper types
-
-**Files to potentially delete:**
-- Any remaining dead code from the old DSL system
-- `formula-boss/Transpilation/ExcelTypeSystem.cs` (if not already deleted in Phase 3)
-
-**Acceptance criteria validation:**
-- [ ] Target formula from #59 compiles and returns correct results
-- [ ] Single-input sugar syntax works
-- [ ] Multi-input explicit lambda works
-- [ ] LET variable capture works for scalars, arrays, tables
-- [ ] Nested lambdas resolve correctly
-- [ ] Cell escalation triggers IsMacroType
-- [ ] C# convention method naming everywhere
-- [ ] Roslyn intellisense for wrapper types AND standard C#
-- [ ] Existing features (LET column bindings, source preservation, error reporting) work
-
-## Testing Approach
-
-Each phase includes its own tests:
-
-- **Runtime types (Phases 1–2):** Pure unit tests in `formula-boss.Runtime.Tests`. No Excel dependency. Test operators, conversions, collection operations, cell access.
-- **Transpiler (Phases 3–4):** Unit tests for input detection and code emission. Integration tests that compile generated code and verify it runs.
-- **Intellisense (Phase 5):** Unit tests that verify completion results for various cursor positions and contexts.
-- **End-to-end (Phase 7):** Integration tests with real wrapper types + compiled UDFs. The target formula from #59 is the primary acceptance test.
-
-## Risks
-
-| Risk | Mitigation |
-|------|------------|
-| Assembly identity with Office interop in Runtime assembly | Phase 1 spike tests this explicitly before building on it |
-| Roslyn `CompletionService` NuGet package size/compatibility | Phase 5 checks package availability for net6.0; fallback is completion from pre-built lists (similar to today) |
-| Performance of Roslyn parsing for input detection (on every formula) | Roslyn `SyntaxTree.ParseText()` is ~1ms for small snippets; cache if needed |
-| Breaking change — all existing formulas stop working | Pre-release product, accepted in spec. No migration path. |
-| `DynamicObject` vs TypedRow for column access | Phase 4 generates TypedRow for known columns; `DynamicObject` fallback for unknown columns |
-
-## Open Questions
-
-None — all resolved during planning. The Phase 1 spike will finalise the COM access approach.
+| File | PRs | Key Change |
+|---|---|---|
+| `formula-boss.Runtime/IExcelRange.cs` | 2 | `Func<Row,...>` → `Func<ExcelValue,...>` |
+| `formula-boss.Runtime/ExcelValue.cs` | 2 | Add `: IExcelRange`, abstract members |
+| `formula-boss.Runtime/ExcelArray.cs` | 2 | Element-wise iteration, RowCollection |
+| `formula-boss.Runtime/ResultConverter.cs` | 1 | Return `object`, shared `Convert()` |
+| `formula-boss.Runtime/RowCollection.cs` | 2 | **New** — `Func<dynamic,...>` instance methods |
+| `formula-boss/Transpilation/InputDetector.cs` | 3 | Free-var-only, flat `Parameters`, per-var `HeaderVariables` |
+| `formula-boss/Transpilation/CodeEmitter.cs` | 1,3,4 | Uniform preamble, dot notation rewrite |
+| `formula-boss/Interception/FormulaPipeline.cs` | 3 | Flat `Parameters` on `PipelineResult` |
+| `formula-boss/Interception/LetFormulaRewriter.cs` | 3 | Remove column binding, flat params |
+| `formula-boss/Interception/FormulaInterceptor.cs` | 3 | Use flat `Parameters` |
+| `formula-boss/AddIn.cs` | 1,2 | Shared ToResult, fixed GetHeaders, init GetCell |
+| `formula-boss/Transpilation/ColumnMapper.cs` | 4 | **New** — sanitised↔original column name mapping |
+| `formula-boss/Transpilation/DotNotationRewriter.cs` | 4 | **New** — Roslyn syntax rewriter for dot→bracket |

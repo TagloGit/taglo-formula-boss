@@ -179,18 +179,29 @@ public class CellEscalationTests : IDisposable
 
         // Filter rows where cell color index is 0 (row % 8 == 0 → rows 8, 16, etc. — none here)
         // Row 1: colorIndex = 1%8=1, Row 2: 2%8=2, Row 3: 3%8=3
-        var filtered = array.Where(r => r[0].Cell.Color == 2);
-        var result = filtered.Rows.ToList();
+        var filtered = array.Rows.Where(r => r[0].Cell.Color == 2);
+        var result = filtered.ToList();
 
         Assert.Single(result);
         Assert.Equal(20.0, result[0][0].Value);
     }
 
     [Fact]
-    public void Wrap_WithOrigin_PropagatesToArray()
+    public void Wrap_WithOrigin_SingleCell_PropagatesToScalar()
     {
         var origin = new RangeOrigin("Sheet1", 1, 1);
         var data = new object?[,] { { 42.0 } };
+
+        var wrapped = ExcelValue.Wrap(data, origin: origin);
+        var scalar = Assert.IsType<ExcelScalar>(wrapped);
+        Assert.Equal(42.0, scalar.RawValue);
+    }
+
+    [Fact]
+    public void Wrap_WithOrigin_MultiCell_PropagatesToArray()
+    {
+        var origin = new RangeOrigin("Sheet1", 1, 1);
+        var data = new object?[,] { { 42.0 }, { 99.0 } };
 
         var wrapped = ExcelValue.Wrap(data, origin: origin);
         var array = Assert.IsType<ExcelArray>(wrapped);

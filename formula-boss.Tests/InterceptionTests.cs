@@ -191,7 +191,7 @@ public class InterceptionTests
         var result = pipeline.Process("data.values.where(v => v > 0)", context);
 
         Assert.True(result.Success);
-        Assert.Equal("FILTEREDDATA", result.UdfName);
+        Assert.Equal("__udf_FILTEREDDATA", result.UdfName);
     }
 
     [Fact]
@@ -206,26 +206,25 @@ public class InterceptionTests
 
         Assert.True(result1.Success);
         Assert.True(result2.Success);
-        Assert.Equal("FIRSTUDF", result1.UdfName);
-        Assert.Equal("SECONDUDF", result2.UdfName);
+        Assert.Equal("__udf_FIRSTUDF", result1.UdfName);
+        Assert.Equal("__udf_SECONDUDF", result2.UdfName);
         Assert.Equal(2, compiler.CompileCount); // Should compile twice
     }
 
     [Fact]
-    public void Pipeline_ReturnsError_ForInvalidSyntax()
+    public void Pipeline_ReturnsError_ForEmptyExpression()
     {
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
 
-        var result = pipeline.Process("data.");
+        var result = pipeline.Process("");
 
         Assert.False(result.Success);
         Assert.NotNull(result.ErrorMessage);
-        Assert.Contains("error", result.ErrorMessage.ToLowerInvariant());
     }
 
     [Fact]
-    public void Pipeline_ExtractsInputParameter()
+    public void Pipeline_ExtractsFlatParameters()
     {
         var compiler = new MockDynamicCompiler();
         var pipeline = new FormulaPipeline(compiler);
@@ -233,7 +232,8 @@ public class InterceptionTests
         var result = pipeline.Process("myRange.cells.toArray()");
 
         Assert.True(result.Success);
-        Assert.Equal("myRange", result.InputParameter);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("myRange", result.Parameters);
     }
 
     [Fact]
@@ -261,6 +261,49 @@ public class InterceptionTests
 
         Assert.True(result.Success);
         Assert.NotNull(result.UdfName);
+    }
+
+    [Fact]
+    public void Pipeline_AppendsAllToHeaderVariableTableParameter()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process("tbl.Rows.Where(r => (double)r[\"Amount\"] > 150).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("tbl[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_DoesNotAppendAllToRangeRefHeaderVariable()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process("A1:B10.Rows.Where(r => (double)r[\"Price\"] > 5).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        // Range refs should stay as-is (user controls the range)
+        Assert.Contains("A1:B10", result.Parameters);
+        Assert.DoesNotContain("A1:B10[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_DoesNotAppendAllToNonHeaderVariable()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process("tbl.Rows.Where(r => (double)r[0] > threshold).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        // threshold is not a header variable — no [#All]
+        Assert.Contains("threshold", result.Parameters);
+        Assert.DoesNotContain("threshold[#All]", result.Parameters);
     }
 
     #endregion

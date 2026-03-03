@@ -1,10 +1,11 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using ExcelDna.Integration;
 
 using FormulaBoss.Commands;
 using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
+using FormulaBoss.Runtime;
 
 namespace FormulaBoss;
 
@@ -67,6 +68,112 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 dynamic app = ExcelDnaUtil.Application;
                 return app.Range[address];
             };
+
+            // Initialize header extraction delegate for generated code.
+            // Accepts already-extracted object[,] values, not raw ExcelReference.
+            RuntimeHelpers.GetHeadersDelegate = values =>
+            {
+                try
+                {
+                    if (values.GetLength(0) < 1)
+                    {
+                        return null;
+                    }
+
+                    var cols = values.GetLength(1);
+                    var headers = new string[cols];
+                    for (var i = 0; i < cols; i++)
+                    {
+                        headers[i] = values[0, i].ToString() ?? "";
+                    }
+
+                    return headers;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GetHeadersDelegate error: {ex.Message}");
+                    return null;
+                }
+            };
+
+            // Initialize origin extraction delegate for generated code
+            RuntimeHelpers.GetOriginDelegate = rangeRef =>
+            {
+                try
+                {
+                    if (rangeRef.GetType().Name != "ExcelReference")
+                    {
+                        return null;
+                    }
+
+                    // Get sheet name from SheetId via reflection
+                    var sheetIdProp = rangeRef.GetType().GetProperty("SheetId");
+                    var sheetId = sheetIdProp?.GetValue(rangeRef);
+                    var sheetName = sheetId != null
+                        ? (string)XlCall.Excel(XlCall.xlSheetNm, rangeRef)
+                        : "Sheet1";
+
+                    // Strip the [Book]Sheet format to just the sheet name
+                    var bracketEnd = sheetName.IndexOf(']');
+                    if (bracketEnd >= 0)
+                    {
+                        sheetName = sheetName[(bracketEnd + 1)..];
+                    }
+
+                    // Get row/col from RowFirst/ColumnFirst properties
+                    var rowFirstProp = rangeRef.GetType().GetProperty("RowFirst");
+                    var colFirstProp = rangeRef.GetType().GetProperty("ColumnFirst");
+                    var row = (int)(rowFirstProp?.GetValue(rangeRef) ?? 0) + 1; // Convert 0-based to 1-based
+                    var col = (int)(colFirstProp?.GetValue(rangeRef) ?? 0) + 1;
+
+                    return new RangeOrigin(sheetName, row, col);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GetOriginDelegate error: {ex.Message}");
+                    return null;
+                }
+            };
+
+            // Initialize cell resolver delegate for object model access (formatting, color, etc.)
+            RuntimeBridge.GetCell = (sheetName, row, col) =>
+            {
+                try
+                {
+                    dynamic app = ExcelDnaUtil.Application;
+                    dynamic sheet = app.Sheets[sheetName];
+                    dynamic cell = sheet.Cells[row, col];
+                    dynamic interior = cell.Interior;
+                    dynamic font = cell.Font;
+                    var result = new Cell
+                    {
+                        Value = cell.Value2,
+                        Formula = cell.Formula ?? "",
+                        Format = cell.NumberFormat ?? "",
+                        Address = cell.Address ?? "",
+                        Row = row,
+                        Col = col,
+                        Interior = new Interior(
+                            (int)(interior.ColorIndex ?? 0),
+                            (int)(double)(interior.Color ?? 0.0)),
+                        Font = new CellFont(
+                            (bool)(font.Bold ?? false),
+                            (bool)(font.Italic ?? false),
+                            (double)(font.Size ?? 11.0),
+                            (string)(font.Name ?? "Calibri"),
+                            (int)(double)(font.Color ?? 0.0))
+                    };
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GetCell error: {ex.Message}");
+                    return new Cell { Row = row, Col = col };
+                }
+            };
+
+            // Initialize result conversion delegate — delegates to shared ResultConverter.Convert()
+            RuntimeHelpers.ToResultDelegate = result => ResultConverter.Convert(result);
 
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes

@@ -16,7 +16,7 @@ Example: `someNamedRange.cells.select(c => c.color)` where `someNamedRange` is d
 
 ### How the generated code resolves ranges
 
-The generated UDF code (object model path in `CSharpTranspiler.cs`) converts an `ExcelReference` to a COM `Range` by:
+The generated UDF code (object model path) converts an `ExcelReference` to a COM `Range` by:
 
 1. Reading `RowFirst`, `RowLast`, `ColumnFirst`, `ColumnLast` properties via reflection
 2. Building an A1-style address string (e.g. `A1:C3`) — **without any sheet qualifier**
@@ -46,7 +46,7 @@ A diagnostic function `FB_DiagRef` was used to test each step of range resolutio
 
 ## Files Involved
 
-- `formula-boss/Transpilation/CSharpTranspiler.cs` — generates the object model range resolution code (~line 1680+)
+- `formula-boss/Transpilation/CodeEmitter.cs` — generates the UDF source code (replaced CSharpTranspiler)
 - `formula-boss/RuntimeHelpers.cs` — host-assembly helper that CAN use XlCall directly
 - `formula-boss/Compilation/DynamicCompiler.cs` — UDF registration (needs `IsMacroType = true` for object model UDFs)
 
@@ -71,6 +71,6 @@ The solution uses a `Func<object, object>` delegate stored on `RuntimeHelpers` (
 
 - `formula-boss/AddIn.cs` — initializes `RuntimeHelpers.ResolveRangeDelegate` with direct `XlCall.Excel(xlfReftext)` call
 - `formula-boss/RuntimeHelpers.cs` — `GetRangeFromReference` delegates to the bridge; no ExcelDNA types anywhere
-- `formula-boss/Transpilation/CSharpTranspiler.cs` — generated code calls `RuntimeHelpers` via reflection instead of inline address building
+- `formula-boss/Transpilation/CodeEmitter.cs` — generated code calls `RuntimeHelpers` via delegates instead of inline address building
 - `formula-boss/Compilation/DynamicCompiler.cs` — `IsMacroType = true` for object model UDFs
 - `formula-boss/Interception/FormulaPipeline.cs` — passes `RequiresObjectModel` through to compiler

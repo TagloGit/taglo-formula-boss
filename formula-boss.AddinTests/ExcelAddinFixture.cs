@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 using Xunit;
@@ -14,8 +14,6 @@ namespace FormulaBoss.AddinTests;
 /// </summary>
 public sealed class ExcelAddinFixture : IDisposable
 {
-    private readonly dynamic _app;
-    private readonly dynamic _workbook;
     private readonly int _excelPid;
     private bool _disposed;
 
@@ -28,27 +26,27 @@ public sealed class ExcelAddinFixture : IDisposable
         var pidsBefore = new HashSet<int>(
             Process.GetProcessesByName("EXCEL").Select(p => p.Id));
 
-        _app = Activator.CreateInstance(excelType)
-               ?? throw new InvalidOperationException("Failed to create Excel.Application instance.");
+        Application = Activator.CreateInstance(excelType)
+                      ?? throw new InvalidOperationException("Failed to create Excel.Application instance.");
 
-        _app.Visible = false;
-        _app.DisplayAlerts = false;
+        Application.Visible = false;
+        Application.DisplayAlerts = false;
 
         // Identify the new Excel process by diffing PIDs
         _excelPid = FindNewExcelPid(pidsBefore);
 
         // Load the Formula Boss XLL
         var xllPath = FindXllPath();
-        bool registered = _app.RegisterXLL(xllPath);
+        bool registered = Application.RegisterXLL(xllPath);
         if (!registered)
         {
-            _app.Quit();
-            Marshal.ReleaseComObject(_app);
+            Application.Quit();
+            Marshal.ReleaseComObject(Application);
             throw new InvalidOperationException($"Failed to register XLL: {xllPath}");
         }
 
         // Create a workbook for tests
-        _workbook = _app.Workbooks.Add();
+        Workbook = Application.Workbooks.Add();
 
         // Wait for AutoOpen to initialize the interceptor — poll rather than fixed sleep
         WaitForAddinReady();
@@ -57,17 +55,17 @@ public sealed class ExcelAddinFixture : IDisposable
     /// <summary>
     ///     The Excel Application COM object.
     /// </summary>
-    public dynamic Application => _app;
+    public dynamic Application { get; }
 
     /// <summary>
     ///     The test workbook.
     /// </summary>
-    public dynamic Workbook => _workbook;
+    public dynamic Workbook { get; }
 
     /// <summary>
     ///     Gets the first worksheet in the test workbook.
     /// </summary>
-    public dynamic Worksheet => _workbook.Worksheets[1];
+    public dynamic Worksheet => Workbook.Worksheets[1];
 
     public void Dispose()
     {
@@ -80,8 +78,8 @@ public sealed class ExcelAddinFixture : IDisposable
 
         try
         {
-            _workbook.Close(false);
-            Marshal.ReleaseComObject(_workbook);
+            Workbook.Close(false);
+            Marshal.ReleaseComObject(Workbook);
         }
         catch
         {
@@ -90,8 +88,8 @@ public sealed class ExcelAddinFixture : IDisposable
 
         try
         {
-            _app.Quit();
-            Marshal.ReleaseComObject(_app);
+            Application.Quit();
+            Marshal.ReleaseComObject(Application);
         }
         catch
         {
@@ -106,10 +104,7 @@ public sealed class ExcelAddinFixture : IDisposable
     ///     Adds a fresh worksheet for test isolation.
     ///     Each test should call this to avoid interference.
     /// </summary>
-    public dynamic AddWorksheet()
-    {
-        return _workbook.Worksheets.Add();
-    }
+    public dynamic AddWorksheet() => Workbook.Worksheets.Add();
 
     /// <summary>
     ///     Polls until the add-in's SheetChange event handler is wired up,
@@ -117,21 +112,20 @@ public sealed class ExcelAddinFixture : IDisposable
     /// </summary>
     private void WaitForAddinReady(int timeoutMs = 10000, int pollIntervalMs = 250)
     {
-        var ws = _workbook.Worksheets[1];
+        var ws = Workbook.Worksheets[1];
         var cell = ws.Range["ZZ1"];
         try
         {
             // Enter a minimal backtick formula
-            cell.Value = "'=`ZZ2:ZZ2.sum()`";
+            cell.Value = "'=`ZZ2:ZZ2.Sum()`";
 
             var sw = Stopwatch.StartNew();
             while (sw.ElapsedMilliseconds < timeoutMs)
             {
                 try
                 {
-                    var formula = cell.Formula2 as string;
                     // If the interceptor has rewritten it (no more backticks), the add-in is ready
-                    if (formula != null && formula.StartsWith('=') && !formula.Contains('`'))
+                    if (cell.Formula2 is string formula && formula.StartsWith('=') && !formula.Contains('`'))
                     {
                         // Clean up the probe cell
                         cell.ClearContents();
