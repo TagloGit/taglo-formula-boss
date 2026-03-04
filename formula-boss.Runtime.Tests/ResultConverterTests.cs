@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -62,10 +62,7 @@ public class ResultConverterTests
     }
 
     [Fact]
-    public void Convert_NullReturnsEmpty()
-    {
-        Assert.Equal(string.Empty, ResultConverter.Convert(null));
-    }
+    public void Convert_NullReturnsEmpty() => Assert.Equal(string.Empty, ResultConverter.Convert(null));
 
     [Fact]
     public void Convert_ScalarReturnsBareValue()
@@ -88,8 +85,7 @@ public class ResultConverterTests
         var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { { "A", 0 }, { "B", 1 } };
         IEnumerable<Row> rows = new[]
         {
-            new Row(new object?[] { 1.0, "X" }, columnMap),
-            new Row(new object?[] { 2.0, "Y" }, columnMap)
+            new Row(new object?[] { 1.0, "X" }, columnMap), new Row(new object?[] { 2.0, "Y" }, columnMap)
         };
 
         var result = ResultConverter.Convert(rows);
@@ -103,12 +99,7 @@ public class ResultConverterTests
     [Fact]
     public void Convert_EnumerableColumnValue_ReturnsVerticalArray()
     {
-        IEnumerable<ColumnValue> values = new[]
-        {
-            new ColumnValue(10.0),
-            new ColumnValue(20.0),
-            new ColumnValue(30.0)
-        };
+        IEnumerable<ColumnValue> values = new[] { new ColumnValue(10.0), new ColumnValue(20.0), new ColumnValue(30.0) };
 
         var result = ResultConverter.Convert(values);
         var arr = Assert.IsType<object?[,]>(result);
@@ -136,7 +127,7 @@ public class ResultConverterTests
     {
         // A single ColumnValue isn't IEnumerable<ColumnValue>, so it falls through to generic return
         // But wrapping in an enumerable of one tests the path
-        var result = ResultConverter.Convert(new[] { new ColumnValue(42.0) } as IEnumerable<ColumnValue>);
+        var result = ResultConverter.Convert(new[] { new ColumnValue(42.0) });
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(1, arr.GetLength(0));
         Assert.Equal(42.0, arr[0, 0]);
