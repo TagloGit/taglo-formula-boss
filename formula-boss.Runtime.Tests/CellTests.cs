@@ -64,4 +64,25 @@ public class CellTests
         Assert.Equal("Arial", font.Name);
         Assert.Equal(255, font.Color);
     }
+
+    [Fact]
+    public void Cell_Formula_IsPopulated()
+    {
+        var cell = new Cell { Formula = "=SUM(A1:A5)" };
+        Assert.Equal("=SUM(A1:A5)", cell.Formula);
+    }
+
+    [Fact]
+    public void Cell_Format_IsPopulated()
+    {
+        var cell = new Cell { Format = "#,##0.00" };
+        Assert.Equal("#,##0.00", cell.Format);
+    }
+
+    [Fact]
+    public void Cell_Address_IsPopulated()
+    {
+        var cell = new Cell { Address = "$B$3" };
+        Assert.Equal("$B$3", cell.Address);
+    }
 }

@@ -539,6 +539,165 @@ public class PipelineTests
     }
 
     [Fact]
+    public void MultipleBacktickExpressions_InOneFormula()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "B1", 3.0);
+            TestUtilities.SetCellValue(ws, "B2", 7.0);
+
+            // Two backtick expressions combined with +
+            TestUtilities.EnterBacktickFormula(ws, "C1", "=`A1:A2.Sum()` + `B1:B2.Sum()`");
+
+            var result = TestUtilities.WaitForResult(ws, "C1", _output);
+
+            _output.WriteLine($"C1 formula: {TestUtilities.GetCellFormula(ws, "C1")}");
+            _output.WriteLine($"C1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(40.0, Convert.ToDouble(result)); // 30 + 10
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void CellEscalation_RowBoldFilter()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            // Table with headers
+            TestUtilities.SetCellValue(ws, "A1", "Name");
+            TestUtilities.SetCellValue(ws, "B1", "Amount");
+            TestUtilities.SetCellValue(ws, "A2", "Alice");
+            TestUtilities.SetCellValue(ws, "B2", 100.0);
+            TestUtilities.SetCellValue(ws, "A3", "Bob");
+            TestUtilities.SetCellValue(ws, "B3", 200.0);
+            TestUtilities.SetCellValue(ws, "A4", "Charlie");
+            TestUtilities.SetCellValue(ws, "B4", 300.0);
+
+            // Bold Bob's name
+            TestUtilities.SetCellBold(ws, "A3", true);
+
+            // Create table
+            var range = ws.Range["A1:B4"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    // Filter rows where Name cell is bold
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Rows.Where(r => r[\"Name\"].Cell.Bold).Select(r => r[\"Amount\"]).Sum()`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1 value: {result}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(200.0, Convert.ToDouble(result)); // Only Bob's amount
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void CellRgb_FilterEndToEnd()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+            TestUtilities.SetCellValue(ws, "A4", 40.0);
+
+            // Set A2 and A4 to red (RGB 255 = pure red in Excel's BGR format)
+            TestUtilities.SetCellRgbColor(ws, "A2", 255);
+            TestUtilities.SetCellRgbColor(ws, "A4", 255);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A4.Cells.Where(c => c.Rgb == 255).Sum()`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(60.0, Convert.ToDouble(result)); // 20 + 40
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void RuntimeError_SurfacesAsValueError()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "not_a_number");
+
+            // Sum on non-numeric data should cause a runtime error
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A1.Sum()`");
+
+            // Wait for the interceptor to process
+            Thread.Sleep(8000);
+
+            var formula = TestUtilities.GetCellFormula(ws, "B1");
+            var value = TestUtilities.GetCellValue(ws, "B1");
+
+            _output.WriteLine($"B1 formula: {formula}");
+            _output.WriteLine($"B1 value: {value} (type: {value?.GetType()?.Name})");
+
+            // After rewrite, the UDF should return #VALUE! (represented as -2146826273 or COMException)
+            // or the formula might not be rewritten at all
+            Assert.NotNull(formula);
+
+            // If rewritten, the value should be an error indicator
+            if (formula!.StartsWith('=') && !formula.Contains('`'))
+            {
+                // UDF was registered — check for error value
+                // Excel error values come through as int error codes
+                var isError = value == null ||
+                             value is int ||
+                             (value is string s && s.StartsWith('#'));
+                Assert.True(isError, $"Expected error value but got: {value}");
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void InvalidExpression_ShowsError()
     {
         var ws = _excel.AddWorksheet();

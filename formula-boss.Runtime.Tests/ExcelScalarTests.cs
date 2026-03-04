@@ -153,4 +153,84 @@ public class ExcelScalarTests
             (acc, cell) => new ExcelScalar((double)acc + (double)cell));
         Assert.Equal(15.0, (double)result);
     }
+
+    [Fact]
+    public void Scan_ReturnsResultOfFold()
+    {
+        var scalar = new ExcelScalar(5.0);
+        var result = scalar.Scan(
+            new ExcelScalar(10.0),
+            (acc, cell) => new ExcelScalar((double)acc + (double)cell));
+        Assert.Equal(15.0, (double)(ExcelValue)result);
+    }
+
+    [Fact]
+    public void SelectMany_FlattensResults()
+    {
+        var scalar = new ExcelScalar(3.0);
+        var result = scalar.SelectMany(v =>
+            new ExcelValue[] { new ExcelScalar((double)v), new ExcelScalar((double)v * 10) });
+        Assert.Equal(2, result.Count());
+    }
+
+    [Fact]
+    public void Map_ReturnsMappedValue()
+    {
+        var scalar = new ExcelScalar(5.0);
+        var result = scalar.Map(v => new ExcelScalar((double)v * 2));
+        Assert.Equal(10.0, (double)(ExcelValue)result);
+    }
+
+    [Fact]
+    public void OrderBy_ReturnsSelf()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var result = scalar.OrderBy(v => v);
+        Assert.Equal(42.0, (double)(ExcelValue)result);
+    }
+
+    [Fact]
+    public void OrderByDescending_ReturnsSelf()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var result = scalar.OrderByDescending(v => v);
+        Assert.Equal(42.0, (double)(ExcelValue)result);
+    }
+
+    [Fact]
+    public void Distinct_ReturnsSelf()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var result = scalar.Distinct();
+        Assert.Equal(1, result.Count());
+    }
+
+    [Fact]
+    public void Min_ReturnsValue()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(42.0, (double)scalar.Min());
+    }
+
+    [Fact]
+    public void Max_ReturnsValue()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(42.0, (double)scalar.Max());
+    }
+
+    [Fact]
+    public void ArithmeticOperators_Work()
+    {
+        var a = new ExcelScalar(10.0);
+        var b = new ExcelScalar(3.0);
+
+        Assert.Equal(13.0, (double)(a + b));
+        Assert.Equal(7.0, (double)(a - b));
+        Assert.Equal(30.0, (double)(a * b));
+
+        var c = new ExcelScalar(5.0);
+        Assert.Equal(15.0, (double)(c * 3));
+        Assert.Equal(7.0, (double)(c + 2));
+    }
 }

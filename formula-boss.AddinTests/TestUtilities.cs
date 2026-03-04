@@ -180,6 +180,54 @@ public static class TestUtilities
     }
 
     /// <summary>
+    ///     Sets the font bold property of a cell and releases COM objects.
+    /// </summary>
+    public static void SetCellBold(dynamic ws, string cellAddress, bool bold)
+    {
+        var cell = ws.Range[cellAddress];
+        try
+        {
+            var font = cell.Font;
+            try
+            {
+                font.Bold = bold;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(font);
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(cell);
+        }
+    }
+
+    /// <summary>
+    ///     Sets the interior RGB color of a cell and releases COM objects.
+    /// </summary>
+    public static void SetCellRgbColor(dynamic ws, string cellAddress, int rgbColor)
+    {
+        var cell = ws.Range[cellAddress];
+        try
+        {
+            var interior = cell.Interior;
+            try
+            {
+                interior.Color = rgbColor;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(interior);
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(cell);
+        }
+    }
+
+    /// <summary>
     ///     Gets a cell's comment text, or null if no comment. Releases COM objects.
     /// </summary>
     public static string? GetCellComment(dynamic ws, string cellAddress)
