@@ -310,4 +310,42 @@ public class CodeEmitterTests
     }
 
     #endregion
+
+    #region Statement Blocks
+
+    [Fact]
+    public void Emit_StatementBlock_UsesLocalFunction()
+    {
+        var result = EmitFromExpression("{ var x = 1; return tbl.Sum() + x; }");
+
+        Assert.Contains("object __userBlock()", result.SourceCode);
+        Assert.Contains("var __result = __userBlock();", result.SourceCode);
+    }
+
+    [Fact]
+    public void Emit_StatementBlock_ContainsUserBlock()
+    {
+        var result = EmitFromExpression("{ var x = 1; return tbl.Sum() + x; }");
+
+        Assert.Contains("return tbl.Sum() + x;", result.SourceCode);
+    }
+
+    [Fact]
+    public void Emit_StatementBlock_StillWrapsParameters()
+    {
+        var result = EmitFromExpression("{ return tbl.Sum(); }");
+
+        Assert.Contains("tbl__raw", result.SourceCode);
+        Assert.Contains("ExcelValue.Wrap(", result.SourceCode);
+    }
+
+    [Fact]
+    public void Emit_StatementBlock_StillConvertsResult()
+    {
+        var result = EmitFromExpression("{ return tbl.Sum(); }");
+
+        Assert.Contains("ToResultDelegate", result.SourceCode);
+    }
+
+    #endregion
 }

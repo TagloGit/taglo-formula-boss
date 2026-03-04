@@ -19,7 +19,8 @@ public record DetectionResult(
     bool RequiresObjectModel,
     IReadOnlySet<string> HeaderVariables,
     string NormalizedExpression,
-    IReadOnlyDictionary<string, string> RangeRefMap);
+    IReadOnlyDictionary<string, string> RangeRefMap,
+    bool IsStatementBlock = false);
 
 /// <summary>
 ///     Analyzes user expressions using Roslyn syntax trees to detect parameters,
@@ -114,18 +115,24 @@ public class InputDetector
         // Step 1: Pre-process range references
         var (normalized, rangeRefMap) = PreprocessRangeRefs(expression);
 
-        // Step 2: Parse with Roslyn
-        var wrappedSource = $"class __Wrapper {{ object __M() => {normalized}; }}";
+        // Step 2: Detect statement blocks and parse with Roslyn
+        var isStatementBlock = IsStatementBlock(normalized);
+        var wrappedSource = isStatementBlock
+            ? $"class __Wrapper {{ object __M() {normalized} }}"
+            : $"class __Wrapper {{ object __M() => {normalized}; }}";
         var tree = CSharpSyntaxTree.ParseText(wrappedSource);
         var root = tree.GetRoot();
 
-        // Find the expression node
+        // Validate parse succeeded
         var methodDecl = root.DescendantNodes().OfType<MethodDeclarationSyntax>().First();
-        var exprBody = methodDecl.ExpressionBody?.Expression;
-
-        if (exprBody == null)
+        if (!isStatementBlock && methodDecl.ExpressionBody?.Expression == null)
         {
             throw new TranspileException($"Failed to parse expression: {expression}");
+        }
+
+        if (isStatementBlock && methodDecl.Body == null)
+        {
+            throw new TranspileException($"Failed to parse statement block: {expression}");
         }
 
         // Step 3: Detect object model usage (.Cell, .Cells)
@@ -143,7 +150,17 @@ public class InputDetector
             requiresObjectModel,
             headerVariables,
             normalized,
-            rangeRefMap);
+            rangeRefMap,
+            isStatementBlock);
+    }
+
+    /// <summary>
+    ///     Detects whether a normalized expression is a statement block (starts with '{' and contains 'return').
+    /// </summary>
+    internal static bool IsStatementBlock(string normalizedExpression)
+    {
+        var trimmed = normalizedExpression.TrimStart();
+        return trimmed.StartsWith('{') && trimmed.Contains("return");
     }
 
     /// <summary>
