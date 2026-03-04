@@ -186,10 +186,9 @@ public class FormulaPipeline
     }
 
     private static string GetStatementLambdaHint() =>
-        "\n\nHint: In statement lambdas, use helper methods for type conversion:\n" +
-        "  Num(x) - convert to double\n" +
-        "  Str(x) - convert to string\n" +
-        "  Bool(x) - convert to bool\n" +
-        "  Int(x) - convert to int\n" +
-        "  IsEmpty(x) - check if null/empty";
+        "\n\nHint: Use standard C# casts for type conversion:\n" +
+        "  Convert.ToDouble(x) or (double)x\n" +
+        "  (string)x or x.ToString()\n" +
+        "  (bool)x or Convert.ToBoolean(x)\n" +
+        "  (int)x or Convert.ToInt32(x)";
 }
