@@ -312,4 +312,106 @@ public class ExcelArrayTests
         Assert.IsType<ExcelArray>(range);
         Assert.Equal(2, range.Rows.Count());
     }
+
+    [Fact]
+    public void Rows_All_TrueWhenAllRowsMatch()
+    {
+        var arr = MakeSingleColumn();
+        Assert.True(arr.Rows.All(r => (double)r[0] > 0));
+        Assert.False(arr.Rows.All(r => (double)r[0] > 2));
+    }
+
+    [Fact]
+    public void Rows_FirstOrDefault_ReturnsNullWhenNoMatch()
+    {
+        var arr = MakeArray();
+        var result = arr.Rows.FirstOrDefault(r => (double)r[0] > 100);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Rows_FirstOrDefault_ReturnsMatchingRow()
+    {
+        var arr = MakeArray();
+        var result = arr.Rows.FirstOrDefault(r => (double)r[0] > 1.0);
+        Assert.NotNull(result);
+        Assert.Equal(2.0, (double)result![0]);
+    }
+
+    [Fact]
+    public void Rows_OrderByDescending_SortsDescending()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0 }, { 3.0 }, { 2.0 } });
+        var sorted = arr.Rows.OrderByDescending(r => (double)r[0]);
+        var rows = sorted.ToList();
+        Assert.Equal(3.0, (double)rows[0][0]);
+        Assert.Equal(2.0, (double)rows[1][0]);
+        Assert.Equal(1.0, (double)rows[2][0]);
+    }
+
+    [Fact]
+    public void Rows_Take_Positive_TakesFromStart()
+    {
+        var arr = MakeSingleColumn();
+        var taken = arr.Rows.Take(2);
+        Assert.Equal(2, taken.Count());
+        var rows = taken.ToList();
+        Assert.Equal(1.0, (double)rows[0][0]);
+        Assert.Equal(2.0, (double)rows[1][0]);
+    }
+
+    [Fact]
+    public void Rows_Take_Negative_TakesFromEnd()
+    {
+        var arr = MakeSingleColumn();
+        var taken = arr.Rows.Take(-2);
+        Assert.Equal(2, taken.Count());
+        var rows = taken.ToList();
+        Assert.Equal(2.0, (double)rows[0][0]);
+        Assert.Equal(3.0, (double)rows[1][0]);
+    }
+
+    [Fact]
+    public void Rows_Skip_Positive_SkipsFromStart()
+    {
+        var arr = MakeSingleColumn();
+        var skipped = arr.Rows.Skip(2);
+        Assert.Equal(1, skipped.Count());
+        Assert.Equal(3.0, (double)skipped.ToList()[0][0]);
+    }
+
+    [Fact]
+    public void Rows_Skip_Negative_SkipsFromEnd()
+    {
+        var arr = MakeSingleColumn();
+        var skipped = arr.Rows.Skip(-1);
+        Assert.Equal(2, skipped.Count());
+        var rows = skipped.ToList();
+        Assert.Equal(1.0, (double)rows[0][0]);
+        Assert.Equal(2.0, (double)rows[1][0]);
+    }
+
+    [Fact]
+    public void Rows_Distinct_RemovesDuplicateRows()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, "A" }, { 2.0, "B" }, { 1.0, "A" } });
+        var distinct = arr.Rows.Distinct();
+        Assert.Equal(2, distinct.Count());
+    }
+
+    // --- ExcelArray.Map ---
+
+    [Fact]
+    public void Map_Preserves2DShape()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
+        var result = arr.Map(x => new ExcelScalar((double)x * 10));
+        var resultArr = (object?[,])((ExcelValue)result).RawValue!;
+        Assert.Equal(2, resultArr.GetLength(0));
+        Assert.Equal(2, resultArr.GetLength(1));
+        Assert.Equal(10.0, resultArr[0, 0]);
+        Assert.Equal(20.0, resultArr[0, 1]);
+        Assert.Equal(30.0, resultArr[1, 0]);
+        Assert.Equal(40.0, resultArr[1, 1]);
+    }
 }
