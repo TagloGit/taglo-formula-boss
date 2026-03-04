@@ -222,4 +222,56 @@ public class InputDetectorTests
     }
 
     #endregion
+
+    #region Statement Block Detection
+
+    [Fact]
+    public void Detect_StatementBlock_DetectedCorrectly()
+    {
+        var result = _detector.Detect("{ var x = 1; return tbl.Sum() + x; }");
+
+        Assert.True(result.IsStatementBlock);
+        Assert.Equal(["tbl"], result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_StatementBlock_WithHeaderAccess()
+    {
+        var result = _detector.Detect("{ var count = tbl.Rows.Count(); return tbl.Rows.Where(r => r[\"Price\"] > 5).ToRange(); }");
+
+        Assert.True(result.IsStatementBlock);
+        Assert.Contains("tbl", result.Parameters);
+        Assert.Contains("tbl", result.HeaderVariables);
+    }
+
+    [Fact]
+    public void Detect_StatementBlock_MultipleParameters()
+    {
+        var result = _detector.Detect("{ if (threshold > 0) return tbl.Sum(); return otherTable.Sum(); }");
+
+        Assert.True(result.IsStatementBlock);
+        Assert.Equal(["otherTable", "tbl", "threshold"], result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_RegularExpression_NotStatementBlock()
+    {
+        var result = _detector.Detect("tbl.Sum()");
+
+        Assert.False(result.IsStatementBlock);
+    }
+
+    [Fact]
+    public void IsStatementBlock_LeadingBraceWithReturn_True()
+    {
+        Assert.True(InputDetector.IsStatementBlock("{ return 1; }"));
+    }
+
+    [Fact]
+    public void IsStatementBlock_NoBrace_False()
+    {
+        Assert.False(InputDetector.IsStatementBlock("tbl.Sum()"));
+    }
+
+    #endregion
 }

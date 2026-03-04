@@ -657,6 +657,34 @@ public class PipelineTests
     }
 
     [Fact]
+    public void StatementBlock_CompilesAndExecutes()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1",
+                "=`{ var total = A1:A3.Sum(); return total + 1; }`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"B1 value: {result}");
+            _output.WriteLine($"B1 comment: {TestUtilities.GetCellComment(ws, "B1")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(61.0, Convert.ToDouble(result)); // 10 + 20 + 30 + 1
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void RuntimeError_SurfacesAsValueError()
     {
         var ws = _excel.AddWorksheet();

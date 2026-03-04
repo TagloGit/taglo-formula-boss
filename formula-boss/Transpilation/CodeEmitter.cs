@@ -162,8 +162,18 @@ public class CodeEmitter
             sb.AppendLine();
         }
 
-        // User expression body — always direct (no lambda stripping)
-        sb.AppendLine($"        var __result = {detection.NormalizedExpression};");
+        // User expression body
+        if (detection.IsStatementBlock)
+        {
+            // Statement block: wrap in local function so user's return statements work
+            sb.AppendLine("        object __userBlock()");
+            sb.AppendLine($"        {detection.NormalizedExpression}");
+            sb.AppendLine("        var __result = __userBlock();");
+        }
+        else
+        {
+            sb.AppendLine($"        var __result = {detection.NormalizedExpression};");
+        }
 
         sb.AppendLine("        return FormulaBoss.RuntimeHelpers.ToResultDelegate != null");
         sb.AppendLine("            ? FormulaBoss.RuntimeHelpers.ToResultDelegate(__result)");

@@ -422,7 +422,7 @@ public class WrapperTypePipelineTests
 
     #region Statement Block
 
-    [Fact(Skip = "Blocked by #108")]
+    [Fact]
     public void StatementBlock_CompilesAndExecutes()
     {
         var compilation = NewPipelineTestHelpers.CompileExpression(

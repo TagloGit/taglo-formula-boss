@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -184,10 +184,7 @@ public class ExcelArrayTests
     // --- Aggregations ---
 
     [Fact]
-    public void Sum_SumsAllCells()
-    {
-        Assert.Equal(6.0, (double)MakeSingleColumn().Sum());
-    }
+    public void Sum_SumsAllCells() => Assert.Equal(6.0, (double)MakeSingleColumn().Sum());
 
     [Fact]
     public void Min_ReturnsMinCell()
@@ -335,7 +332,7 @@ public class ExcelArrayTests
         var arr = MakeArray();
         var result = arr.Rows.FirstOrDefault(r => (double)r[0] > 1.0);
         Assert.NotNull(result);
-        Assert.Equal(2.0, (double)result![0]);
+        Assert.Equal(2.0, (double)result[0]);
     }
 
     [Fact]
