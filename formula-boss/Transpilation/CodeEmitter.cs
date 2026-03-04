@@ -214,6 +214,15 @@ public class CodeEmitter
             sb.AppendLine($"        var {param}__origin = {param}__isRef == true");
             sb.AppendLine($"            ? (RangeOrigin?)FormulaBoss.RuntimeHelpers.GetOriginDelegate?.Invoke({param}__raw)");
             sb.AppendLine($"            : null;");
+
+            // When headers were stripped, the origin must shift down by one row
+            // so cell positions align with the data rows, not the header row
+            if (extractHeaders)
+            {
+                sb.AppendLine($"        if ({param}__headers != null && {param}__origin != null)");
+                sb.AppendLine($"            {param}__origin = {param}__origin with {{ TopRow = {param}__origin.TopRow + 1 }};");
+            }
+
             sb.AppendLine($"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);");
         }
         else
