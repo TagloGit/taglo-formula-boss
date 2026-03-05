@@ -1,6 +1,4 @@
-﻿using FormulaBoss.Interception;
-
-using Microsoft.CodeAnalysis.Completion;
+﻿using Microsoft.CodeAnalysis.Completion;
 
 namespace FormulaBoss.UI.Completion;
 
@@ -41,8 +39,9 @@ internal sealed class RoslynCompletionProvider
             return (items, false);
         }
 
-        // Outside DSL: use legacy top-level completions (table names, LET variables)
-        if (!ctx.InsideDsl && !BacktickExtractor.IsBacktickFormula(fullText))
+        // Outside DSL: use top-level completions (table names, LET variables).
+        // Check cursor context (InsideDsl), not whether formula contains backticks elsewhere.
+        if (!ctx.InsideDsl)
         {
             if (ctx.Type == DslType.TopLevel)
             {
