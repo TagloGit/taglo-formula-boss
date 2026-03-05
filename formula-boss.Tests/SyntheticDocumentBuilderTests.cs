@@ -123,6 +123,30 @@ public class SyntheticDocumentBuilderTests
     }
 
     [Fact]
+    public void Build_StatementBlock_EmitsLocalFunction()
+    {
+        var formula = "=LET(myFunc, `{ var s = new StringBuilder(); s.`";
+        var textUp = "=LET(myFunc, `{ var s = new StringBuilder(); s.";
+
+        var (source, _) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
+        Assert.Contains("object __userBlock()", source);
+        Assert.Contains("var s = new StringBuilder();", source);
+        Assert.DoesNotContain("var __result = {", source);
+    }
+
+    [Fact]
+    public void BuildForDiagnostics_StatementBlock_EmitsLocalFunction()
+    {
+        var formula = "=LET(myFunc, `{ var s = new StringBuilder(); return s.ToString(); }`)";
+
+        var result = SyntheticDocumentBuilder.BuildForDiagnostics(formula, TwoTableMetadata);
+        Assert.NotNull(result);
+        Assert.Contains("object __userBlock()", result.Source);
+        Assert.Contains("var s = new StringBuilder();", result.Source);
+        Assert.DoesNotContain("var __result = {", result.Source);
+    }
+
+    [Fact]
     public void Build_NamedRange_DeclaredAsExcelArray()
     {
         var formula = "=LET(r, TaxRate, `r.`)";

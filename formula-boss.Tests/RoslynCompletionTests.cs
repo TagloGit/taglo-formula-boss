@@ -148,6 +148,21 @@ public class RoslynCompletionTests : IDisposable
     }
 
     [Fact]
+    public async Task StatementBlock_ShowsCompletions()
+    {
+        var formula = "=LET(myFunc, `{ var s = new StringBuilder(); s.`";
+        var textUp = "=LET(myFunc, `{ var s = new StringBuilder(); s.";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Length", texts);
+        Assert.Contains("Append", texts);
+        Assert.Contains("AppendLine", texts);
+    }
+
+    [Fact]
     public async Task NonDslContext_ShowsLetVariables_WhenFormulaContainsBackticks()
     {
         var formula = "=LET(input, A1, myFormula, `Sales.Rows.Where(r => r.Amount > 100)`, )";

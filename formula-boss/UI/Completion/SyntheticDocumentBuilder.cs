@@ -92,15 +92,27 @@ internal static class SyntheticDocumentBuilder
         }
 
         // Embed the expression and mark cursor position
-        sb.Append("var __result = ");
-        var caretOffset = sb.Length + dslExpression.Length;
-        sb.Append(dslExpression);
-        sb.AppendLine(";");
-
-        sb.AppendLine("}");
-        sb.AppendLine("}");
-
-        return (sb.ToString(), caretOffset);
+        if (IsStatementBlock(dslExpression))
+        {
+            // Statement block: emit as local function body so var/return/etc. are valid
+            sb.Append("object __userBlock() ");
+            var caretOffset = sb.Length + dslExpression.Length;
+            sb.AppendLine(dslExpression);
+            sb.AppendLine("var __result = __userBlock();");
+            sb.AppendLine("}");
+            sb.AppendLine("}");
+            return (sb.ToString(), caretOffset);
+        }
+        else
+        {
+            sb.Append("var __result = ");
+            var caretOffset = sb.Length + dslExpression.Length;
+            sb.Append(dslExpression);
+            sb.AppendLine(";");
+            sb.AppendLine("}");
+            sb.AppendLine("}");
+            return (sb.ToString(), caretOffset);
+        }
     }
 
     /// <summary>
@@ -185,10 +197,21 @@ internal static class SyntheticDocumentBuilder
         }
 
         // Embed the full expression and track its position
-        sb.Append("var __result = ");
-        var expressionStartInSynthetic = sb.Length;
-        sb.Append(expressionText);
-        sb.AppendLine(";");
+        int expressionStartInSynthetic;
+        if (IsStatementBlock(expressionText))
+        {
+            sb.Append("object __userBlock() ");
+            expressionStartInSynthetic = sb.Length;
+            sb.AppendLine(expressionText);
+            sb.AppendLine("var __result = __userBlock();");
+        }
+        else
+        {
+            sb.Append("var __result = ");
+            expressionStartInSynthetic = sb.Length;
+            sb.Append(expressionText);
+            sb.AppendLine(";");
+        }
 
         sb.AppendLine("}");
         sb.AppendLine("}");
@@ -468,6 +491,14 @@ internal static class SyntheticDocumentBuilder
     {
         return ColumnMapper.Sanitise(name);
     }
+
+    /// <summary>
+    ///     Detects whether a DSL expression is a statement block.
+    ///     More lenient than <see cref="InputDetector.IsStatementBlock"/> —
+    ///     does not require 'return' since the user may still be typing.
+    /// </summary>
+    private static bool IsStatementBlock(string expression) =>
+        expression.TrimStart().StartsWith('{');
 
     private static bool IsValidIdentifier(string name) =>
         name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_') &&
