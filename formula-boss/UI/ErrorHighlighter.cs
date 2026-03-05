@@ -4,17 +4,16 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
+using FormulaBoss.UI.Completion;
+
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Rendering;
 
-using FormulaBoss.Interception;
-using FormulaBoss.Parsing;
-
 namespace FormulaBoss.UI;
 
 /// <summary>
-///     Highlights parse errors in backtick expressions with red squiggly underlines.
+///     Highlights Roslyn compile errors in backtick expressions with red squiggly underlines.
 ///     Shows tooltip messages on mouse hover over error regions.
 /// </summary>
 internal sealed class ErrorHighlighter : IBackgroundRenderer
@@ -23,12 +22,20 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
     private readonly DispatcherTimer _debounceTimer;
     private readonly Pen _squigglePen;
     private readonly ToolTip _tooltip;
+    private readonly Func<RoslynWorkspaceManager?> _getWorkspace;
+    private readonly Func<WorkbookMetadata?> _getMetadata;
 
+    private CancellationTokenSource? _diagnosticCts;
     private List<ErrorMarker> _markers = [];
 
-    public ErrorHighlighter(TextEditor editor)
+    public ErrorHighlighter(
+        TextEditor editor,
+        Func<RoslynWorkspaceManager?> getWorkspace,
+        Func<WorkbookMetadata?> getMetadata)
     {
         _editor = editor;
+        _getWorkspace = getWorkspace;
+        _getMetadata = getMetadata;
 
         var red = Color.FromRgb(0xFF, 0x30, 0x30);
         _squigglePen = new Pen(new SolidColorBrush(red), 1.2) { DashStyle = DashStyles.Dot };
@@ -36,12 +43,8 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
 
         _tooltip = new ToolTip { Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse };
 
-        _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-        _debounceTimer.Tick += (_, _) =>
-        {
-            _debounceTimer.Stop();
-            UpdateErrors();
-        };
+        _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _debounceTimer.Tick += OnDebounceTimerTick;
 
         editor.TextArea.TextView.BackgroundRenderers.Add(this);
         editor.TextChanged += (_, _) =>
@@ -109,37 +112,76 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         dc.DrawGeometry(null, _squigglePen, geometry);
     }
 
-    private void UpdateErrors()
+    private async void OnDebounceTimerTick(object? sender, EventArgs e)
     {
-        var text = _editor.Text;
-        var newMarkers = new List<ErrorMarker>();
+        _debounceTimer.Stop();
+        _diagnosticCts?.Cancel();
+        _diagnosticCts = new CancellationTokenSource();
+        var ct = _diagnosticCts.Token;
 
-        var expressions = BacktickExtractor.Extract(text);
-        foreach (var expr in expressions)
+        try
         {
-            // Lex and parse the backtick expression
-            var lexer = new Lexer(expr.Expression);
-            var tokens = lexer.ScanTokens();
+            await UpdateErrorsAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when user types quickly
+        }
+    }
 
-            // Collect lexer errors (tokens with TokenType.Error)
-            foreach (var token in tokens)
+    private async Task UpdateErrorsAsync(CancellationToken ct)
+    {
+        var workspace = _getWorkspace();
+        if (workspace == null)
+        {
+            return;
+        }
+
+        var text = _editor.Text;
+        var metadata = _getMetadata();
+
+        var buildResult = SyntheticDocumentBuilder.BuildForDiagnostics(text, metadata);
+        if (buildResult == null)
+        {
+            _markers = [];
+            _editor.TextArea.TextView.InvalidateLayer(Layer);
+            return;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        var diagnostics = await workspace.GetDiagnosticsAsync(buildResult.Source, ct);
+
+        ct.ThrowIfCancellationRequested();
+
+        var newMarkers = new List<ErrorMarker>();
+        var exprStart = buildResult.ExpressionStartInSynthetic;
+        var exprEnd = exprStart + buildResult.ExpressionLength;
+
+        foreach (var diagnostic in diagnostics)
+        {
+            var span = diagnostic.Location.SourceSpan;
+
+            // Only show diagnostics within the expression region
+            if (span.Start < exprStart || span.Start >= exprEnd)
             {
-                if (token.Type == TokenType.Error)
-                {
-                    // +1 skips the opening backtick
-                    var offset = expr.StartIndex + 1 + token.Position;
-                    newMarkers.Add(new ErrorMarker(offset, Math.Max(1, token.Lexeme.Length), token.Lexeme));
-                }
+                continue;
             }
 
-            // Collect parser errors
-            var parser = new Parser(tokens, expr.Expression);
-            parser.Parse();
-            foreach (var (position, length, message) in parser.StructuredErrors)
+            // Filter trailing diagnostics to reduce noise while typing
+            if (span.Start >= exprEnd - 2)
             {
-                var offset = expr.StartIndex + 1 + position;
-                newMarkers.Add(new ErrorMarker(offset, length, message));
+                continue;
             }
+
+            var editorOffset = (span.Start - exprStart) + buildResult.ExpressionStartInEditor;
+            var length = Math.Min(span.Length, buildResult.ExpressionLength - (span.Start - exprStart));
+            if (length <= 0)
+            {
+                length = 1;
+            }
+
+            newMarkers.Add(new ErrorMarker(editorOffset, length, diagnostic.GetMessage()));
         }
 
         _markers = newMarkers;
