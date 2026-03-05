@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -10,13 +10,13 @@ public class CellExtensionsTests
         Interior = new Interior(color, 0)
     };
 
-    private static List<Cell> TestCells() => new()
-    {
-        MakeCell(10, color: 3),
-        MakeCell(20, color: 6),
-        MakeCell(30, color: 3),
-        MakeCell(40, color: 6)
-    };
+    private static List<Cell> TestCells() =>
+    [
+        MakeCell(10, 3),
+        MakeCell(20, 6),
+        MakeCell(30, 3),
+        MakeCell(40, 6)
+    ];
 
     [Fact]
     public void Sum_AllCells() =>

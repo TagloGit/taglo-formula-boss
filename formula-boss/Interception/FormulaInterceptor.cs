@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using ExcelDna.Integration;
 
@@ -143,7 +143,8 @@ public class FormulaInterceptor : IDisposable
 
             // Check if this is a LET formula - handle specially for named UDFs
             if (LetFormulaParser.TryParse(originalFormula, out var letStructure) &&
-                letStructure!.Bindings.Any(b => b.HasBacktick))
+                (letStructure!.Bindings.Any(b => b.HasBacktick) ||
+                 letStructure.ResultExpression.Contains('`')))
             {
                 ProcessLetFormula(cell, letStructure);
                 return;
@@ -234,6 +235,51 @@ public class FormulaInterceptor : IDisposable
             }
         }
 
+        // Validate: column access on LET variables is not supported
+        var letVariableNames = new HashSet<string>(
+            letStructure.Bindings
+                .Where(b => !b.HasBacktick)
+                .Select(b => b.VariableName.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (_, processed) in processedBindings)
+        {
+            foreach (var param in processed.Parameters)
+            {
+                if (!param.EndsWith("[#All]"))
+                {
+                    continue;
+                }
+
+                var baseName = param[..^"[#All]".Length];
+                if (letVariableNames.Contains(baseName))
+                {
+                    errors.Add(
+                        $"Column access (r[\"..\"]) requires a direct table reference. " +
+                        $"LET variable '{baseName}' cannot be used — use the table name directly.");
+                }
+            }
+        }
+
+        if (processedResult != null)
+        {
+            foreach (var param in processedResult.Parameters)
+            {
+                if (!param.EndsWith("[#All]"))
+                {
+                    continue;
+                }
+
+                var baseName = param[..^"[#All]".Length];
+                if (letVariableNames.Contains(baseName))
+                {
+                    errors.Add(
+                        $"Column access (r[\"..\"]) requires a direct table reference. " +
+                        $"LET variable '{baseName}' cannot be used — use the table name directly.");
+                }
+            }
+        }
+
         if (errors.Count > 0)
         {
             SetCellError(cell, string.Join("\n", errors));
@@ -243,8 +289,7 @@ public class FormulaInterceptor : IDisposable
         var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResult);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
-        cell.Formula2 = newFormula;
-        ClearCellComment(cell);
+        WriteFormula(cell, newFormula);
     }
 
     private void ProcessBacktickFormula(dynamic cell, string originalFormula)
@@ -289,8 +334,21 @@ public class FormulaInterceptor : IDisposable
         var newFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
         Debug.WriteLine($"Rewriting formula to: {newFormula}");
 
-        cell.Formula2 = newFormula;
-        ClearCellComment(cell);
+        WriteFormula(cell, newFormula);
+    }
+
+    private static void WriteFormula(dynamic cell, string formula)
+    {
+        try
+        {
+            cell.Formula2 = formula;
+            ClearCellComment(cell);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to write formula: {ex.Message}");
+            SetCellError(cell, $"Could not write formula: {ex.Message}");
+        }
     }
 
     private static void SetCellError(dynamic cell, string errorMessage)
