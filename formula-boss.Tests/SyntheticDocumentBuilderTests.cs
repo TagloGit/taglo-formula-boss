@@ -125,7 +125,7 @@ public class SyntheticDocumentBuilderTests
     [Fact]
     public void Build_StatementBlock_EmitsLocalFunction()
     {
-        var formula = "=LET(myFunc, `{ var s = new StringBuilder(); s.`";
+        var formula = "=LET(myFunc, `{ var s = new StringBuilder(); s. }`)";
         var textUp = "=LET(myFunc, `{ var s = new StringBuilder(); s.";
 
         var (source, _) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
