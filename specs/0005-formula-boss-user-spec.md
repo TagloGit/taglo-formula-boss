@@ -288,8 +288,7 @@ The floating editor provides Roslyn-powered autocomplete:
 
 - **Wrapper type methods:** `.Rows`, `.Where()`, `.Any()`, `.Sum()`, etc.
 - **Column names:** After `r.` or `r["`, column names from table headers are suggested
-- **Standard C# methods:** String methods (`.Contains()`, `.Split()`), Math, etc.
-- **Known gap:** Static type completions (e.g. `Regex.Match()`) require the namespace to be in scope. Currently `System.Text.RegularExpressions` is not included in the synthetic document — `Regex.` won't autocomplete (#103).
+- **Standard C# methods:** String methods (`.Contains()`, `.Split()`), Math, `Regex`, etc.
 - **LINQ methods:** Available on any `IEnumerable<>`
 - **Named ranges and table names:** Suggested as top-level identifiers
 - **Real-time error squiggles:** Syntax errors highlighted as you type

@@ -27,12 +27,7 @@ internal static class SyntheticDocumentBuilder
         var sb = new StringBuilder(1024);
 
         // Usings
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Collections;");
-        sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using FormulaBoss.Runtime;");
-        sb.AppendLine();
+        AppendUsings(sb);
 
         // Generate typed row classes and typed table classes per table
         var tableTypeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -129,12 +124,7 @@ internal static class SyntheticDocumentBuilder
         var sb = new StringBuilder(1024);
 
         // Usings
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Collections;");
-        sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using FormulaBoss.Runtime;");
-        sb.AppendLine();
+        AppendUsings(sb);
 
         // Generate typed row classes and typed table classes per table
         var tableTypeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -208,6 +198,18 @@ internal static class SyntheticDocumentBuilder
             expressionStartInSynthetic,
             expressionStartInEditor,
             expressionText.Length);
+    }
+
+    private static void AppendUsings(StringBuilder sb)
+    {
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Text;");
+        sb.AppendLine("using System.Text.RegularExpressions;");
+        sb.AppendLine("using FormulaBoss.Runtime;");
+        sb.AppendLine();
     }
 
     private static void EmitTypedRow(StringBuilder sb, string rowTypeName, IReadOnlyList<string> columns)
