@@ -32,6 +32,10 @@ public static class ShowFloatingEditorCommand
     private static int _targetCellScreenTop;
     private static double _targetMonitorScale = 1.0;
 
+    // True after the editor has been positioned at least once — subsequent opens
+    // reuse whatever position the user left the window in (session-only memory).
+    private static bool _hasBeenPositioned;
+
     /// <summary>
     ///     Initializes the command with the Excel application reference.
     ///     Must be called during add-in initialization.
@@ -62,6 +66,7 @@ public static class ShowFloatingEditorCommand
         _window = null;
         _app = null;
         _targetAddress = null;
+        _hasBeenPositioned = false;
     }
 
     /// <summary>
@@ -116,9 +121,6 @@ public static class ShowFloatingEditorCommand
                         _targetAddress = currentAddress;
                         _window.Metadata = metadata;
                         _window.FormulaText = editorContent;
-
-                        var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
-                        WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
                     }
                 }
                 else
@@ -131,8 +133,12 @@ public static class ShowFloatingEditorCommand
                     _window.Metadata = metadata;
                     _window.FormulaText = editorContent;
 
-                    var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
-                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                    if (!_hasBeenPositioned)
+                    {
+                        var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
+                        WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                        _hasBeenPositioned = true;
+                    }
 
                     _window.Show();
                     _window.Activate();
