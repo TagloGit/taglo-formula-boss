@@ -252,6 +252,23 @@ public class LetFormulaReconstructorTests
         Assert.Contains("`filtered.max()`", editable);
     }
 
+    [Fact]
+    public void TryReconstruct_HandlesMultipleBacktickResultExpressions()
+    {
+        var processed = @"=LET(a, A1:A3, b, B1:B3,
+            _src__result_1, ""a.Sum()"",
+            _result_1, _RESULT_1(a),
+            _src__result_2, ""b.Sum()"",
+            _result_2, _RESULT_2(b),
+            _result_1 + _result_2)";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.EndsWith("`a.Sum()` + `b.Sum()`)", editable);
+    }
+
     #endregion
 
     #region Header Binding Stripping
