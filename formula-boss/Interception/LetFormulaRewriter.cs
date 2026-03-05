@@ -32,7 +32,8 @@ public static class LetFormulaRewriter
     public static string Rewrite(
         LetStructure original,
         IReadOnlyDictionary<string, ProcessedBinding> processedBindings,
-        ProcessedBinding? processedResult = null)
+        IReadOnlyList<ProcessedBinding>? processedResults = null,
+        string? rewrittenResultExpression = null)
     {
         var sb = new StringBuilder();
         sb.Append("=LET(").Append(NewLine);
@@ -60,19 +61,22 @@ public static class LetFormulaRewriter
         }
 
         // Handle the result expression
-        if (processedResult != null)
+        if (processedResults is { Count: > 0 })
         {
-            // Result expression had a backtick - add _src_ doc and binding, then reference it
-            sb.Append(Indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
-            sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",")
-                .Append(NewLine);
+            // Result expression had backtick(s) - add _src_ doc and binding for each
+            foreach (var processedResult in processedResults)
+            {
+                sb.Append(Indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
+                sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",")
+                    .Append(NewLine);
 
-            sb.Append(Indent).Append(processedResult.VariableName).Append(", ");
-            AppendUdfCall(sb, processedResult);
-            sb.Append(',').Append(NewLine);
+                sb.Append(Indent).Append(processedResult.VariableName).Append(", ");
+                AppendUdfCall(sb, processedResult);
+                sb.Append(',').Append(NewLine);
+            }
 
-            // Final expression references the new binding
-            sb.Append(Indent).Append(processedResult.VariableName).Append(')');
+            // Final expression references the new bindings
+            sb.Append(Indent).Append(rewrittenResultExpression ?? processedResults[0].VariableName).Append(')');
         }
         else
         {

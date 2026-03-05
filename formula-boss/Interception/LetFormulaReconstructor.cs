@@ -114,18 +114,31 @@ public static class LetFormulaReconstructor
         sb.Append(Indent);
         var resultExpr = structure.ResultExpression.Trim();
 
-        // Only replace result with backtick if it's the special _result variable
-        // (which means the original had a backtick expression in the result position)
-        // Don't replace if resultExpr is just a variable name like "maxYellow"
+        // Check for _result or _result_N variables and replace with backtick expressions
         if (resultExpr == "_result" && sourceExpressions.TryGetValue("_result", out var resultDsl))
         {
+            // Single backtick result
             sb.Append('`');
             sb.Append(resultDsl);
             sb.Append('`');
         }
         else
         {
-            sb.Append(resultExpr);
+            // Check for multiple _result_N references in the result expression
+            var reconstructed = resultExpr;
+            var hasResultVars = false;
+            foreach (var (varName, dsl) in sourceExpressions)
+            {
+                if (!varName.StartsWith("_result_", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                reconstructed = reconstructed.Replace(varName, $"`{dsl}`");
+                hasResultVars = true;
+            }
+
+            sb.Append(hasResultVars ? reconstructed : resultExpr);
         }
 
         sb.Append(')');

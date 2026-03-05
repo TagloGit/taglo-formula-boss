@@ -87,14 +87,38 @@ public class LetFormulaRewriterTests
             ["filtered"] = new("filtered", "data.where(v => v > 0)", "FILTERED", new[] { "data" })
         };
 
-        var processedResult = new ProcessedBinding("_result", "filtered.max()", "_RESULT", new[] { "filtered" });
+        var processedResults = new[] { new ProcessedBinding("_result", "filtered.max()", "_RESULT", new[] { "filtered" }) };
 
-        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings, processedResult);
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings, processedResults);
 
         Assert.Contains("_src__result", result);
         Assert.Contains("\"filtered.max()\"", result);
         Assert.Contains("_result, _RESULT(filtered)", result);
         Assert.EndsWith("_result)", result.TrimEnd());
+    }
+
+    [Fact]
+    public void Rewrite_HandlesMultipleBacktickResultExpressions()
+    {
+        var formula = "=LET(a, A1:A3, b, B1:B3, `a.Sum()` + `b.Sum()`)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var processedResults = new[]
+        {
+            new ProcessedBinding("_result_1", "a.Sum()", "_RESULT_1", new[] { "a" }),
+            new ProcessedBinding("_result_2", "b.Sum()", "_RESULT_2", new[] { "b" })
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>(),
+            processedResults, "_result_1 + _result_2");
+
+        Assert.Contains("_src__result_1", result);
+        Assert.Contains("\"a.Sum()\"", result);
+        Assert.Contains("_result_1, _RESULT_1(a)", result);
+        Assert.Contains("_src__result_2", result);
+        Assert.Contains("\"b.Sum()\"", result);
+        Assert.Contains("_result_2, _RESULT_2(b)", result);
+        Assert.EndsWith("_result_1 + _result_2)", result.TrimEnd());
     }
 
     #endregion

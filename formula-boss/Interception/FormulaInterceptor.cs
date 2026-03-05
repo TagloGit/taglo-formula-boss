@@ -204,25 +204,29 @@ public class FormulaInterceptor : IDisposable
             }
         }
 
-        // Check if the result expression also contains a backtick
-        ProcessedBinding? processedResult = null;
+        // Check if the result expression also contains backtick(s)
+        var processedResults = new List<ProcessedBinding>();
+        string? rewrittenResultExpression = null;
         if (letStructure.ResultExpression.Contains('`'))
         {
-            var dslExpression = LetFormulaParser.ExtractBacktickExpression(letStructure.ResultExpression);
-            if (dslExpression != null)
+            var backtickExprs = BacktickExtractor.Extract(letStructure.ResultExpression);
+            for (var i = 0; i < backtickExprs.Count; i++)
             {
+                var dslExpression = backtickExprs[i].Expression;
+                var varName = backtickExprs.Count == 1 ? "_result" : $"_result_{i + 1}";
+
                 Debug.WriteLine($"Processing LET result expression: `{dslExpression}`");
 
-                var context = new ExpressionContext("_result");
+                var context = new ExpressionContext(varName);
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
                 {
-                    processedResult = new ProcessedBinding(
-                        "_result",
+                    processedResults.Add(new ProcessedBinding(
+                        varName,
                         dslExpression,
                         result.UdfName,
-                        result.Parameters ?? Array.Empty<string>());
+                        result.Parameters ?? Array.Empty<string>()));
 
                     Debug.WriteLine(
                         $"LET result UDF generated: {result.UdfName}({string.Join(", ", result.Parameters ?? Array.Empty<string>())})");
@@ -232,6 +236,19 @@ public class FormulaInterceptor : IDisposable
                     errors.Add($"Result expression: {result.ErrorMessage ?? "Unknown error"}");
                     Debug.WriteLine($"Pipeline error for result expression: {result.ErrorMessage}");
                 }
+            }
+
+            // Build the rewritten result expression by replacing backticks with variable names
+            if (processedResults.Count > 0 && processedResults.Count == backtickExprs.Count)
+            {
+                var replacements = new Dictionary<string, string>();
+                for (var i = 0; i < backtickExprs.Count; i++)
+                {
+                    replacements[backtickExprs[i].Expression] = processedResults[i].VariableName;
+                }
+
+                rewrittenResultExpression =
+                    BacktickExtractor.RewriteFormula(letStructure.ResultExpression, replacements);
             }
         }
 
@@ -261,7 +278,7 @@ public class FormulaInterceptor : IDisposable
             }
         }
 
-        if (processedResult != null)
+        foreach (var processedResult in processedResults)
         {
             foreach (var param in processedResult.Parameters)
             {
@@ -286,7 +303,8 @@ public class FormulaInterceptor : IDisposable
             return;
         }
 
-        var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResult);
+        var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResults,
+            rewrittenResultExpression);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
         WriteFormula(cell, newFormula);
