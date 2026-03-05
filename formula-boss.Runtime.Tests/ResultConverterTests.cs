@@ -83,10 +83,7 @@ public class ResultConverterTests
     public void Convert_EnumerableRow_ReturnsObjectArray()
     {
         var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { { "A", 0 }, { "B", 1 } };
-        IEnumerable<Row> rows = new[]
-        {
-            new Row(new object?[] { 1.0, "X" }, columnMap), new Row(new object?[] { 2.0, "Y" }, columnMap)
-        };
+        IEnumerable<Row> rows = new[] { new Row([1.0, "X"], columnMap), new Row([2.0, "Y"], columnMap) };
 
         var result = ResultConverter.Convert(rows);
         var arr = Assert.IsType<object?[,]>(result);
@@ -112,7 +109,7 @@ public class ResultConverterTests
     [Fact]
     public void Convert_RowResult_SpillsAsSingleRow()
     {
-        var row = new Row(new object?[] { "Alice", 30.0 }, null);
+        var row = new Row(["Alice", 30.0], null);
         ExcelValue rowAsExcel = row; // implicit conversion to ExcelArray 1×2
         var result = ResultConverter.Convert(rowAsExcel);
         var arr = Assert.IsType<object?[,]>(result);

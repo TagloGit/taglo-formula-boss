@@ -756,4 +756,63 @@ public class PipelineTests
             TestUtilities.CleanupWorksheet(ws);
         }
     }
+
+    [Fact]
+    public void LetFormula_ColumnAccessOnLetVariable_ShowsError()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            // Set up a table
+            TestUtilities.SetCellValue(ws, "A1", "Name");
+            TestUtilities.SetCellValue(ws, "B1", "Amount");
+            TestUtilities.SetCellValue(ws, "A2", "Alice");
+            TestUtilities.SetCellValue(ws, "B2", 100.0);
+            TestUtilities.SetCellValue(ws, "A3", "Bob");
+            TestUtilities.SetCellValue(ws, "B3", 200.0);
+
+            var range = ws.Range["A1:B3"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    // LET formula where backtick expression uses column access on a LET variable
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=LET(sales, {tableName}, `sales.Rows.Where(r => (double)r[\"Amount\"] > 150).Count()`)");
+
+                    Thread.Sleep(5000);
+
+                    var formula = TestUtilities.GetCellFormula(ws, "D1");
+                    var comment = TestUtilities.GetCellComment(ws, "D1");
+
+                    _output.WriteLine($"D1 formula: {formula}");
+                    _output.WriteLine($"D1 comment: {comment}");
+
+                    // Should show error about LET variable column access, not a COM exception
+                    Assert.NotNull(comment);
+                    Assert.Contains("LET variable", comment);
+                    Assert.Contains("sales", comment);
+                    // Formula should be left as backtick text (not rewritten)
+                    Assert.True(formula?.Contains('`') ?? false, "Formula should not have been rewritten");
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
 }

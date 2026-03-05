@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -15,15 +15,12 @@ public class CellEscalationTests : IDisposable
             Address = $"${(char)('A' + col - 1)}${row}",
             Row = row,
             Col = col,
-            Interior = new Interior(row % 8, row * 1000 + col),
+            Interior = new Interior(row % 8, (row * 1000) + col),
             Font = new CellFont(row % 2 == 0, col % 2 == 0, 11.0, "Calibri", 0)
         };
     }
 
-    public void Dispose()
-    {
-        RuntimeBridge.GetCell = null;
-    }
+    public void Dispose() => RuntimeBridge.GetCell = null;
 
     [Fact]
     public void ColumnValue_Cell_EscalatesToCom()
