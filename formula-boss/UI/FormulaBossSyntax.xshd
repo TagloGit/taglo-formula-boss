@@ -41,7 +41,7 @@
     <!-- Comparison operators -->
     <Rule color="Operator">==|!=|&gt;=|&lt;=|&gt;|&lt;</Rule>
 
-    <!-- C# keywords used in statement lambdas -->
+    <!-- C# keywords -->
     <Keywords color="Keyword">
       <Word>var</Word>
       <Word>return</Word>
@@ -51,60 +51,68 @@
       <Word>true</Word>
       <Word>false</Word>
       <Word>null</Word>
+      <Word>for</Word>
+      <Word>foreach</Word>
+      <Word>while</Word>
+      <Word>break</Word>
+      <Word>continue</Word>
+      <Word>switch</Word>
+      <Word>case</Word>
+      <Word>in</Word>
     </Keywords>
 
-    <!-- Data accessor methods -->
+    <!-- Data accessor properties -->
     <Keywords color="Accessor">
-      <Word>cells</Word>
-      <Word>values</Word>
-      <Word>rows</Word>
-      <Word>cols</Word>
-      <Word>withHeaders</Word>
+      <Word>Rows</Word>
+      <Word>Cells</Word>
+      <Word>Cell</Word>
+      <Word>RawValue</Word>
+      <Word>RowCount</Word>
+      <Word>ColCount</Word>
+      <Word>Headers</Word>
+      <Word>ColumnCount</Word>
     </Keywords>
 
-    <!-- LINQ-style methods -->
+    <!-- LINQ-style and collection methods -->
     <Keywords color="Method">
-      <Word>where</Word>
-      <Word>select</Word>
-      <Word>find</Word>
-      <Word>some</Word>
-      <Word>every</Word>
-      <Word>map</Word>
-      <Word>orderBy</Word>
-      <Word>orderByDesc</Word>
-      <Word>take</Word>
-      <Word>skip</Word>
-      <Word>distinct</Word>
-      <Word>groupBy</Word>
-      <Word>reduce</Word>
-      <Word>aggregate</Word>
-      <Word>scan</Word>
-      <Word>sum</Word>
-      <Word>avg</Word>
-      <Word>average</Word>
-      <Word>min</Word>
-      <Word>max</Word>
-      <Word>count</Word>
-      <Word>first</Word>
-      <Word>firstOrDefault</Word>
-      <Word>last</Word>
-      <Word>lastOrDefault</Word>
-      <Word>toArray</Word>
+      <Word>Where</Word>
+      <Word>Select</Word>
+      <Word>SelectMany</Word>
+      <Word>Map</Word>
+      <Word>Any</Word>
+      <Word>All</Word>
+      <Word>First</Word>
+      <Word>FirstOrDefault</Word>
+      <Word>OrderBy</Word>
+      <Word>OrderByDescending</Word>
+      <Word>Take</Word>
+      <Word>Skip</Word>
+      <Word>Distinct</Word>
+      <Word>Count</Word>
+      <Word>Sum</Word>
+      <Word>Min</Word>
+      <Word>Max</Word>
+      <Word>Average</Word>
+      <Word>Aggregate</Word>
+      <Word>Scan</Word>
+      <Word>ToRange</Word>
     </Keywords>
 
     <!-- Cell properties -->
     <Keywords color="CellProperty">
-      <Word>value</Word>
-      <Word>color</Word>
-      <Word>rgb</Word>
-      <Word>bold</Word>
-      <Word>italic</Word>
-      <Word>fontSize</Word>
-      <Word>format</Word>
-      <Word>formula</Word>
-      <Word>row</Word>
-      <Word>col</Word>
-      <Word>address</Word>
+      <Word>Value</Word>
+      <Word>Color</Word>
+      <Word>Rgb</Word>
+      <Word>Bold</Word>
+      <Word>Italic</Word>
+      <Word>FontSize</Word>
+      <Word>Format</Word>
+      <Word>Formula</Word>
+      <Word>Row</Word>
+      <Word>Col</Word>
+      <Word>Address</Word>
+      <Word>Interior</Word>
+      <Word>Font</Word>
     </Keywords>
 
     <!-- Numbers -->

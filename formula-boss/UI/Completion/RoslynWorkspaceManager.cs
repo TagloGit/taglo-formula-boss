@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Immutable;
+using System.Diagnostics;
 
 using FormulaBoss.Compilation;
 
@@ -43,20 +44,14 @@ internal sealed class RoslynWorkspaceManager : IDisposable
 
     public void Dispose() => _workspace.Dispose();
 
-    /// <summary>
-    ///     Updates the synthetic document and returns Roslyn completions at the given caret offset.
-    /// </summary>
-    public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(
-        string syntheticSource, int caretOffset, CancellationToken cancellationToken)
+    private void UpdateDocument(string syntheticSource)
     {
-        // Remove old document if present
         if (_documentId != null)
         {
             _workspace.TryApplyChanges(
                 _workspace.CurrentSolution.RemoveDocument(_documentId));
         }
 
-        // Add new document
         _documentId = DocumentId.CreateNewId(_projectId);
         var documentInfo = DocumentInfo.Create(
             _documentId,
@@ -67,6 +62,15 @@ internal sealed class RoslynWorkspaceManager : IDisposable
 
         _workspace.TryApplyChanges(
             _workspace.CurrentSolution.AddDocument(documentInfo));
+    }
+
+    /// <summary>
+    ///     Updates the synthetic document and returns Roslyn completions at the given caret offset.
+    /// </summary>
+    public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(
+        string syntheticSource, int caretOffset, CancellationToken cancellationToken)
+    {
+        UpdateDocument(syntheticSource);
 
         var document = _workspace.CurrentSolution.GetDocument(_documentId);
         if (document == null)
@@ -96,6 +100,43 @@ internal sealed class RoslynWorkspaceManager : IDisposable
         {
             Debug.WriteLine($"Roslyn completion error: {ex.Message}");
             return Array.Empty<CompletionItem>();
+        }
+    }
+
+    /// <summary>
+    ///     Updates the synthetic document and returns Roslyn semantic diagnostics.
+    /// </summary>
+    public async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(
+        string syntheticSource, CancellationToken cancellationToken)
+    {
+        UpdateDocument(syntheticSource);
+
+        var document = _workspace.CurrentSolution.GetDocument(_documentId);
+        if (document == null)
+        {
+            return ImmutableArray<Diagnostic>.Empty;
+        }
+
+        try
+        {
+            var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+            if (semanticModel == null)
+            {
+                return ImmutableArray<Diagnostic>.Empty;
+            }
+
+            return semanticModel.GetDiagnostics(cancellationToken: cancellationToken)
+                .Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+                .ToImmutableArray();
+        }
+        catch (OperationCanceledException)
+        {
+            return ImmutableArray<Diagnostic>.Empty;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Roslyn diagnostics error: {ex.Message}");
+            return ImmutableArray<Diagnostic>.Empty;
         }
     }
 

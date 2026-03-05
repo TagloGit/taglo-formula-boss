@@ -108,6 +108,108 @@ internal static class SyntheticDocumentBuilder
         return (sb.ToString(), caretOffset);
     }
 
+    /// <summary>
+    ///     Builds a synthetic C# document for Roslyn diagnostics and returns position mapping
+    ///     so diagnostic spans can be translated back to editor offsets.
+    /// </summary>
+    public static DiagnosticBuildResult? BuildForDiagnostics(string fullText, WorkbookMetadata? metadata)
+    {
+        // Find the last backtick expression
+        var expressions = BacktickExtractor.Extract(fullText);
+        if (expressions.Count == 0)
+        {
+            return null;
+        }
+
+        var lastExpr = expressions[^1];
+        var expressionText = lastExpr.Expression;
+        // +1 to skip the opening backtick character
+        var expressionStartInEditor = lastExpr.StartIndex + 1;
+
+        var sb = new StringBuilder(1024);
+
+        // Usings
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using FormulaBoss.Runtime;");
+        sb.AppendLine();
+
+        // Generate typed row classes and typed table classes per table
+        var tableTypeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (metadata != null)
+        {
+            foreach (var (tableName, columns) in metadata.TableColumns)
+            {
+                var safeTableName = SanitiseIdentifier(tableName);
+                if (string.IsNullOrEmpty(safeTableName))
+                {
+                    continue;
+                }
+
+                var rowTypeName = $"__{safeTableName}Row";
+                var rowCollTypeName = $"__{safeTableName}RowCollection";
+                var tableTypeName = $"__{safeTableName}Table";
+                tableTypeNames[tableName] = tableTypeName;
+
+                EmitTypedRow(sb, rowTypeName, columns);
+                EmitTypedRowCollection(sb, rowCollTypeName, rowTypeName);
+                EmitTypedTable(sb, tableTypeName, rowCollTypeName);
+            }
+        }
+
+        sb.AppendLine("class __Ctx {");
+        sb.AppendLine("void __M() {");
+
+        // Declare LET binding variables with appropriate types
+        var bindings = ExtractLetBindingsTyped(fullText, metadata, tableTypeNames);
+        var declaredNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (varName, typeName) in bindings)
+        {
+            sb.AppendLine($"{typeName} {varName} = default!;");
+            declaredNames.Add(varName);
+        }
+
+        // Declare table names and named ranges as variables
+        if (metadata != null)
+        {
+            foreach (var tableName in metadata.TableNames)
+            {
+                if (!declaredNames.Contains(tableName) && IsValidIdentifier(tableName) &&
+                    tableTypeNames.TryGetValue(tableName, out var tableTypeName))
+                {
+                    sb.AppendLine($"{tableTypeName} {tableName} = default!;");
+                    declaredNames.Add(tableName);
+                }
+            }
+
+            foreach (var name in metadata.NamedRanges)
+            {
+                if (!declaredNames.Contains(name) && IsValidIdentifier(name))
+                {
+                    sb.AppendLine($"ExcelArray {name} = default!;");
+                    declaredNames.Add(name);
+                }
+            }
+        }
+
+        // Embed the full expression and track its position
+        sb.Append("var __result = ");
+        var expressionStartInSynthetic = sb.Length;
+        sb.Append(expressionText);
+        sb.AppendLine(";");
+
+        sb.AppendLine("}");
+        sb.AppendLine("}");
+
+        return new DiagnosticBuildResult(
+            sb.ToString(),
+            expressionStartInSynthetic,
+            expressionStartInEditor,
+            expressionText.Length);
+    }
+
     private static void EmitTypedRow(StringBuilder sb, string rowTypeName, IReadOnlyList<string> columns)
     {
         sb.AppendLine($"class {rowTypeName} {{");
@@ -369,3 +471,9 @@ internal static class SyntheticDocumentBuilder
         name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_') &&
         name.All(c => char.IsLetterOrDigit(c) || c == '_');
 }
+
+internal sealed record DiagnosticBuildResult(
+    string Source,
+    int ExpressionStartInSynthetic,
+    int ExpressionStartInEditor,
+    int ExpressionLength);

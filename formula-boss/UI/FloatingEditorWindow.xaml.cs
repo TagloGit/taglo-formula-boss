@@ -44,8 +44,11 @@ public partial class FloatingEditorWindow
         // Bracket matching highlight
         _ = new BracketHighlighter(FormulaEditor);
 
-        // Real-time parse error squiggles
-        _ = new ErrorHighlighter(FormulaEditor);
+        // Real-time Roslyn error squiggles
+        _ = new ErrorHighlighter(
+            FormulaEditor,
+            () => { EnsureWorkspace(); return _workspaceManager; },
+            () => Metadata);
 
         // Editor behaviors (subscribes to TextEntering/TextEntered/PreviewKeyDown internally)
         _behaviorHandler = new EditorBehaviorHandler(FormulaEditor)
