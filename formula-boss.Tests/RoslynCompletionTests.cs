@@ -104,6 +104,21 @@ public class RoslynCompletionTests : IDisposable
     }
 
     [Fact]
+    public async Task RegexDot_ShowsStaticMethods()
+    {
+        var formula = "=`Regex.`";
+        var textUp = "=`Regex.";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Match", texts);
+        Assert.Contains("Replace", texts);
+        Assert.Contains("IsMatch", texts);
+    }
+
+    [Fact]
     public async Task FiltersInternalTypes()
     {
         var formula = "=`Sales.`";
