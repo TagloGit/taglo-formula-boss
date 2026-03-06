@@ -1116,4 +1116,39 @@ public class PipelineTests
             TestUtilities.CleanupWorksheet(ws);
         }
     }
+
+    [Fact]
+    public void CrossSheetRangeRef_SumsCorrectly()
+    {
+        // Create a second worksheet with data, then reference it from the first
+        var dataWs = _excel.AddWorksheet();
+        var formulaWs = _excel.AddWorksheet();
+        try
+        {
+            // Get the data sheet name for the cross-sheet reference
+            string sheetName = dataWs.Name;
+
+            // Put data on the data sheet
+            TestUtilities.SetCellValue(dataWs, "A1", 10.0);
+            TestUtilities.SetCellValue(dataWs, "A2", 20.0);
+            TestUtilities.SetCellValue(dataWs, "A3", 30.0);
+
+            // Enter a backtick formula on the formula sheet referencing the data sheet
+            TestUtilities.EnterBacktickFormula(formulaWs, "A1",
+                $"=`{sheetName}!A1:A3.Sum()`");
+
+            var result = TestUtilities.WaitForResult(formulaWs, "A1", _output);
+
+            _output.WriteLine($"A1 formula: {TestUtilities.GetCellFormula(formulaWs, "A1")}");
+            _output.WriteLine($"A1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(60.0, Convert.ToDouble(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(formulaWs);
+            TestUtilities.CleanupWorksheet(dataWs);
+        }
+    }
 }
