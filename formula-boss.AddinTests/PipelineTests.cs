@@ -815,4 +815,119 @@ public class PipelineTests
             TestUtilities.CleanupWorksheet(ws);
         }
     }
+
+    [Fact]
+    public void RowPath_GroupBy_SelectCount()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Category");
+            TestUtilities.SetCellValue(ws, "A2", "Fruit");
+            TestUtilities.SetCellValue(ws, "A3", "Veg");
+            TestUtilities.SetCellValue(ws, "A4", "Fruit");
+            TestUtilities.SetCellValue(ws, "A5", "Veg");
+            TestUtilities.SetCellValue(ws, "A6", "Fruit");
+            TestUtilities.SetCellValue(ws, "B1", "Price");
+            TestUtilities.SetCellValue(ws, "B2", 1.0);
+            TestUtilities.SetCellValue(ws, "B3", 2.0);
+            TestUtilities.SetCellValue(ws, "B4", 3.0);
+            TestUtilities.SetCellValue(ws, "B5", 4.0);
+            TestUtilities.SetCellValue(ws, "B6", 5.0);
+
+            var range = ws.Range["A1:B6"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Rows.GroupBy(r => r[\"Category\"]).Select(g => g.Count())`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, D2={TestUtilities.GetCellValue(ws, "D2")}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(3.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D1"))); // Fruit: 3
+                    Assert.Equal(2.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D2"))); // Veg: 2
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void RowPath_GroupBy_SelectKeyAndCount()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Category");
+            TestUtilities.SetCellValue(ws, "A2", "Fruit");
+            TestUtilities.SetCellValue(ws, "A3", "Veg");
+            TestUtilities.SetCellValue(ws, "A4", "Fruit");
+            TestUtilities.SetCellValue(ws, "B1", "Price");
+            TestUtilities.SetCellValue(ws, "B2", 10.0);
+            TestUtilities.SetCellValue(ws, "B3", 20.0);
+            TestUtilities.SetCellValue(ws, "B4", 30.0);
+
+            var range = ws.Range["A1:B4"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Rows.GroupBy(r => r[\"Category\"]).Select(g => new object[] {{ g.Key, g.Count() }})`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
+                    _output.WriteLine($"D2={TestUtilities.GetCellValue(ws, "D2")}, E2={TestUtilities.GetCellValue(ws, "E2")}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal("Fruit", TestUtilities.GetCellValue(ws, "D1"));
+                    Assert.Equal(2.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "E1")));
+                    Assert.Equal("Veg", TestUtilities.GetCellValue(ws, "D2"));
+                    Assert.Equal(1.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "E2")));
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
 }

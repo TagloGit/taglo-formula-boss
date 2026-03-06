@@ -30,6 +30,41 @@ public static class ResultConverter
             return result;
         }
 
+        if (result is GroupedRowCollection grouped)
+        {
+            var allRows = new List<object?[]>();
+            foreach (var group in grouped)
+            {
+                foreach (var row in group)
+                {
+                    var cols = row.ColumnCount;
+                    var rowData = new object?[cols + 1];
+                    rowData[0] = group.Key;
+                    for (var c = 0; c < cols; c++)
+                    {
+                        rowData[c + 1] = row[c].Value;
+                    }
+
+                    allRows.Add(rowData);
+                }
+            }
+
+            if (allRows.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var totalCols = allRows[0].Length;
+            var groupArr = new object?[allRows.Count, totalCols];
+            for (var r = 0; r < allRows.Count; r++)
+                for (var c = 0; c < totalCols; c++)
+                {
+                    groupArr[r, c] = allRows[r][c];
+                }
+
+            return groupArr;
+        }
+
         if (result is IEnumerable<Row> rows)
         {
             var rowList = rows.ToList();

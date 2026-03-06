@@ -208,6 +208,28 @@ Access `.Rows` to iterate row-by-row. The lambda parameter is `dynamic` (a `Row`
 | `.Rows.Distinct()` | `RowCollection` | Remove duplicate rows |
 | `.Rows.Count()` | `int` | Number of rows |
 | `.Rows.ToRange()` | `IExcelRange` | Convert back to array for element-wise ops |
+| `.Rows.GroupBy(r => key)` | `GroupedRowCollection` | Group rows by key |
+
+#### GroupedRowCollection Operations
+
+After `.GroupBy()`, the lambda parameter is `dynamic` (a `RowGroup` object) with a `.Key` property and all `RowCollection` methods:
+
+| Operation | Returns | Description |
+|---|---|---|
+| `.GroupBy(...).Select(g => expr)` | `IExcelRange` | Project each group (key, count, aggregation) |
+| `.GroupBy(...).Where(g => pred)` | `GroupedRowCollection` | Filter groups |
+| `.GroupBy(...).OrderBy(g => key)` | `GroupedRowCollection` | Sort groups ascending |
+| `.GroupBy(...).OrderByDescending(g => key)` | `GroupedRowCollection` | Sort groups descending |
+| `.GroupBy(...).Count()` | `int` | Number of groups |
+| `.GroupBy(...).First()` | `RowGroup` | First group |
+
+Each `RowGroup` inherits all `RowCollection` methods (`.Where()`, `.Select()`, `.Count()`, `.ToRange()`, etc.) so you can query within each group. For multi-column projection, return `object[]`:
+
+```
+tbl.Rows.GroupBy(r => r["Region"]).Select(g => new object[] { g.Key, g.Count() })
+```
+
+If a `GroupedRowCollection` is returned directly (without `.Select()`), it flattens all rows with a key column prepended.
 
 > **Planned — not yet implemented:**
 >
@@ -215,7 +237,6 @@ Access `.Rows` to iterate row-by-row. The lambda parameter is `dynamic` (a `Row`
 > |---|---|---|---|
 > | `.Rows.Aggregate(seed, (acc, r) => expr)` | value | Fold rows to single value | #99 |
 > | `.Rows.Scan(seed, (acc, r) => expr)` | `RowCollection` | Running fold over rows | #99 |
-> | `.Rows.GroupBy(r => key)` | TBD | Group rows by key (API design pending) | #101 |
 
 ### Column Access on Rows
 
@@ -359,6 +380,16 @@ The floating editor provides Roslyn-powered autocomplete:
         return "Over target by " + (total - target);
     return "Under target by " + (target - total);
 }`
+```
+
+### Group by category with count
+```
+'=`tbl.Rows.GroupBy(r => r["Category"]).Select(g => new object[] { g.Key, g.Count() })`
+```
+
+### Filter groups with more than 5 rows
+```
+'=`tbl.Rows.GroupBy(r => r["Region"]).Where(g => g.Count() > 5).Select(g => g.Key)`
 ```
 
 ### Cross-type comparison
