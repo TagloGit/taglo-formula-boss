@@ -9,7 +9,7 @@ namespace FormulaBoss.Transpilation;
 /// </summary>
 public class CodeEmitter
 {
-    public const string UdfPrefix = "__udf_";
+    public const string UdfPrefix = "__FB_";
 
     private static readonly HashSet<string> ReservedExcelNames = new(StringComparer.OrdinalIgnoreCase)
     {
