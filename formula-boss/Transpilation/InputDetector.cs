@@ -29,10 +29,10 @@ public record DetectionResult(
 /// </summary>
 public class InputDetector
 {
-    // Matches Excel range references: A1:B10, $A$1:$B$10, A1, $A$1, etc.
-    // Must appear before a dot or at end of string to avoid false positives
+    // Matches Excel range references, optionally with a sheet prefix:
+    //   A1:B10, $A$1:$B$10, Sheet2!A1:B10, 'Sheet Name'!$A$1:$B$10, etc.
     private static readonly Regex RangeRefPattern = new(
-        @"\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?",
+        @"(?:'[^']+?'!|[A-Za-z0-9_]+!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?",
         RegexOptions.Compiled);
 
     // C# keywords and common type names that should not be treated as free variables
@@ -174,16 +174,19 @@ public class InputDetector
         {
             var rangeRef = match.Value;
 
-            // Only treat as range ref if it contains a colon (A1:B10) or starts with $
-            // Single identifiers like A1 could be valid C# identifiers used as variable names
-            if (!rangeRef.Contains(':') && !rangeRef.StartsWith('$'))
+            // Only treat as range ref if it contains a colon (A1:B10), starts with $,
+            // or has a sheet prefix (Sheet2!A1, 'Sheet Name'!A1:B10)
+            if (!rangeRef.Contains(':') && !rangeRef.StartsWith('$') && !rangeRef.Contains('!'))
             {
                 return rangeRef;
             }
 
             var placeholder = "__range_" + rangeRef
                 .Replace(":", "_")
-                .Replace("$", "");
+                .Replace("$", "")
+                .Replace("!", "_")
+                .Replace("'", "")
+                .Replace(" ", "_");
 
             map[placeholder] = rangeRef;
             return placeholder;

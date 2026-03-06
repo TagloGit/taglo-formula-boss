@@ -179,6 +179,36 @@ public class InputDetectorTests
         Assert.DoesNotContain("threshold", result.HeaderVariables);
     }
 
+    [Fact]
+    public void Detect_CrossSheetRangeRef_ReplacedWithPlaceholder()
+    {
+        var result = _detector.Detect("Sheet2!A1:B10.Rows.Count()");
+
+        Assert.Single(result.Parameters);
+        Assert.StartsWith("__range_", result.Parameters[0]);
+        Assert.Contains("Sheet2!A1:B10", result.RangeRefMap.Values);
+    }
+
+    [Fact]
+    public void Detect_QuotedSheetRangeRef_ReplacedWithPlaceholder()
+    {
+        var result = _detector.Detect("'My Sheet'!A1:B10.Rows.Count()");
+
+        Assert.Single(result.Parameters);
+        Assert.StartsWith("__range_", result.Parameters[0]);
+        Assert.Contains("'My Sheet'!A1:B10", result.RangeRefMap.Values);
+    }
+
+    [Fact]
+    public void Detect_CrossSheetSingleCell_ReplacedWithPlaceholder()
+    {
+        var result = _detector.Detect("Sheet2!A1.Value");
+
+        Assert.Single(result.Parameters);
+        Assert.StartsWith("__range_", result.Parameters[0]);
+        Assert.Contains("Sheet2!A1", result.RangeRefMap.Values);
+    }
+
     #endregion
 
     #region Range Ref Preprocessing
@@ -219,6 +249,37 @@ public class InputDetectorTests
 
         Assert.Equal("A1.Rows", normalized);
         Assert.Empty(map);
+    }
+
+    [Fact]
+    public void PreprocessRangeRefs_CrossSheetRange_Replaced()
+    {
+        var (normalized, map) = InputDetector.PreprocessRangeRefs("Sheet2!A1:B10.Rows");
+
+        Assert.DoesNotContain("!", normalized);
+        Assert.Single(map);
+        Assert.Contains("Sheet2!A1:B10", map.Values);
+    }
+
+    [Fact]
+    public void PreprocessRangeRefs_QuotedSheetRange_Replaced()
+    {
+        var (normalized, map) = InputDetector.PreprocessRangeRefs("'My Sheet'!A1:B10.Rows");
+
+        Assert.DoesNotContain("!", normalized);
+        Assert.DoesNotContain("'", normalized);
+        Assert.Single(map);
+        Assert.Contains("'My Sheet'!A1:B10", map.Values);
+    }
+
+    [Fact]
+    public void PreprocessRangeRefs_CrossSheetSingleCell_Replaced()
+    {
+        var (normalized, map) = InputDetector.PreprocessRangeRefs("Sheet2!A1.Value");
+
+        Assert.DoesNotContain("!", normalized);
+        Assert.Single(map);
+        Assert.Contains("Sheet2!A1", map.Values);
     }
 
     #endregion

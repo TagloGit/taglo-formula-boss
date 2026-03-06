@@ -86,13 +86,14 @@ Excel-style range references are supported directly in expressions:
 
 Range references like `A1:C10` are automatically converted to valid C# identifiers internally. Single-cell references like `A1` or `B1` work as free variables — Excel resolves them as cell references.
 
-**Cross-sheet references** (e.g. `Sheet2!A1:B10`) are not currently supported directly in expression bodies. Use LET binding as a workaround:
+**Cross-sheet references** are supported directly in expression bodies:
 
 ```
-=LET(data, Sheet2!A1:B10, `data.Sum()`)
+`Sheet2!A1:B10.Sum()`
+`'My Sheet'!A1:C10.Rows.Where(r => r[0] > 5)`
 ```
 
-> **Planned:** Cross-sheet range reference support in expression bodies (#100).
+Sheet names with spaces must be wrapped in single quotes, matching standard Excel syntax.
 
 ### Statement Blocks
 
