@@ -18,12 +18,6 @@ public class DynamicCompiler
     private readonly HashSet<string> _registeredUdfs = [];
 
     /// <summary>
-    ///     Clears the registration tracking for a UDF name, allowing it to be
-    ///     re-registered with a new implementation on the next compile.
-    /// </summary>
-    public void ClearRegistration(string methodName) => _registeredUdfs.Remove(methodName);
-
-    /// <summary>
     ///     Compiles C# source code and registers all UDFs in it.
     ///     Returns a list of compilation errors, or empty list on success.
     /// </summary>
@@ -175,8 +169,7 @@ public class DynamicCompiler
 
             foreach (var method in methods)
             {
-                // Skip if already registered — caller must call ClearRegistration
-                // before recompiling a UDF with the same name
+                // Skip if already registered
                 if (_registeredUdfs.Contains(method.Name))
                 {
                     Debug.WriteLine($"UDF already registered: {method.Name}");
