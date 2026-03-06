@@ -207,6 +207,7 @@ public class FormulaPipeline
         }
 
         _registeredUdfExpressions.Remove(methodName);
+        _compiler.ClearRegistration(methodName);
         Debug.WriteLine($"Evicted stale UDF cache for {methodName} (was: {oldExpression})");
     }
 
