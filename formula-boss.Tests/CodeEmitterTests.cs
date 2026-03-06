@@ -1,4 +1,4 @@
-using FormulaBoss.Transpilation;
+﻿using FormulaBoss.Transpilation;
 
 using Xunit;
 
@@ -14,6 +14,18 @@ public class CodeEmitterTests
         var detection = _detector.Detect(expression);
         return _emitter.Emit(detection, expression, preferredName);
     }
+
+    #region Result Conversion
+
+    [Fact]
+    public void Emit_ContainsToResultDelegate()
+    {
+        var result = EmitFromExpression("tbl.Rows.Count()");
+
+        Assert.Contains("ToResultDelegate", result.SourceCode);
+    }
+
+    #endregion
 
     #region Using Directives
 
@@ -60,7 +72,7 @@ public class CodeEmitterTests
     {
         var result = EmitFromExpression("tbl.Rows.Count()");
 
-        Assert.Contains("public static object __udf_", result.SourceCode);
+        Assert.Contains($"public static object {CodeEmitter.UdfPrefix}", result.SourceCode);
     }
 
     #endregion
@@ -72,7 +84,7 @@ public class CodeEmitterTests
     {
         var result = EmitFromExpression("tbl.Rows.Count()");
 
-        Assert.StartsWith("__udf_", result.MethodName);
+        Assert.StartsWith(CodeEmitter.UdfPrefix, result.MethodName);
     }
 
     [Fact]
@@ -98,7 +110,7 @@ public class CodeEmitterTests
     {
         var result = EmitFromExpression("tbl.Rows.Count()", "myCustomUdf");
 
-        Assert.Equal("__udf_MYCUSTOMUDF", result.MethodName);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}MYCUSTOMUDF", result.MethodName);
     }
 
     [Fact]
@@ -106,7 +118,7 @@ public class CodeEmitterTests
     {
         var result = EmitFromExpression("tbl.Rows.Count()", "sum");
 
-        Assert.Equal("__udf__SUM", result.MethodName);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}_SUM", result.MethodName);
     }
 
     #endregion
@@ -202,18 +214,6 @@ public class CodeEmitterTests
 
     #endregion
 
-    #region Result Conversion
-
-    [Fact]
-    public void Emit_ContainsToResultDelegate()
-    {
-        var result = EmitFromExpression("tbl.Rows.Count()");
-
-        Assert.Contains("ToResultDelegate", result.SourceCode);
-    }
-
-    #endregion
-
     #region Object Model Propagation
 
     [Fact]
@@ -289,7 +289,7 @@ public class CodeEmitterTests
     {
         var name = CodeEmitter.GenerateMethodName("x", "hello world!");
 
-        Assert.Equal("__udf_HELLOWORLD", name);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}HELLOWORLD", name);
     }
 
     [Fact]
@@ -297,7 +297,7 @@ public class CodeEmitterTests
     {
         var name = CodeEmitter.GenerateMethodName("x", "123abc");
 
-        Assert.Equal("__udf__123ABC", name);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}_123ABC", name);
     }
 
     [Fact]
@@ -305,8 +305,8 @@ public class CodeEmitterTests
     {
         var name = CodeEmitter.GenerateMethodName("tbl.Rows.Count()", "   ");
 
-        Assert.StartsWith("__udf_", name);
-        Assert.NotEqual("__udf_", name);
+        Assert.StartsWith(CodeEmitter.UdfPrefix, name);
+        Assert.NotEqual(CodeEmitter.UdfPrefix, name);
     }
 
     #endregion

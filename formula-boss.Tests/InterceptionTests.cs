@@ -1,4 +1,6 @@
+﻿using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
+using FormulaBoss.Transpilation;
 
 using Xunit;
 
@@ -6,45 +8,47 @@ namespace FormulaBoss.Tests;
 
 public class InterceptionTests
 {
+    /// <summary>
+    ///     Mock compiler for testing the pipeline without actual Roslyn compilation.
+    /// </summary>
+    private sealed class MockDynamicCompiler : DynamicCompiler
+    {
+        public int CompileCount { get; private set; }
+
+        public override List<string> CompileAndRegister(string source, bool isMacroType = false)
+        {
+            CompileCount++;
+            // Return empty list (success) without actually compiling
+            return [];
+        }
+    }
+
     #region BacktickExtractor.IsBacktickFormula Tests
 
     [Fact]
-    public void IsBacktickFormula_ReturnsFalse_ForNull()
-    {
-        Assert.False(BacktickExtractor.IsBacktickFormula(null));
-    }
+    public void IsBacktickFormula_ReturnsFalse_ForNull() => Assert.False(BacktickExtractor.IsBacktickFormula(null));
 
     [Fact]
-    public void IsBacktickFormula_ReturnsFalse_ForEmptyString()
-    {
+    public void IsBacktickFormula_ReturnsFalse_ForEmptyString() =>
         Assert.False(BacktickExtractor.IsBacktickFormula(""));
-    }
 
     [Fact]
-    public void IsBacktickFormula_ReturnsFalse_ForFormulaWithoutBackticks()
-    {
+    public void IsBacktickFormula_ReturnsFalse_ForFormulaWithoutBackticks() =>
         // Formula-like text without backticks should not match
         Assert.False(BacktickExtractor.IsBacktickFormula("=SUM(A1:A10)"));
-    }
 
     [Fact]
-    public void IsBacktickFormula_ReturnsFalse_ForPlainText()
-    {
+    public void IsBacktickFormula_ReturnsFalse_ForPlainText() =>
         Assert.False(BacktickExtractor.IsBacktickFormula("hello world"));
-    }
 
     [Fact]
-    public void IsBacktickFormula_ReturnsTrue_ForFormulaWithBackticks()
-    {
+    public void IsBacktickFormula_ReturnsTrue_ForFormulaWithBackticks() =>
         // Excel stores '=SUM(`...`) as =SUM(`...`) - the apostrophe is hidden
         Assert.True(BacktickExtractor.IsBacktickFormula("=SUM(`data.Where(x => x > 0)`)"));
-    }
 
     [Fact]
-    public void IsBacktickFormula_ReturnsFalse_ForBackticksWithoutEquals()
-    {
+    public void IsBacktickFormula_ReturnsFalse_ForBackticksWithoutEquals() =>
         Assert.False(BacktickExtractor.IsBacktickFormula("`data.Where(x => x > 0)`"));
-    }
 
     #endregion
 
@@ -85,7 +89,7 @@ public class InterceptionTests
 
         Assert.Single(result);
         Assert.Equal(1, result[0].StartIndex); // Position of opening backtick
-        Assert.Equal(7, result[0].EndIndex);   // Position after closing backtick
+        Assert.Equal(7, result[0].EndIndex); // Position after closing backtick
     }
 
     [Fact]
@@ -114,12 +118,12 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["data.Where(x => x > 0)"] = "__udf_abc(data)"
+            ["data.Where(x => x > 0)"] = $"{CodeEmitter.UdfPrefix}abc(data)"
         };
 
         var result = BacktickExtractor.RewriteFormula("=SUM(`data.Where(x => x > 0)`)", replacements);
 
-        Assert.Equal("=SUM(__udf_abc(data))", result);
+        Assert.Equal($"=SUM({CodeEmitter.UdfPrefix}abc(data))", result);
     }
 
     [Fact]
@@ -127,13 +131,13 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["a.Sum()"] = "__udf_1(a)",
-            ["b.Sum()"] = "__udf_2(b)"
+            ["a.Sum()"] = $"{CodeEmitter.UdfPrefix}1(a)",
+            ["b.Sum()"] = $"{CodeEmitter.UdfPrefix}2(b)"
         };
 
         var result = BacktickExtractor.RewriteFormula("=SUM(`a.Sum()`) + SUM(`b.Sum()`)", replacements);
 
-        Assert.Equal("=SUM(__udf_1(a)) + SUM(__udf_2(b))", result);
+        Assert.Equal($"=SUM({CodeEmitter.UdfPrefix}1(a)) + SUM({CodeEmitter.UdfPrefix}2(b))", result);
     }
 
     [Fact]
@@ -141,14 +145,14 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["data.cells.where(c=>c.color==6).select(c=>c.value)"] = "__udf_abc(data)"
+            ["data.cells.where(c=>c.color==6).select(c=>c.value)"] = $"{CodeEmitter.UdfPrefix}abc(data)"
         };
 
         var result = BacktickExtractor.RewriteFormula(
             "=AVERAGE(`data.cells.where(c=>c.color==6).select(c=>c.value)`)",
             replacements);
 
-        Assert.Equal("=AVERAGE(__udf_abc(data))", result);
+        Assert.Equal($"=AVERAGE({CodeEmitter.UdfPrefix}abc(data))", result);
     }
 
     [Fact]
@@ -156,12 +160,12 @@ public class InterceptionTests
     {
         var replacements = new Dictionary<string, string>
         {
-            ["data.Select(x => x * 2)"] = "__udf_abc(data)"
+            ["data.Select(x => x * 2)"] = $"{CodeEmitter.UdfPrefix}abc(data)"
         };
 
         var result = BacktickExtractor.RewriteFormula("=`data.Select(x => x * 2)`", replacements);
 
-        Assert.Equal("=__udf_abc(data)", result);
+        Assert.Equal($"={CodeEmitter.UdfPrefix}abc(data)", result);
     }
 
     #endregion
@@ -178,7 +182,7 @@ public class InterceptionTests
 
         Assert.True(result.Success);
         Assert.NotNull(result.UdfName);
-        Assert.StartsWith("__udf_", result.UdfName);
+        Assert.StartsWith($"{CodeEmitter.UdfPrefix}", result.UdfName);
     }
 
     [Fact]
@@ -191,7 +195,7 @@ public class InterceptionTests
         var result = pipeline.Process("data.Where(v => v > 0)", context);
 
         Assert.True(result.Success);
-        Assert.Equal("__udf_FILTEREDDATA", result.UdfName);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}FILTEREDDATA", result.UdfName);
     }
 
     [Fact]
@@ -206,8 +210,8 @@ public class InterceptionTests
 
         Assert.True(result1.Success);
         Assert.True(result2.Success);
-        Assert.Equal("__udf_FIRSTUDF", result1.UdfName);
-        Assert.Equal("__udf_SECONDUDF", result2.UdfName);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}FIRSTUDF", result1.UdfName);
+        Assert.Equal($"{CodeEmitter.UdfPrefix}SECONDUDF", result2.UdfName);
         Assert.Equal(2, compiler.CompileCount); // Should compile twice
     }
 
@@ -307,19 +311,4 @@ public class InterceptionTests
     }
 
     #endregion
-
-    /// <summary>
-    /// Mock compiler for testing the pipeline without actual Roslyn compilation.
-    /// </summary>
-    private sealed class MockDynamicCompiler : Compilation.DynamicCompiler
-    {
-        public int CompileCount { get; private set; }
-
-        public override List<string> CompileAndRegister(string source, bool isMacroType = false)
-        {
-            CompileCount++;
-            // Return empty list (success) without actually compiling
-            return [];
-        }
-    }
 }
