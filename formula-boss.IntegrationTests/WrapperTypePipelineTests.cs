@@ -91,6 +91,57 @@ public class WrapperTypePipelineTests
         Assert.True(compilation.Success, compilation.ErrorMessage);
     }
 
+    [Fact]
+    public void Sugar_GroupBy_DirectReturn()
+    {
+        var values = new object[,] { { "A", 1.0 }, { "B", 2.0 }, { "A", 3.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.GroupBy(r => r[0])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0)); // all 3 rows flattened
+        Assert.Equal(3, arr.GetLength(1)); // key + 2 original columns
+    }
+
+    [Fact]
+    public void Sugar_GroupBy_Select_Count()
+    {
+        var values = new object[,] { { "A", 1.0 }, { "B", 2.0 }, { "A", 3.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.GroupBy(r => r[0]).Select(g => g.Count())");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0)); // 2 groups
+        Assert.Equal(2, arr[0, 0]); // A has 2 rows
+        Assert.Equal(1, arr[1, 0]); // B has 1 row
+    }
+
+    [Fact]
+    public void Sugar_GroupBy_Select_MultiColumn()
+    {
+        var values = new object[,] { { "A", 10.0 }, { "B", 20.0 }, { "A", 30.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.GroupBy(r => r[0]).Select(g => new object[] { g.Key, g.Count() })");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal("A", arr[0, 0]);
+        Assert.Equal(2, arr[0, 1]);
+    }
+
     #endregion
 
     #region Aggregate

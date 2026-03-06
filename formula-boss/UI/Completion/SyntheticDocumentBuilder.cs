@@ -271,6 +271,7 @@ internal static class SyntheticDocumentBuilder
         sb.AppendLine($"public {rowCollTypeName} Skip(int count) => this;");
         sb.AppendLine($"public {rowCollTypeName} Distinct() => this;");
         sb.AppendLine($"public IExcelRange ToRange() => default!;");
+        sb.AppendLine($"public GroupedRowCollection GroupBy(Func<{rowTypeName}, object> keySelector) => default!;");
         sb.AppendLine($"public IEnumerator<{rowTypeName}> GetEnumerator() => default!;");
         sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
         sb.AppendLine("}");

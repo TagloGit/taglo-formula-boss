@@ -92,6 +92,11 @@ public class RowCollection : IEnumerable<Row>
     public RowCollection Skip(int count) =>
         new(count >= 0 ? _rows.Skip(count) : _rows.SkipLast(-count), _columnMap);
 
+    public GroupedRowCollection GroupBy(Func<dynamic, object> keySelector) =>
+        new(_rows.GroupBy(r => keySelector(r), r => r)
+            .Select(g => new RowGroup(g.Key, g, _columnMap))
+            .ToList());
+
     public RowCollection Distinct()
     {
         var seen = new HashSet<string>();
