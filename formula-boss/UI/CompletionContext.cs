@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 using FormulaBoss.Parsing;
 
@@ -233,17 +233,8 @@ public static class ContextResolver
 
         // Check if any segment in the chain is ".Rows" — that makes this a Row context
         var root = chain[0];
-        var startIdx = 0;
 
-        if (hasRangePrefix || IsRangeIdentifier(root, metadata))
-        {
-            // Root is a known range/table — skip it when scanning for .Rows
-            if (!hasRangePrefix)
-            {
-                startIdx = 1;
-            }
-        }
-        else
+        if (!hasRangePrefix && !IsRangeIdentifier(root, metadata))
         {
             // Check if root is a lambda parameter in a Row context
             var (isRow, tableName) = IsRowContext(tokens, dotIndex, root);
