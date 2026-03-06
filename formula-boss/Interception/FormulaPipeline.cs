@@ -152,7 +152,7 @@ public class FormulaPipeline
         var candidateName = preferredName;
         var suffix = 2;
 
-        while (_registeredUdfExpressions.TryGetValue(SanitizeName(candidateName), out var existingExpression))
+        while (_registeredUdfExpressions.TryGetValue(FullMethodName(candidateName), out var existingExpression))
         {
             // If same expression, we can reuse the name (will hit cache anyway)
             if (existingExpression == expression)
@@ -170,7 +170,8 @@ public class FormulaPipeline
         return candidateName;
     }
 
-    private static string SanitizeName(string name) => CodeEmitter.SanitizeName(name);
+    private static string FullMethodName(string preferredName) =>
+        CodeEmitter.GenerateMethodName("", preferredName);
 
     private static bool ContainsTypeError(string errorMsg)
     {
