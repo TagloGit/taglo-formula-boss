@@ -160,6 +160,24 @@ public class WrapperTypePipelineTests
         Assert.Equal(60.0, result);
     }
 
+    [Fact]
+    public void Sugar_Scan_RunningTotal()
+    {
+        var values = new object[,] { { 10.0 }, { 20.0 }, { 30.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.Scan(0.0, (acc, r) => acc + (double)r[0])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(10.0, arr[0, 0]);
+        Assert.Equal(30.0, arr[1, 0]);
+        Assert.Equal(60.0, arr[2, 0]);
+    }
+
     #endregion
 
     #region Negative Indexing

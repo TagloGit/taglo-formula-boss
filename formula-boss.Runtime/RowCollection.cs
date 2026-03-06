@@ -97,6 +97,36 @@ public class RowCollection : IEnumerable<Row>
             .Select(g => new RowGroup(g.Key, g, _columnMap))
             .ToList());
 
+    public dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func)
+    {
+        dynamic acc = seed;
+        foreach (var row in _rows)
+        {
+            acc = func(acc, row);
+        }
+
+        return acc;
+    }
+
+    public IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func)
+    {
+        var results = new List<object?>();
+        dynamic acc = seed;
+        foreach (var row in _rows)
+        {
+            acc = func(acc, row);
+            results.Add((object?)acc);
+        }
+
+        var arr = new object?[results.Count, 1];
+        for (var i = 0; i < results.Count; i++)
+        {
+            arr[i, 0] = results[i] is ColumnValue cv ? cv.Value : results[i];
+        }
+
+        return new ExcelArray(arr);
+    }
+
     public RowCollection Distinct()
     {
         var seen = new HashSet<string>();

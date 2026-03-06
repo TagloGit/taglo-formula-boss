@@ -817,6 +817,114 @@ public class PipelineTests
     }
 
     [Fact]
+    public void RowPath_Aggregate_Sum()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Item");
+            TestUtilities.SetCellValue(ws, "A2", "A");
+            TestUtilities.SetCellValue(ws, "A3", "B");
+            TestUtilities.SetCellValue(ws, "A4", "C");
+            TestUtilities.SetCellValue(ws, "B1", "Price");
+            TestUtilities.SetCellValue(ws, "B2", 10.0);
+            TestUtilities.SetCellValue(ws, "B3", 20.0);
+            TestUtilities.SetCellValue(ws, "B4", 30.0);
+
+            var range = ws.Range["A1:B4"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Rows.Aggregate(0.0, (acc, r) => acc + (double)r[\"Price\"])`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1 value: {result}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(60.0, Convert.ToDouble(result));
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void RowPath_Scan_RunningTotal()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Item");
+            TestUtilities.SetCellValue(ws, "A2", "A");
+            TestUtilities.SetCellValue(ws, "A3", "B");
+            TestUtilities.SetCellValue(ws, "A4", "C");
+            TestUtilities.SetCellValue(ws, "B1", "Price");
+            TestUtilities.SetCellValue(ws, "B2", 10.0);
+            TestUtilities.SetCellValue(ws, "B3", 20.0);
+            TestUtilities.SetCellValue(ws, "B4", 30.0);
+
+            var range = ws.Range["A1:B4"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Rows.Scan(0.0, (acc, r) => acc + (double)r[\"Price\"])`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, D2={TestUtilities.GetCellValue(ws, "D2")}, D3={TestUtilities.GetCellValue(ws, "D3")}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(10.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D1")));
+                    Assert.Equal(30.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D2")));
+                    Assert.Equal(60.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D3")));
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void RowPath_GroupBy_SelectCount()
     {
         var ws = _excel.AddWorksheet();
