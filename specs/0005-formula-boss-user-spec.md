@@ -206,6 +206,8 @@ Access `.Rows` to iterate row-by-row. The lambda parameter is `dynamic` (a `Row`
 | `.Rows.Take(n)` | `RowCollection` | First n rows (negative = last n) |
 | `.Rows.Skip(n)` | `RowCollection` | Skip first n rows (negative = skip last n) |
 | `.Rows.Distinct()` | `RowCollection` | Remove duplicate rows |
+| `.Rows.Aggregate(seed, (acc, r) => expr)` | value | Fold rows to single value |
+| `.Rows.Scan(seed, (acc, r) => expr)` | `IExcelRange` | Running fold over rows |
 | `.Rows.Count()` | `int` | Number of rows |
 | `.Rows.ToRange()` | `IExcelRange` | Convert back to array for element-wise ops |
 | `.Rows.GroupBy(r => key)` | `GroupedRowCollection` | Group rows by key |
@@ -230,13 +232,6 @@ tbl.Rows.GroupBy(r => r["Region"]).Select(g => new object[] { g.Key, g.Count() }
 ```
 
 If a `GroupedRowCollection` is returned directly (without `.Select()`), it flattens all rows with a key column prepended.
-
-> **Planned — not yet implemented:**
->
-> | Operation | Returns | Description | Issue |
-> |---|---|---|---|
-> | `.Rows.Aggregate(seed, (acc, r) => expr)` | value | Fold rows to single value | #99 |
-> | `.Rows.Scan(seed, (acc, r) => expr)` | `RowCollection` | Running fold over rows | #99 |
 
 ### Column Access on Rows
 

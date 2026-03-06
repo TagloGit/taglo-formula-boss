@@ -260,26 +260,9 @@ public static class ContextResolver
             }
         }
 
-        // Scan the chain for the last .Rows accessor — if the chain ends with .Rows,
-        // the caret is in a Row context
-        for (var i = chain.Count - 1; i >= startIdx; i--)
-        {
-            if (chain[i].Equals("Rows", StringComparison.OrdinalIgnoreCase))
-            {
-                // .Rows is the last meaningful segment — Row context
-                if (i == chain.Count - 1)
-                {
-                    // Find root table name for column completions
-                    var tableName = hasRangePrefix ? null : root;
-                    return (DslType.Row, tableName);
-                }
-
-                // Something after .Rows (e.g. .Rows.Where(...).) — still could be Row
-                // if a later lambda parameter is in scope, but for the chain walk
-                // the result is Unknown (Roslyn handles method completions)
-                break;
-            }
-        }
+        // Scan the chain for .Rows — if present, Roslyn handles RowCollection method completions.
+        // Column completions are only shown inside lambda parameters (handled by IsRowContext above).
+        // No special handling needed here — fall through to Unknown.
 
         return (DslType.Unknown, null);
     }

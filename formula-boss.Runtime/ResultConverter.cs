@@ -25,6 +25,11 @@ public static class ResultConverter
             return range.ToResult();
         }
 
+        if (result is ColumnValue colVal)
+        {
+            return colVal.Value ?? string.Empty;
+        }
+
         if (result is bool or int or double or string)
         {
             return result;
