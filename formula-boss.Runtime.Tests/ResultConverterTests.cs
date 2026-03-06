@@ -120,10 +120,22 @@ public class ResultConverterTests
     }
 
     [Fact]
-    public void Convert_ColumnValue_ReturnsSingleValue()
+    public void Convert_ColumnValue_UnwrapsToRawValue()
     {
-        // A single ColumnValue isn't IEnumerable<ColumnValue>, so it falls through to generic return
-        // But wrapping in an enumerable of one tests the path
+        var result = ResultConverter.Convert(new ColumnValue(42.0));
+        Assert.Equal(42.0, result);
+    }
+
+    [Fact]
+    public void Convert_ColumnValue_NullReturnsEmpty()
+    {
+        var result = ResultConverter.Convert(new ColumnValue(null));
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Convert_ColumnValueEnumerable_ReturnsSingleValue()
+    {
         var result = ResultConverter.Convert(new[] { new ColumnValue(42.0) });
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(1, arr.GetLength(0));

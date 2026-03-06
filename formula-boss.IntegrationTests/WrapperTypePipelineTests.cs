@@ -161,6 +161,20 @@ public class WrapperTypePipelineTests
     }
 
     [Fact]
+    public void Sugar_Aggregate_WithoutCast()
+    {
+        var values = new object[,] { { 10.0 }, { 20.0 }, { 30.0 } };
+        var compilation = NewPipelineTestHelpers.CompileExpression(
+            "tbl.Rows.Aggregate(0.0, (acc, r) => acc + r[0])");
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        var result = NewPipelineTestHelpers.ExecuteWithValues(compilation.Method!, values);
+        Assert.Equal(60.0, result);
+    }
+
+    [Fact]
     public void Sugar_Scan_RunningTotal()
     {
         var values = new object[,] { { 10.0 }, { 20.0 }, { 30.0 } };
