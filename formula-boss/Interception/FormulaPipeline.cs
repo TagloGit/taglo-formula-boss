@@ -64,6 +64,13 @@ public class FormulaPipeline
             return new PipelineResult(true, cachedUdfName, null, cachedParams);
         }
 
+        // For preferred names (LET bindings), evict stale cache if the expression changed.
+        // This allows re-edits to reuse the same UDF name with a new implementation.
+        if (context?.PreferredUdfName != null)
+        {
+            EvictStaleCacheForPreferredName(context.PreferredUdfName);
+        }
+
         // Step 1: Detect parameters using Roslyn
         var detector = new InputDetector();
         DetectionResult detection;
@@ -152,7 +159,7 @@ public class FormulaPipeline
         var candidateName = preferredName;
         var suffix = 2;
 
-        while (_registeredUdfExpressions.TryGetValue(SanitizeName(candidateName), out var existingExpression))
+        while (_registeredUdfExpressions.TryGetValue(FullMethodName(candidateName), out var existingExpression))
         {
             // If same expression, we can reuse the name (will hit cache anyway)
             if (existingExpression == expression)
@@ -170,7 +177,41 @@ public class FormulaPipeline
         return candidateName;
     }
 
-    private static string SanitizeName(string name) => CodeEmitter.SanitizeName(name);
+    /// <summary>
+    ///     Evicts stale cache entries when a preferred name's expression has changed (re-edit).
+    ///     This allows the same UDF name to be reused with a new implementation.
+    /// </summary>
+    private void EvictStaleCacheForPreferredName(string preferredName)
+    {
+        var methodName = FullMethodName(preferredName);
+        if (!_registeredUdfExpressions.TryGetValue(methodName, out var oldExpression))
+        {
+            return;
+        }
+
+        // Find and remove the old cache entry that maps to this method name
+        string? oldCacheKey = null;
+        foreach (var (key, value) in _udfCache)
+        {
+            if (value == methodName)
+            {
+                oldCacheKey = key;
+                break;
+            }
+        }
+
+        if (oldCacheKey != null)
+        {
+            _udfCache.Remove(oldCacheKey);
+            _parametersCache.Remove(oldCacheKey);
+        }
+
+        _registeredUdfExpressions.Remove(methodName);
+        Debug.WriteLine($"Evicted stale UDF cache for {methodName} (was: {oldExpression})");
+    }
+
+    private static string FullMethodName(string preferredName) =>
+        CodeEmitter.GenerateMethodName("", preferredName);
 
     private static bool ContainsTypeError(string errorMsg)
     {

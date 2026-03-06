@@ -983,6 +983,84 @@ public class PipelineTests
     }
 
     [Fact]
+    public void ReEdit_LET_ChangedExpression_RecompilesUdf()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            // Step 1: Enter initial LET formula
+            TestUtilities.EnterBacktickFormula(ws, "B1",
+                "=LET(x, `A1:A3.Sum()`, x)");
+
+            var result1 = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"Step 1 - B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"Step 1 - B1 value: {result1}");
+
+            Assert.NotNull(result1);
+            Assert.Equal(60.0, Convert.ToDouble(result1)); // 10 + 20 + 30
+
+            // Step 2: Re-enter with a different expression (simulating editor re-edit)
+            TestUtilities.EnterBacktickFormula(ws, "B1",
+                "=LET(x, `A1:A3.Count()`, x)");
+
+            var result2 = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"Step 2 - B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"Step 2 - B1 value: {result2}");
+
+            Assert.NotNull(result2);
+            Assert.Equal(3.0, Convert.ToDouble(result2)); // Count = 3
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ReEdit_SimpleBacktick_ChangedExpression_RecompilesUdf()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            // Step 1: Enter initial backtick formula
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Sum()`");
+
+            var result1 = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"Step 1 - B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"Step 1 - B1 value: {result1}");
+
+            Assert.NotNull(result1);
+            Assert.Equal(60.0, Convert.ToDouble(result1));
+
+            // Step 2: Re-enter with a different expression
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Count()`");
+
+            var result2 = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"Step 2 - B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"Step 2 - B1 value: {result2}");
+
+            Assert.NotNull(result2);
+            Assert.Equal(3.0, Convert.ToDouble(result2));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void RowPath_GroupBy_SelectKeyAndCount()
     {
         var ws = _excel.AddWorksheet();
