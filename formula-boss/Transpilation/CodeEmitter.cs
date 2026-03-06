@@ -1,32 +1,104 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 namespace FormulaBoss.Transpilation;
 
 /// <summary>
-///     Generates C# UDF source code from a <see cref="DetectionResult"/>.
+///     Generates C# UDF source code from a <see cref="DetectionResult" />.
 ///     Generated code references FormulaBoss.Runtime types directly (loaded via host ALC).
 /// </summary>
 public class CodeEmitter
 {
+    public const string UdfPrefix = "__udf_";
+
     private static readonly HashSet<string> ReservedExcelNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "RESULT", "SUM", "AVERAGE", "COUNT", "MIN", "MAX", "IF", "AND", "OR", "NOT",
-        "FILTER", "SORT", "UNIQUE", "INDEX", "MATCH", "VLOOKUP", "HLOOKUP", "XLOOKUP",
-        "LET", "LAMBDA", "MAP", "REDUCE", "SCAN", "MAKEARRAY", "BYROW", "BYCOL",
-        "CHOOSE", "OFFSET", "INDIRECT", "ROW", "COLUMN", "ROWS", "COLUMNS",
-        "SUMIF", "SUMIFS", "COUNTIF", "COUNTIFS", "AVERAGEIF", "AVERAGEIFS",
-        "CONCATENATE", "TEXTJOIN", "LEFT", "RIGHT", "MID", "LEN", "FIND", "SEARCH",
-        "SUBSTITUTE", "REPLACE", "TRIM", "UPPER", "LOWER", "PROPER", "TEXT", "VALUE",
-        "TODAY", "NOW", "DATE", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
-        "ROUND", "ROUNDUP", "ROUNDDOWN", "INT", "MOD", "ABS", "POWER", "SQRT",
-        "TRUE", "FALSE", "NA", "ISNA", "ISERROR", "ISBLANK", "ISNUMBER", "ISTEXT"
+        "RESULT",
+        "SUM",
+        "AVERAGE",
+        "COUNT",
+        "MIN",
+        "MAX",
+        "IF",
+        "AND",
+        "OR",
+        "NOT",
+        "FILTER",
+        "SORT",
+        "UNIQUE",
+        "INDEX",
+        "MATCH",
+        "VLOOKUP",
+        "HLOOKUP",
+        "XLOOKUP",
+        "LET",
+        "LAMBDA",
+        "MAP",
+        "REDUCE",
+        "SCAN",
+        "MAKEARRAY",
+        "BYROW",
+        "BYCOL",
+        "CHOOSE",
+        "OFFSET",
+        "INDIRECT",
+        "ROW",
+        "COLUMN",
+        "ROWS",
+        "COLUMNS",
+        "SUMIF",
+        "SUMIFS",
+        "COUNTIF",
+        "COUNTIFS",
+        "AVERAGEIF",
+        "AVERAGEIFS",
+        "CONCATENATE",
+        "TEXTJOIN",
+        "LEFT",
+        "RIGHT",
+        "MID",
+        "LEN",
+        "FIND",
+        "SEARCH",
+        "SUBSTITUTE",
+        "REPLACE",
+        "TRIM",
+        "UPPER",
+        "LOWER",
+        "PROPER",
+        "TEXT",
+        "VALUE",
+        "TODAY",
+        "NOW",
+        "DATE",
+        "YEAR",
+        "MONTH",
+        "DAY",
+        "HOUR",
+        "MINUTE",
+        "SECOND",
+        "ROUND",
+        "ROUNDUP",
+        "ROUNDDOWN",
+        "INT",
+        "MOD",
+        "ABS",
+        "POWER",
+        "SQRT",
+        "TRUE",
+        "FALSE",
+        "NA",
+        "ISNA",
+        "ISERROR",
+        "ISBLANK",
+        "ISNUMBER",
+        "ISTEXT"
     };
 
     /// <summary>
     ///     Generates a UDF source code string from a detection result and the original expression.
     /// </summary>
-    /// <param name="detection">Detection result from <see cref="InputDetector"/>.</param>
+    /// <param name="detection">Detection result from <see cref="InputDetector" />.</param>
     /// <param name="originalExpression">The original user expression.</param>
     /// <param name="preferredName">Optional preferred UDF name.</param>
     /// <param name="headersByParameter">
@@ -90,12 +162,12 @@ public class CodeEmitter
         if (!string.IsNullOrWhiteSpace(preferredName))
         {
             var sanitized = SanitizeName(preferredName);
-            return $"__udf_{sanitized}";
+            return $"{UdfPrefix}{sanitized}";
         }
 
         using var sha = SHA256.Create();
         var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(expression));
-        return $"__udf_{Convert.ToHexString(hash)[..8]}";
+        return $"{UdfPrefix}{Convert.ToHexString(hash)[..8]}";
     }
 
     internal static string SanitizeName(string name)
@@ -197,18 +269,19 @@ public class CodeEmitter
         if (extractHeaders)
         {
             // Get headers from first row (only when expression uses r["Col"] syntax for this param)
-            sb.AppendLine($"        var {param}__headers = {param}__values is object[,] {param}__arr && {param}__arr.GetLength(0) > 0");
+            sb.AppendLine(
+                $"        var {param}__headers = {param}__values is object[,] {param}__arr && {param}__arr.GetLength(0) > 0");
             sb.AppendLine($"            ? FormulaBoss.RuntimeHelpers.GetHeadersDelegate?.Invoke({param}__arr)");
-            sb.AppendLine($"            : null;");
+            sb.AppendLine("            : null;");
 
             // Strip header row from values when headers are present
             sb.AppendLine($"        if ({param}__headers != null && {param}__values is object[,] {param}__valArr)");
             sb.AppendLine("        {");
             sb.AppendLine($"            var __rows = {param}__valArr.GetLength(0) - 1;");
             sb.AppendLine($"            var __cols = {param}__valArr.GetLength(1);");
-            sb.AppendLine($"            var __stripped = new object[__rows, __cols];");
-            sb.AppendLine($"            for (var __r = 0; __r < __rows; __r++)");
-            sb.AppendLine($"                for (var __c = 0; __c < __cols; __c++)");
+            sb.AppendLine("            var __stripped = new object[__rows, __cols];");
+            sb.AppendLine("            for (var __r = 0; __r < __rows; __r++)");
+            sb.AppendLine("                for (var __c = 0; __c < __cols; __c++)");
             sb.AppendLine($"                    __stripped[__r, __c] = {param}__valArr[__r + 1, __c];");
             sb.AppendLine($"            {param}__values = __stripped;");
             sb.AppendLine("        }");
@@ -222,18 +295,21 @@ public class CodeEmitter
         if (requiresObjectModel)
         {
             sb.AppendLine($"        var {param}__origin = {param}__isRef == true");
-            sb.AppendLine($"            ? (RangeOrigin?)FormulaBoss.RuntimeHelpers.GetOriginDelegate?.Invoke({param}__raw)");
-            sb.AppendLine($"            : null;");
+            sb.AppendLine(
+                $"            ? (RangeOrigin?)FormulaBoss.RuntimeHelpers.GetOriginDelegate?.Invoke({param}__raw)");
+            sb.AppendLine("            : null;");
 
             // When headers were stripped, the origin must shift down by one row
             // so cell positions align with the data rows, not the header row
             if (extractHeaders)
             {
                 sb.AppendLine($"        if ({param}__headers != null && {param}__origin != null)");
-                sb.AppendLine($"            {param}__origin = {param}__origin with {{ TopRow = {param}__origin.TopRow + 1 }};");
+                sb.AppendLine(
+                    $"            {param}__origin = {param}__origin with {{ TopRow = {param}__origin.TopRow + 1 }};");
             }
 
-            sb.AppendLine($"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);");
+            sb.AppendLine(
+                $"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);");
         }
         else
         {
