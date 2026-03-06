@@ -56,7 +56,7 @@ internal class EditorBehaviorHandler
     public Action? ForceCompletionRequested { get; set; }
 
     /// <summary>
-    ///     Invoked when Ctrl+Enter is pressed to apply the formula.
+    ///     Invoked when Enter is pressed to apply the formula.
     /// </summary>
     public Action<string>? FormulaApplyRequested { get; set; }
 
@@ -160,15 +160,15 @@ internal class EditorBehaviorHandler
 
             if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None)
             {
-                HandleEnter();
                 e.Handled = true;
+                FormulaApplyRequested?.Invoke(_editor.Text);
                 return;
             }
 
             if (e is { Key: Key.Enter, KeyboardDevice.Modifiers: ModifierKeys.Control })
             {
+                HandleEnter();
                 e.Handled = true;
-                FormulaApplyRequested?.Invoke(_editor.Text);
                 return;
             }
 
