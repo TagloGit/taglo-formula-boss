@@ -1,11 +1,15 @@
 ﻿namespace FormulaBoss.Runtime;
 
+/// <summary>Abstract base class for all Excel values (scalars, arrays, tables).</summary>
 public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, IComparable
 {
+    /// <summary>Gets the underlying raw value (a single object for scalars, object[,] for arrays).</summary>
     public abstract object? RawValue { get; }
 
+    /// <inheritdoc />
     public int CompareTo(object? obj) => obj is ExcelValue ev ? CompareTo(ev) : 1;
 
+    /// <inheritdoc />
     public int CompareTo(ExcelValue? other)
     {
         if (other is null)
@@ -33,30 +37,76 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
         return Comparer<double>.Default.Compare(Convert.ToDouble(a), Convert.ToDouble(b));
     }
 
-    // IExcelRange — abstract, implemented by ExcelArray and ExcelScalar
+    /// <inheritdoc />
     public abstract RowCollection Rows { get; }
+
+    /// <inheritdoc />
     public abstract IEnumerable<Cell> Cells { get; }
+
+    /// <inheritdoc />
     public abstract IExcelRange Where(Func<ExcelValue, bool> predicate);
+
+    /// <inheritdoc />
     public abstract IExcelRange Select(Func<ExcelValue, ExcelValue> selector);
+
+    /// <inheritdoc />
     public abstract IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector);
+
+    /// <inheritdoc />
     public abstract bool Any(Func<ExcelValue, bool> predicate);
+
+    /// <inheritdoc />
     public abstract bool All(Func<ExcelValue, bool> predicate);
+
+    /// <inheritdoc />
     public abstract ExcelValue First(Func<ExcelValue, bool> predicate);
+
+    /// <inheritdoc />
     public abstract ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate);
+
+    /// <inheritdoc />
     public abstract int Count();
+
+    /// <inheritdoc />
     public abstract ExcelScalar Sum();
+
+    /// <inheritdoc />
     public abstract ExcelScalar Min();
+
+    /// <inheritdoc />
     public abstract ExcelScalar Max();
+
+    /// <inheritdoc />
     public abstract ExcelScalar Average();
+
+    /// <inheritdoc />
     public abstract IExcelRange Map(Func<ExcelValue, ExcelValue> selector);
+
+    /// <inheritdoc />
     public abstract IExcelRange OrderBy(Func<ExcelValue, object> keySelector);
+
+    /// <inheritdoc />
     public abstract IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector);
+
+    /// <inheritdoc />
     public abstract IExcelRange Take(int count);
+
+    /// <inheritdoc />
     public abstract IExcelRange Skip(int count);
+
+    /// <inheritdoc />
     public abstract IExcelRange Distinct();
+
+    /// <inheritdoc />
     public abstract ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func);
+
+    /// <inheritdoc />
     public abstract IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func);
 
+    /// <summary>Wraps a raw Excel value into the appropriate ExcelValue subtype.</summary>
+    /// <param name="value">The raw value from Excel (scalar, object[,], or existing ExcelValue).</param>
+    /// <param name="headers">Column headers — if provided, creates an ExcelTable instead of ExcelArray.</param>
+    /// <param name="origin">The worksheet position of the range, enabling Cell access.</param>
     public static ExcelValue Wrap(object? value, string[]? headers = null,
         RangeOrigin? origin = null)
     {

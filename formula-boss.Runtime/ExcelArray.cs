@@ -1,5 +1,6 @@
 ﻿namespace FormulaBoss.Runtime;
 
+/// <summary>A 2D array of Excel values supporting element-wise operations.</summary>
 public class ExcelArray : ExcelValue, IExcelRange
 {
     private readonly Dictionary<string, int>? _columnMap;
@@ -14,9 +15,13 @@ public class ExcelArray : ExcelValue, IExcelRange
         _origin = origin;
     }
 
+    /// <inheritdoc />
     public override object RawValue => _data;
 
+    /// <summary>Gets the number of rows in this array.</summary>
     public int RowCount => _data.GetLength(0);
+
+    /// <summary>Gets the number of columns in this array.</summary>
     public int ColCount => _data.GetLength(1);
 
     public override RowCollection Rows
