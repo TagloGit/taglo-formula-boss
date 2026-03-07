@@ -1,4 +1,4 @@
-using FormulaBoss.UI;
+﻿using FormulaBoss.UI;
 using FormulaBoss.UI.Completion;
 
 using Xunit;
@@ -7,16 +7,13 @@ namespace FormulaBoss.Tests;
 
 public class SignatureHelpTests : IDisposable
 {
-    private readonly RoslynWorkspaceManager _workspace;
-    private readonly SignatureHelpProvider _provider;
-
     private static readonly WorkbookMetadata SalesMetadata = new(
         new[] { "Sales" },
         Array.Empty<string>(),
-        new Dictionary<string, IReadOnlyList<string>>
-        {
-            ["Sales"] = new[] { "Date", "Amount", "Region" }
-        });
+        new Dictionary<string, IReadOnlyList<string>> { ["Sales"] = new[] { "Date", "Amount", "Region" } });
+
+    private readonly SignatureHelpProvider _provider;
+    private readonly RoslynWorkspaceManager _workspace;
 
     public SignatureHelpTests()
     {
@@ -24,10 +21,7 @@ public class SignatureHelpTests : IDisposable
         _provider = new SignatureHelpProvider(_workspace);
     }
 
-    public void Dispose()
-    {
-        _workspace.Dispose();
-    }
+    public void Dispose() => _workspace.Dispose();
 
     [Fact]
     public async Task Where_ShowsSignature()
@@ -147,7 +141,7 @@ public class SignatureHelpTests : IDisposable
         var formula = "=`(`";
         var textUp = "=`(";
 
-        var result = await _provider.GetSignatureHelpAsync(
+        await _provider.GetSignatureHelpAsync(
             textUp, formula, SalesMetadata, CancellationToken.None);
 
         // Should return null gracefully, not throw
