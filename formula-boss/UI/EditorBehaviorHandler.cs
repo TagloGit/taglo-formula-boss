@@ -83,6 +83,34 @@ internal class EditorBehaviorHandler
     /// </summary>
     public Func<bool>? IsCompletionWindowOpen { get; set; }
 
+    /// <summary>
+    ///     Invoked when signature help should be shown or updated (on '(' or ',').
+    /// </summary>
+    public Action? SignatureHelpRequested { get; set; }
+
+    /// <summary>
+    ///     Invoked when signature help should be dismissed (on ')' or Escape).
+    /// </summary>
+    public Action? SignatureHelpDismissRequested { get; set; }
+
+    /// <summary>
+    ///     Returns true when the signature help popup is visible, so Up/Down
+    ///     can cycle overloads instead of moving the caret.
+    /// </summary>
+    public Func<bool>? IsSignatureHelpVisible { get; set; }
+
+    /// <summary>
+    ///     Invoked when the user presses Down to cycle to the next overload.
+    ///     Returns true if consumed.
+    /// </summary>
+    public Func<bool>? NextOverload { get; set; }
+
+    /// <summary>
+    ///     Invoked when the user presses Up to cycle to the previous overload.
+    ///     Returns true if consumed.
+    /// </summary>
+    public Func<bool>? PreviousOverload { get; set; }
+
     private void OnTextEntering(object sender, TextCompositionEventArgs e)
     {
         try
@@ -136,6 +164,15 @@ internal class EditorBehaviorHandler
                 CompletionRequested?.Invoke(ch);
             }
 
+            if (ch is '(' or ',')
+            {
+                SignatureHelpRequested?.Invoke();
+            }
+            else if (ch == ')')
+            {
+                SignatureHelpDismissRequested?.Invoke();
+            }
+
             if (IsCompletionListEmpty?.Invoke() == true)
             {
                 CompletionCloseRequested?.Invoke(ch);
@@ -151,6 +188,44 @@ internal class EditorBehaviorHandler
     {
         try
         {
+            // Up/Down cycle overloads when signature help is visible and completion is not
+            if (e.Key == Key.Down && e.KeyboardDevice.Modifiers == ModifierKeys.None
+                && IsCompletionWindowOpen?.Invoke() != true
+                && IsSignatureHelpVisible?.Invoke() == true)
+            {
+                if (NextOverload?.Invoke() == true)
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            if (e.Key == Key.Up && e.KeyboardDevice.Modifiers == ModifierKeys.None
+                && IsCompletionWindowOpen?.Invoke() != true
+                && IsSignatureHelpVisible?.Invoke() == true)
+            {
+                if (PreviousOverload?.Invoke() == true)
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // Escape: close completion first, then signature help
+            if (e.Key == Key.Escape && e.KeyboardDevice.Modifiers == ModifierKeys.None)
+            {
+                if (IsCompletionWindowOpen?.Invoke() == true)
+                {
+                    // Let AvalonEdit's CompletionWindow handle the Escape
+                }
+                else if (IsSignatureHelpVisible?.Invoke() == true)
+                {
+                    SignatureHelpDismissRequested?.Invoke();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if (e is { Key: Key.Space, KeyboardDevice.Modifiers: ModifierKeys.Control })
             {
                 e.Handled = true;
@@ -797,6 +872,14 @@ internal class EditorBehaviorHandler
         try
         {
             var currentLine = _editor.TextArea.Caret.Line;
+
+            // Re-trigger signature help when the popup is already visible
+            // to update active parameter as the caret moves between arguments
+            if (IsSignatureHelpVisible?.Invoke() == true)
+            {
+                SignatureHelpRequested?.Invoke();
+            }
+
             if (currentLine == _lastCaretLine)
             {
                 return;
