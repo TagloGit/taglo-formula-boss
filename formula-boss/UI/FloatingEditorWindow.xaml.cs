@@ -23,7 +23,10 @@ public partial class FloatingEditorWindow
     private bool _sizeChanged;
     private RoslynWorkspaceManager? _workspaceManager;
     private RoslynCompletionProvider? _completionProvider;
+    private SignatureHelpProvider? _signatureHelpProvider;
+    private SignatureHelpPopup? _signatureHelpPopup;
     private CancellationTokenSource? _completionCts;
+    private CancellationTokenSource? _signatureHelpCts;
 
     public FloatingEditorWindow()
     {
@@ -63,12 +66,18 @@ public partial class FloatingEditorWindow
             },
             FormulaApplyRequested = text =>
             {
+                DismissSignatureHelp();
                 FormulaApplied?.Invoke(this, text);
                 Hide();
             },
             IsCompletionListEmpty = () =>
                 _completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0,
-            IsCompletionWindowOpen = () => _completionWindow != null
+            IsCompletionWindowOpen = () => _completionWindow != null,
+            SignatureHelpRequested = () => ShowSignatureHelp(),
+            SignatureHelpDismissRequested = DismissSignatureHelp,
+            IsSignatureHelpVisible = () => _signatureHelpPopup?.IsVisible == true,
+            NextOverload = () => _signatureHelpPopup?.NextOverload() == true,
+            PreviousOverload = () => _signatureHelpPopup?.PreviousOverload() == true
         };
 
         // Track size changes with debounced save
@@ -90,6 +99,9 @@ public partial class FloatingEditorWindow
                 FormulaEditor.SelectAll();
             }
         };
+
+        // Dismiss signature help when editor loses focus
+        Deactivated += (_, _) => DismissSignatureHelp();
     }
 
     /// <summary>
@@ -128,6 +140,7 @@ public partial class FloatingEditorWindow
 
         _workspaceManager = new RoslynWorkspaceManager();
         _completionProvider = new RoslynCompletionProvider(_workspaceManager);
+        _signatureHelpProvider = new SignatureHelpProvider(_workspaceManager);
 
         // Fire-and-forget warm-up
         _ = _workspaceManager.WarmUpAsync();
@@ -230,6 +243,50 @@ public partial class FloatingEditorWindow
         };
     }
 
+    private async void ShowSignatureHelp()
+    {
+        EnsureWorkspace();
+
+        _signatureHelpCts?.Cancel();
+        _signatureHelpCts = new CancellationTokenSource();
+        var ct = _signatureHelpCts.Token;
+
+        var textUpToCaret = FormulaEditor.Document.GetText(0, FormulaEditor.CaretOffset);
+        var fullText = FormulaEditor.Text;
+
+        SignatureHelpModel? model;
+
+        try
+        {
+            model = await _signatureHelpProvider!.GetSignatureHelpAsync(
+                textUpToCaret, fullText, Metadata, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (model == null)
+        {
+            DismissSignatureHelp();
+            return;
+        }
+
+        _signatureHelpPopup ??= new SignatureHelpPopup(FormulaEditor);
+        _signatureHelpPopup.Update(model);
+    }
+
+    private void DismissSignatureHelp()
+    {
+        _signatureHelpCts?.Cancel();
+        _signatureHelpPopup?.Hide();
+    }
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         _sizeChanged = true;
@@ -261,6 +318,7 @@ public partial class FloatingEditorWindow
     {
         // Don't actually close, just hide - we reuse the window
         e.Cancel = true;
+        DismissSignatureHelp();
         Hide();
     }
 
@@ -269,8 +327,13 @@ public partial class FloatingEditorWindow
         _completionCts?.Cancel();
         _completionCts?.Dispose();
         _completionCts = null;
+        _signatureHelpCts?.Cancel();
+        _signatureHelpCts?.Dispose();
+        _signatureHelpCts = null;
+        DismissSignatureHelp();
         _workspaceManager?.Dispose();
         _workspaceManager = null;
         _completionProvider = null;
+        _signatureHelpProvider = null;
     }
 }
