@@ -143,7 +143,7 @@ public static class ContextResolver
     /// <summary>
     ///     Determines if the caret position is inside an unmatched backtick (i.e., inside a DSL expression).
     /// </summary>
-    private static bool IsInsideBackticks(string textUpToCaret)
+    internal static bool IsInsideBackticks(string textUpToCaret)
     {
         var count = 0;
         foreach (var c in textUpToCaret)
