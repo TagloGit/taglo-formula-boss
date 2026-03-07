@@ -1,5 +1,6 @@
 ﻿namespace FormulaBoss.Runtime;
 
+/// <summary>Represents a single cell value from a row, with implicit conversions and formatting access via Cell.</summary>
 public class ColumnValue : IComparable<ColumnValue>, IComparable
 {
     public ColumnValue(object? value)
@@ -7,6 +8,7 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
         Value = value;
     }
 
+    /// <summary>Gets the underlying raw value of this cell.</summary>
     public object? Value { get; }
 
     /// <summary>

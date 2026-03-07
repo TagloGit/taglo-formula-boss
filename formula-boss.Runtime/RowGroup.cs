@@ -13,5 +13,6 @@ public class RowGroup : RowCollection
         Key = key is ColumnValue cv ? cv.Value : key;
     }
 
+    /// <summary>Gets the grouping key shared by all rows in this group.</summary>
     public object? Key { get; }
 }

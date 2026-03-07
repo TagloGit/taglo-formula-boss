@@ -1,5 +1,6 @@
 ﻿namespace FormulaBoss.Runtime;
 
+/// <summary>A single Excel value (one cell or a computed scalar).</summary>
 public class ExcelScalar : ExcelValue, IExcelRange
 {
     private readonly RangeOrigin? _origin;

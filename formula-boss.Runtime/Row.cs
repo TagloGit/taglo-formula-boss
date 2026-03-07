@@ -2,6 +2,7 @@
 
 namespace FormulaBoss.Runtime;
 
+/// <summary>Represents a single row from an Excel range, with column access via indexer or dynamic member syntax.</summary>
 public class Row : DynamicObject
 {
     private readonly Dictionary<string, int>? _columnMap;
@@ -20,6 +21,8 @@ public class Row : DynamicObject
     /// </summary>
     internal Func<int, Cell>? CellResolver { get; }
 
+    /// <summary>Gets a column value by header name.</summary>
+    /// <param name="columnName">The column header name (case-insensitive).</param>
     public ColumnValue this[string columnName]
     {
         get
@@ -33,6 +36,8 @@ public class Row : DynamicObject
         }
     }
 
+    /// <summary>Gets a column value by zero-based index. Negative indices count from the end.</summary>
+    /// <param name="index">The column index.</param>
     public ColumnValue this[int index]
     {
         get
@@ -42,6 +47,7 @@ public class Row : DynamicObject
         }
     }
 
+    /// <summary>Gets the number of columns in this row.</summary>
     public int ColumnCount => _values.Length;
 
     /// <summary>
