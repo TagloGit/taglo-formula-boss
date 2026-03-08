@@ -72,10 +72,12 @@
                            Width="20" Height="20"
                            Margin="0,0,6,0"
                            RenderOptions.BitmapScalingMode="NearestNeighbor" />
-                    <TextBlock Text="Formula Boss"
-                               Foreground="#aaaaaa"
+                    <TextBlock Foreground="#aaaaaa"
                                FontSize="12"
-                               VerticalAlignment="Center" />
+                               VerticalAlignment="Center">
+                        <Run Text="Formula Boss" Foreground="#cccccc" FontWeight="SemiBold" />
+                        <Run Text="from Taglo" />
+                    </TextBlock>
                 </StackPanel>
             </DockPanel>
         </Border>
