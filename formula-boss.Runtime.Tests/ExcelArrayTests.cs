@@ -294,6 +294,15 @@ public class ExcelArrayTests
         Assert.Equal(1.0, (double)list[0]);
     }
 
+    [Fact]
+    public void ForEach_ExecutesActionPerElement()
+    {
+        var arr = MakeSingleColumn();
+        var sum = 0.0;
+        arr.ForEach(el => sum += (double)el);
+        Assert.Equal(6.0, sum);
+    }
+
     // --- SelectMany ---
 
     [Fact]

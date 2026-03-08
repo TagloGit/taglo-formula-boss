@@ -1,9 +1,10 @@
-﻿using System.Dynamic;
+﻿using System.Collections;
+using System.Dynamic;
 
 namespace FormulaBoss.Runtime;
 
 /// <summary>Represents a single row from an Excel range, with column access via indexer or dynamic member syntax.</summary>
-public class Row : DynamicObject
+public class Row : DynamicObject, IEnumerable<ColumnValue>
 {
     private readonly Dictionary<string, int>? _columnMap;
     private readonly object?[] _values;
@@ -49,6 +50,17 @@ public class Row : DynamicObject
 
     /// <summary>Gets the number of columns in this row.</summary>
     public int ColumnCount => _values.Length;
+
+    /// <summary>Returns an enumerator that iterates over the column values in this row.</summary>
+    public IEnumerator<ColumnValue> GetEnumerator()
+    {
+        for (var i = 0; i < _values.Length; i++)
+        {
+            yield return MakeColumnValue(i);
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     /// <summary>
     ///     Converts a Row to an ExcelArray (1 row × N columns) so it can be returned
