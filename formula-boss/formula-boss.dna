@@ -8,4 +8,7 @@
 
   <!-- Keep FormulaBoss.Runtime.dll unpacked so generated code (loaded via ALC) can resolve Runtime types -->
   <Reference Path="FormulaBoss.Runtime.dll" Pack="false" />
+
+  <!-- Logo for ribbon branding -->
+  <Image Name="logo32" Path="Resources\logo32.png" Pack="true" />
 </DnaLibrary>

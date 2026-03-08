@@ -1,5 +1,4 @@
-﻿using System.Drawing;
-using System.Reflection;
+using System.Drawing;
 using System.Runtime.InteropServices;
 
 using ExcelDna.Integration.CustomUI;
@@ -15,14 +14,14 @@ namespace FormulaBoss.UI;
 public class RibbonController : ExcelRibbon
 {
     public override string GetCustomUI(string ribbonId) =>
-        @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui' loadImage='LoadImage'>
+        @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
           <ribbon>
             <tabs>
               <tab id='formulaBossTab' label='Formula Boss'>
                 <group id='editorGroup' label='Editor'>
                   <button id='openEditor'
                           label='Open Editor'
-                          image='logo32'
+                          getImage='GetEditorButtonImage'
                           size='large'
                           onAction='OnOpenEditor'
                           screentip='Open Floating Editor'
@@ -33,17 +32,7 @@ public class RibbonController : ExcelRibbon
           </ribbon>
         </customUI>";
 
-    public Bitmap? LoadImage(string imageId)
-    {
-        if (imageId == "logo32")
-        {
-            var stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("FormulaBoss.Resources.logo-32.png");
-            return stream != null ? new Bitmap(stream) : null;
-        }
-
-        return null;
-    }
+    public Bitmap GetEditorButtonImage(IRibbonControl control) => (Bitmap)base.LoadImage("logo32");
 
     public void OnOpenEditor(IRibbonControl control) => ShowFloatingEditorCommand.ShowFloatingEditor();
 }

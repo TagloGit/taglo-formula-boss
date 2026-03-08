@@ -16,7 +16,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="UI\FormulaBossSyntax.xshd" />
-    <EmbeddedResource Include="Resources\logo-32.png" />
+    <EmbeddedResource Include="Resources\logo32.png" />
+    <None Include="Resources\logo32.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
