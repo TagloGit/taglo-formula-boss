@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="UI\FormulaBossSyntax.xshd" />
+    <EmbeddedResource Include="Resources\logo-32.png" />
   </ItemGroup>
 
   <ItemGroup>
