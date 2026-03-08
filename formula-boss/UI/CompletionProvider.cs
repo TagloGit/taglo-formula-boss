@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-using FormulaBoss.Interception;
+﻿using FormulaBoss.Interception;
 
 namespace FormulaBoss.UI;
 
@@ -197,7 +195,7 @@ internal static class CompletionHelpers
         }
 
         var bodyStart = letIdx + 4;
-        var args = SplitArgumentsTolerant(fullText, bodyStart);
+        var args = LetArgumentSplitter.SplitTolerant(fullText, bodyStart);
 
         for (var i = 0; i + 1 < args.Count; i += 2)
         {
@@ -242,7 +240,7 @@ internal static class CompletionHelpers
         }
 
         var bodyStart = letIdx + 4;
-        var args = SplitArgumentsTolerant(fullText, bodyStart);
+        var args = LetArgumentSplitter.SplitTolerant(fullText, bodyStart);
 
         for (var i = 0; i < args.Count; i += 2)
         {
@@ -261,94 +259,4 @@ internal static class CompletionHelpers
         return names;
     }
 
-    private static List<string> SplitArgumentsTolerant(string text, int startPos)
-    {
-        var args = new List<string>();
-        var current = new StringBuilder();
-        var depth = 0;
-        var inString = false;
-        var inBacktick = false;
-
-        for (var i = startPos; i < text.Length; i++)
-        {
-            var c = text[i];
-
-            if (inBacktick)
-            {
-                current.Append(c);
-                if (c == '`')
-                {
-                    inBacktick = false;
-                }
-
-                continue;
-            }
-
-            if (inString)
-            {
-                current.Append(c);
-                if (c == '"')
-                {
-                    if (i + 1 < text.Length && text[i + 1] == '"')
-                    {
-                        current.Append(text[i + 1]);
-                        i++;
-                    }
-                    else
-                    {
-                        inString = false;
-                    }
-                }
-
-                continue;
-            }
-
-            switch (c)
-            {
-                case '`':
-                    inBacktick = true;
-                    current.Append(c);
-                    break;
-                case '"':
-                    inString = true;
-                    current.Append(c);
-                    break;
-                case '(':
-                    depth++;
-                    current.Append(c);
-                    break;
-                case ')':
-                    if (depth > 0)
-                    {
-                        depth--;
-                        current.Append(c);
-                    }
-                    else
-                    {
-                        if (current.Length > 0)
-                        {
-                            args.Add(current.ToString());
-                        }
-
-                        return args;
-                    }
-
-                    break;
-                case ',' when depth == 0:
-                    args.Add(current.ToString());
-                    current.Clear();
-                    break;
-                default:
-                    current.Append(c);
-                    break;
-            }
-        }
-
-        if (current.Length > 0)
-        {
-            args.Add(current.ToString());
-        }
-
-        return args;
-    }
 }

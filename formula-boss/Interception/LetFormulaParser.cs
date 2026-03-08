@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace FormulaBoss.Interception;
+﻿namespace FormulaBoss.Interception;
 
 /// <summary>
 ///     Represents a variable binding in a LET formula.
@@ -82,7 +80,7 @@ public static class LetFormulaParser
 
         // Find the matching closing parenthesis
         var bodyStart = letStart + 4; // After "LET("
-        var bodyEnd = FindMatchingCloseParen(formula, bodyStart - 1);
+        var bodyEnd = LetArgumentSplitter.FindMatchingCloseParen(formula, bodyStart - 1);
         if (bodyEnd == -1)
         {
             return null;
@@ -92,7 +90,7 @@ public static class LetFormulaParser
         var body = formula.Substring(bodyStart, bodyEnd - bodyStart);
 
         // Split into arguments respecting nesting
-        var arguments = SplitArguments(body);
+        var arguments = LetArgumentSplitter.Split(body);
         if (arguments.Count < 3)
         {
             return null; // LET needs at least: name, value, result
@@ -117,132 +115,6 @@ public static class LetFormulaParser
         var resultExpression = arguments[^1].Trim();
 
         return new LetStructure(bindings, resultExpression, formula);
-    }
-
-    /// <summary>
-    ///     Finds the matching closing parenthesis for an opening parenthesis.
-    /// </summary>
-    /// <param name="text">The text to search.</param>
-    /// <param name="openParenIndex">Index of the opening parenthesis.</param>
-    /// <returns>Index of the matching closing parenthesis, or -1 if not found.</returns>
-    private static int FindMatchingCloseParen(string text, int openParenIndex)
-    {
-        var depth = 0;
-        var inString = false;
-        var stringChar = '\0';
-
-        for (var i = openParenIndex; i < text.Length; i++)
-        {
-            var c = text[i];
-
-            // Handle string literals
-            if (!inString && (c == '"' || c == '\''))
-            {
-                inString = true;
-                stringChar = c;
-            }
-            else if (inString && c == stringChar)
-            {
-                // Check for escaped quote (doubled)
-                if (i + 1 < text.Length && text[i + 1] == stringChar)
-                {
-                    i++; // Skip the escaped quote
-                }
-                else
-                {
-                    inString = false;
-                }
-            }
-            else if (!inString)
-            {
-                if (c == '(')
-                {
-                    depth++;
-                }
-                else if (c == ')')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        return i;
-                    }
-                }
-            }
-        }
-
-        return -1;
-    }
-
-    /// <summary>
-    ///     Splits LET arguments by comma, respecting nested parentheses and string literals.
-    /// </summary>
-    /// <param name="body">The LET body (content between LET( and )).</param>
-    /// <returns>List of argument strings.</returns>
-    private static List<string> SplitArguments(string body)
-    {
-        var arguments = new List<string>();
-        var current = new StringBuilder();
-        var depth = 0;
-        var inString = false;
-        var stringChar = '\0';
-
-        for (var i = 0; i < body.Length; i++)
-        {
-            var c = body[i];
-
-            // Handle string literals
-            if (!inString && (c == '"' || c == '\''))
-            {
-                inString = true;
-                stringChar = c;
-                current.Append(c);
-            }
-            else if (inString && c == stringChar)
-            {
-                current.Append(c);
-                // Check for escaped quote (doubled)
-                if (i + 1 < body.Length && body[i + 1] == stringChar)
-                {
-                    current.Append(body[i + 1]);
-                    i++; // Skip the escaped quote
-                }
-                else
-                {
-                    inString = false;
-                }
-            }
-            else if (inString)
-            {
-                current.Append(c);
-            }
-            else if (c == '(')
-            {
-                depth++;
-                current.Append(c);
-            }
-            else if (c == ')')
-            {
-                depth--;
-                current.Append(c);
-            }
-            else if (c == ',' && depth == 0)
-            {
-                arguments.Add(current.ToString());
-                current.Clear();
-            }
-            else
-            {
-                current.Append(c);
-            }
-        }
-
-        // Add the last argument
-        if (current.Length > 0)
-        {
-            arguments.Add(current.ToString());
-        }
-
-        return arguments;
     }
 
     /// <summary>
