@@ -54,11 +54,11 @@ Each test was in a separate class to isolate JIT failures.
 
 **FBTEST1 (assembly locations):**
 ```
-Runtime: C:\Users\trjac\Repositories\taglo-formula-boss\formula-boss\bin\Debug\net6.0-windows\FormulaBoss.Runtime.dll
+Runtime: <repo>\formula-boss\bin\Debug\net6.0-windows\FormulaBoss.Runtime.dll
   FullName: FormulaBoss.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 ExcelDNA: (empty location)
   FullName: ExcelDna.Integration, Version=1.1.0.0, Culture=neutral, PublicKeyToken=f225e9659857edbe
-Host: C:\Users\trjac\Repositories\taglo-formula-boss\formula-boss\bin\Debug\net6.0-windows\formula-boss.dll
+Host: <repo>\formula-boss\bin\Debug\net6.0-windows\formula-boss.dll
   FullName: formula-boss, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 ```
 
