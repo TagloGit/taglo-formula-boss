@@ -12,7 +12,7 @@
   <a href="#download">Download</a> &middot;
   <a href="#quick-examples">Examples</a> &middot;
   <a href="specs/0005-formula-boss-user-spec.md">Full Spec</a> &middot;
-  <a href="https://github.com/TagloGit">Taglo</a>
+  <a href="https://www.taglo.io">Taglo</a>
 </p>
 
 ---
@@ -93,4 +93,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, code style, and P
 
 ---
 
-<sub>Formula Boss is a [Taglo](https://github.com/TagloGit) project.</sub>
+<sub>Formula Boss is a [Taglo](https://www.taglo.io) project.</sub>
