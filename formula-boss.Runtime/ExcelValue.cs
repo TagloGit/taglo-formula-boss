@@ -98,10 +98,10 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract IExcelRange Distinct();
 
     /// <inheritdoc />
-    public abstract ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func);
+    public abstract dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 
     /// <inheritdoc />
-    public abstract IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func);
+    public abstract IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 
     /// <summary>Wraps a raw Excel value into the appropriate ExcelValue subtype.</summary>
     /// <param name="value">The raw value from Excel (scalar, object[,], or existing ExcelValue).</param>

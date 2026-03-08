@@ -89,10 +89,10 @@ public interface IExcelRange
     /// <summary>Applies an accumulator function over the elements, returning the final result.</summary>
     /// <param name="seed">The initial accumulator value.</param>
     /// <param name="func">A function that takes (accumulator, element) and returns the new accumulator.</param>
-    ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func);
+    dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 
     /// <summary>Like Aggregate, but returns all intermediate accumulator values as a range.</summary>
     /// <param name="seed">The initial accumulator value.</param>
     /// <param name="func">A function that takes (accumulator, element) and returns the new accumulator.</param>
-    IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func);
+    IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 }

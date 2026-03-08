@@ -90,12 +90,17 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override IExcelRange Skip(int count) => count == 0 ? this : new ExcelArray(new object[0, 0]);
     public override IExcelRange Distinct() => this;
 
-    public override ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func) =>
+    public override dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func) =>
         func(seed, this);
 
-    public override IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
+    public override IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func)
     {
-        var result = func(seed, this);
-        return result;
+        dynamic result = func(seed, this);
+        if (result is IExcelRange range)
+        {
+            return range;
+        }
+
+        return new ExcelScalar(result is ExcelValue ev ? ev.RawValue : result);
     }
 }
