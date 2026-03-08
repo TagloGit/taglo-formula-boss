@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -158,7 +158,7 @@ public class ExcelScalarTests
     public void Aggregate_DynamicSeed_And_DoubleReturns()
     {
         var scalar = new ExcelScalar(5.0);
-        var result = scalar.Aggregate(10.0, (dynamic acc, dynamic cell) => acc + cell);
+        var result = scalar.Aggregate(10.0, (acc, cell) => acc + cell);
         Assert.Equal(15.0, (double)result);
     }
 
@@ -176,7 +176,7 @@ public class ExcelScalarTests
     public void Scan_DynamicSeed_And_DoubleReturns()
     {
         var scalar = new ExcelScalar(5.0);
-        var result = scalar.Scan(10.0, (dynamic acc, dynamic cell) => acc + cell);
+        var result = scalar.Scan(10.0, (acc, cell) => acc + cell);
         Assert.Equal(15.0, (double)(ExcelValue)result);
     }
 

@@ -1,6 +1,4 @@
-using System.Collections.Generic;
-using System.Linq;
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -11,12 +9,7 @@ public class RowCollectionTests
 
     private static RowCollection CreateTestCollection()
     {
-        var rows = new Row[]
-        {
-            new(["A", 10.0], ColumnMap),
-            new(["B", 20.0], ColumnMap),
-            new(["C", 30.0], ColumnMap)
-        };
+        var rows = new Row[] { new(["A", 10.0], ColumnMap), new(["B", 20.0], ColumnMap), new(["C", 30.0], ColumnMap) };
         return new RowCollection(rows, ColumnMap);
     }
 

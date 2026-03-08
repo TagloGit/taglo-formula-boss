@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 /// <summary>A 2D array of Excel values supporting element-wise operations.</summary>
 public class ExcelArray : ExcelValue, IExcelRange
@@ -205,7 +203,7 @@ public class ExcelArray : ExcelValue, IExcelRange
 
     public override dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func)
     {
-        dynamic acc = seed;
+        var acc = seed;
         foreach (var el in ElementWise())
         {
             acc = func(acc, el);
@@ -217,7 +215,7 @@ public class ExcelArray : ExcelValue, IExcelRange
     public override IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func)
     {
         var results = new List<object?>();
-        dynamic acc = seed;
+        var acc = seed;
         foreach (var el in ElementWise())
         {
             acc = func(acc, el);
