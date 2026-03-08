@@ -155,12 +155,28 @@ public class ExcelScalarTests
     }
 
     [Fact]
+    public void Aggregate_DynamicSeed_And_DoubleReturns()
+    {
+        var scalar = new ExcelScalar(5.0);
+        var result = scalar.Aggregate(10.0, (dynamic acc, dynamic cell) => acc + cell);
+        Assert.Equal(15.0, (double)result);
+    }
+
+    [Fact]
     public void Scan_ReturnsResultOfFold()
     {
         var scalar = new ExcelScalar(5.0);
         var result = scalar.Scan(
             new ExcelScalar(10.0),
             (acc, cell) => new ExcelScalar((double)acc + (double)cell));
+        Assert.Equal(15.0, (double)(ExcelValue)result);
+    }
+
+    [Fact]
+    public void Scan_DynamicSeed_And_DoubleReturns()
+    {
+        var scalar = new ExcelScalar(5.0);
+        var result = scalar.Scan(10.0, (dynamic acc, dynamic cell) => acc + cell);
         Assert.Equal(15.0, (double)(ExcelValue)result);
     }
 
