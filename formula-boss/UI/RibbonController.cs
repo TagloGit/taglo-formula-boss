@@ -1,5 +1,4 @@
-using System.Drawing;
-using System.IO;
+﻿using System.Drawing;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -46,8 +45,5 @@ public class RibbonController : ExcelRibbon
         return null;
     }
 
-    public void OnOpenEditor(IRibbonControl control)
-    {
-        ShowFloatingEditorCommand.ShowFloatingEditor();
-    }
+    public void OnOpenEditor(IRibbonControl control) => ShowFloatingEditorCommand.ShowFloatingEditor();
 }

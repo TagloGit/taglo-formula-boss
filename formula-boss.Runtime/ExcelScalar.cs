@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 /// <summary>A single Excel value (one cell or a computed scalar).</summary>
 public class ExcelScalar : ExcelValue, IExcelRange
@@ -41,12 +39,6 @@ public class ExcelScalar : ExcelValue, IExcelRange
 
             yield return RuntimeBridge.GetCell(_origin.SheetName, _origin.TopRow, _origin.LeftCol);
         }
-    }
-
-    /// <inheritdoc />
-    public override IEnumerator<ExcelValue> GetEnumerator()
-    {
-        yield return this;
     }
 
     // Element-wise: a scalar is a single element
@@ -103,12 +95,18 @@ public class ExcelScalar : ExcelValue, IExcelRange
 
     public override IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func)
     {
-        dynamic result = func(seed, this);
+        var result = func(seed, this);
         if (result is IExcelRange range)
         {
             return range;
         }
 
         return new ExcelScalar(result is ExcelValue ev ? ev.RawValue : result);
+    }
+
+    /// <inheritdoc />
+    public override IEnumerator<ExcelValue> GetEnumerator()
+    {
+        yield return this;
     }
 }

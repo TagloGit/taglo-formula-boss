@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -221,7 +219,7 @@ public class ExcelArrayTests
     [Fact]
     public void Aggregate_DynamicSeed_And_DoubleReturns()
     {
-        var result = MakeSingleColumn().Aggregate(0.0, (dynamic acc, dynamic cell) => acc + cell);
+        var result = MakeSingleColumn().Aggregate(0.0, (acc, cell) => acc + cell);
         Assert.Equal(6.0, (double)result);
     }
 
@@ -229,7 +227,7 @@ public class ExcelArrayTests
     public void Aggregate_StringSeed_And_StringReturns()
     {
         var arr = new ExcelArray(new object?[,] { { "a" }, { "b" }, { "c" } });
-        var result = arr.Aggregate("", (dynamic acc, dynamic cell) => (string)acc + (string)cell);
+        var result = arr.Aggregate("", (acc, cell) => (string)acc + (string)cell);
         Assert.Equal("abc", (string)result);
     }
 
@@ -249,7 +247,7 @@ public class ExcelArrayTests
     [Fact]
     public void Scan_DynamicSeed_And_DoubleReturns()
     {
-        var result = MakeSingleColumn().Scan(0.0, (dynamic acc, dynamic cell) => acc + cell);
+        var result = MakeSingleColumn().Scan(0.0, (acc, cell) => acc + cell);
         var rows = result.Rows.ToList();
         Assert.Equal(3, rows.Count);
         Assert.Equal(1.0, (double)rows[0][0]);
