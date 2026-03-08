@@ -51,6 +51,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     {
         _instance = this;
 
+        // Install global exception handlers as early as possible — before any other
+        // initialization that might throw on background threads.
+        CrashGuard.InstallGlobalHandlers();
+
         try
         {
             // AutoClose is NOT called when Excel shuts down — only when the
@@ -183,7 +187,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"AddIn.AutoOpen error: {ex}");
+            CrashGuard.Log("AddIn.AutoOpen", ex);
         }
     }
 
@@ -209,7 +213,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"InitializeInterception error: {ex}");
+            CrashGuard.Log("InitializeInterception", ex);
         }
     }
 

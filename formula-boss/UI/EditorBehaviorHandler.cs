@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Input;
 
 using ICSharpCode.AvalonEdit;
@@ -138,7 +137,7 @@ internal class EditorBehaviorHandler
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"OnTextEntering error: {ex.Message}");
+            CrashGuard.Log("OnTextEntering", ex);
         }
     }
 
@@ -180,7 +179,7 @@ internal class EditorBehaviorHandler
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"OnTextEntered error: {ex.Message}");
+            CrashGuard.Log("OnTextEntered", ex);
         }
     }
 
@@ -298,7 +297,7 @@ internal class EditorBehaviorHandler
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"OnPreviewKeyDown error: {ex.Message}");
+            CrashGuard.Log("OnPreviewKeyDown", ex);
         }
     }
 
@@ -901,9 +900,9 @@ internal class EditorBehaviorHandler
                 doc.Replace(prevLine.Offset, prevLine.Length, "");
             }
         }
-        catch (ArgumentOutOfRangeException ex)
+        catch (Exception ex)
         {
-            Debug.WriteLine($"OnCaretPositionChanged error: {ex.Message}");
+            CrashGuard.Log("OnCaretPositionChanged", ex);
         }
     }
 

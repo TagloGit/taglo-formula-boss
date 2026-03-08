@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
@@ -147,7 +146,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ShowFloatingEditor error: {ex.Message}");
+            CrashGuard.Log("ShowFloatingEditor", ex);
         }
         finally
         {
@@ -210,7 +209,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"CaptureTargetCellPosition error: {ex}");
+            CrashGuard.Log("CaptureTargetCellPosition", ex);
             _targetCellScreenLeft = 0;
             _targetCellScreenTop = 0;
         }
@@ -237,6 +236,15 @@ public static class ShowFloatingEditorCommand
             _window = new FloatingEditorWindow();
             _window.FormulaApplied += OnFormulaApplied;
             _windowDispatcher = Dispatcher.CurrentDispatcher;
+
+            // Catch any unhandled exception on the WPF dispatcher thread
+            // so it doesn't crash the background thread (and potentially Excel).
+            _windowDispatcher.UnhandledException += (_, args) =>
+            {
+                CrashGuard.Log("WPF Dispatcher.UnhandledException", args.Exception);
+                args.Handled = true;
+            };
+
             readyEvent.Set();
 
             Dispatcher.Run();
@@ -293,7 +301,7 @@ public static class ShowFloatingEditorCommand
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"OnFormulaApplied error: {ex.Message}");
+                CrashGuard.Log("OnFormulaApplied", ex);
             }
             finally
             {
@@ -333,7 +341,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"PlayChompAnimation error: {ex.Message}");
+            CrashGuard.Log("PlayChompAnimation", ex);
             return null;
         }
     }

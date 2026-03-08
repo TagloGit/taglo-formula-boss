@@ -148,6 +148,22 @@ public partial class FloatingEditorWindow
 
     private async void ShowCompletion()
     {
+        try
+        {
+            await ShowCompletionCore();
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when user types quickly
+        }
+        catch (Exception ex)
+        {
+            CrashGuard.Log("ShowCompletion", ex);
+        }
+    }
+
+    private async Task ShowCompletionCore()
+    {
         // Don't open a second window
         if (_completionWindow != null)
         {
@@ -164,18 +180,8 @@ public partial class FloatingEditorWindow
         var textUpToCaret = FormulaEditor.Document.GetText(0, FormulaEditor.CaretOffset);
         var fullText = FormulaEditor.Text;
 
-        IReadOnlyList<CompletionData> items;
-        bool isBracketContext;
-
-        try
-        {
-            (items, isBracketContext) = await _completionProvider!.GetCompletionsAsync(
-                textUpToCaret, fullText, Metadata, ct);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
+        var (items, isBracketContext) = await _completionProvider!.GetCompletionsAsync(
+            textUpToCaret, fullText, Metadata, ct);
 
         if (ct.IsCancellationRequested || items.Count == 0)
         {
@@ -245,6 +251,22 @@ public partial class FloatingEditorWindow
 
     private async void ShowSignatureHelp()
     {
+        try
+        {
+            await ShowSignatureHelpCore();
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when user types quickly
+        }
+        catch (Exception ex)
+        {
+            CrashGuard.Log("ShowSignatureHelp", ex);
+        }
+    }
+
+    private async Task ShowSignatureHelpCore()
+    {
         EnsureWorkspace();
 
         _signatureHelpCts?.Cancel();
@@ -254,17 +276,8 @@ public partial class FloatingEditorWindow
         var textUpToCaret = FormulaEditor.Document.GetText(0, FormulaEditor.CaretOffset);
         var fullText = FormulaEditor.Text;
 
-        SignatureHelpModel? model;
-
-        try
-        {
-            model = await _signatureHelpProvider!.GetSignatureHelpAsync(
-                textUpToCaret, fullText, Metadata, ct);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
+        var model = await _signatureHelpProvider!.GetSignatureHelpAsync(
+            textUpToCaret, fullText, Metadata, ct);
 
         if (ct.IsCancellationRequested)
         {

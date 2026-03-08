@@ -127,6 +127,10 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         {
             // Expected when user types quickly
         }
+        catch (Exception ex)
+        {
+            CrashGuard.Log("ErrorHighlighter.OnDebounceTimerTick", ex);
+        }
     }
 
     private async Task UpdateErrorsAsync(CancellationToken ct)
