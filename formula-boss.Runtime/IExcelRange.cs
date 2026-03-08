@@ -86,6 +86,10 @@ public interface IExcelRange
     /// <summary>Returns distinct elements (compared by string representation).</summary>
     IExcelRange Distinct();
 
+    /// <summary>Executes an action for each element in the range.</summary>
+    /// <param name="action">The action to perform on each element.</param>
+    void ForEach(Action<ExcelValue> action);
+
     /// <summary>Applies an accumulator function over the elements, returning the final result.</summary>
     /// <param name="seed">The initial accumulator value.</param>
     /// <param name="func">A function that takes (accumulator, element) and returns the new accumulator.</param>

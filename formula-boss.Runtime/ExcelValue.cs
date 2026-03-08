@@ -105,6 +105,15 @@ public abstract class ExcelValue : IExcelRange, IEnumerable<ExcelValue>, ICompar
     public abstract IExcelRange Distinct();
 
     /// <inheritdoc />
+    public void ForEach(Action<ExcelValue> action)
+    {
+        foreach (var el in this)
+        {
+            action(el);
+        }
+    }
+
+    /// <inheritdoc />
     public abstract dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 
     /// <inheritdoc />

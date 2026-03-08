@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
@@ -59,5 +61,30 @@ public class RowCollectionTests
         var result = empty.Scan(0.0, (acc, r) => acc + (double)r[1]);
         var arr = (object?[,])result.ToResult();
         Assert.Equal(0, arr.GetLength(0));
+    }
+
+    [Fact]
+    public void Row_Foreach_EnumeratesColumnValues()
+    {
+        var row = new Row(new object?[] { "A", 10.0, true }, ColumnMap);
+        var values = new List<object?>();
+        foreach (var col in row)
+        {
+            values.Add(col.Value);
+        }
+
+        Assert.Equal(3, values.Count);
+        Assert.Equal("A", values[0]);
+        Assert.Equal(10.0, values[1]);
+        Assert.Equal(true, values[2]);
+    }
+
+    [Fact]
+    public void Row_LinqToList_Works()
+    {
+        var row = new Row(new object?[] { 1.0, 2.0, 3.0 }, null);
+        var list = row.ToList();
+        Assert.Equal(3, list.Count);
+        Assert.Equal(2.0, (double)list[1]);
     }
 }
