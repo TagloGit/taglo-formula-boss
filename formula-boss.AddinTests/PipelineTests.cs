@@ -1118,6 +1118,34 @@ public class PipelineTests
     }
 
     [Fact]
+    public void Foreach_SumsRange()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1",
+                "=LET(data, A1:A3, result, `{ var sum = 0.0; foreach (var x in data) { sum += (double)x; } return sum; }`, result)");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"B1 value: {result}");
+            _output.WriteLine($"B1 comment: {TestUtilities.GetCellComment(ws, "B1")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(60.0, Convert.ToDouble(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void CrossSheetRangeRef_SumsCorrectly()
     {
         // Create a second worksheet with data, then reference it from the first
