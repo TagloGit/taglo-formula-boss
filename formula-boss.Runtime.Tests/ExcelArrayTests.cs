@@ -217,11 +217,37 @@ public class ExcelArrayTests
     }
 
     [Fact]
+    public void Aggregate_DynamicSeed_And_DoubleReturns()
+    {
+        var result = MakeSingleColumn().Aggregate(0.0, (dynamic acc, dynamic cell) => acc + cell);
+        Assert.Equal(6.0, (double)result);
+    }
+
+    [Fact]
+    public void Aggregate_StringSeed_And_StringReturns()
+    {
+        var arr = new ExcelArray(new object?[,] { { "a" }, { "b" }, { "c" } });
+        var result = arr.Aggregate("", (dynamic acc, dynamic cell) => (string)acc + (string)cell);
+        Assert.Equal("abc", (string)result);
+    }
+
+    [Fact]
     public void Scan_RunningFold()
     {
         var result = MakeSingleColumn().Scan(
             new ExcelScalar(0.0),
             (acc, cell) => new ExcelScalar((double)acc + (double)cell));
+        var rows = result.Rows.ToList();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(1.0, (double)rows[0][0]);
+        Assert.Equal(3.0, (double)rows[1][0]);
+        Assert.Equal(6.0, (double)rows[2][0]);
+    }
+
+    [Fact]
+    public void Scan_DynamicSeed_And_DoubleReturns()
+    {
+        var result = MakeSingleColumn().Scan(0.0, (dynamic acc, dynamic cell) => acc + cell);
         var rows = result.Rows.ToList();
         Assert.Equal(3, rows.Count);
         Assert.Equal(1.0, (double)rows[0][0]);

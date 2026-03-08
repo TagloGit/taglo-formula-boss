@@ -201,9 +201,9 @@ public class ExcelArray : ExcelValue, IExcelRange
         return FromElements(distinct);
     }
 
-    public override ExcelValue Aggregate(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
+    public override dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func)
     {
-        var acc = seed;
+        dynamic acc = seed;
         foreach (var el in ElementWise())
         {
             acc = func(acc, el);
@@ -212,20 +212,20 @@ public class ExcelArray : ExcelValue, IExcelRange
         return acc;
     }
 
-    public override IExcelRange Scan(ExcelValue seed, Func<ExcelValue, ExcelValue, ExcelValue> func)
+    public override IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func)
     {
-        var results = new List<ExcelValue>();
-        var acc = seed;
+        var results = new List<object?>();
+        dynamic acc = seed;
         foreach (var el in ElementWise())
         {
             acc = func(acc, el);
-            results.Add(acc);
+            results.Add((object?)acc);
         }
 
         var array = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
         {
-            array[i, 0] = results[i].RawValue;
+            array[i, 0] = results[i] is ExcelValue ev ? ev.RawValue : results[i];
         }
 
         return new ExcelArray(array);
