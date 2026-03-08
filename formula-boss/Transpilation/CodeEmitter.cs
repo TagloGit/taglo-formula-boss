@@ -208,7 +208,11 @@ public class CodeEmitter
 
         // Using directives
         sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections;");
+        sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Text;");
+        sb.AppendLine("using System.Text.RegularExpressions;");
         sb.AppendLine("using FormulaBoss.Runtime;");
         sb.AppendLine();
 
