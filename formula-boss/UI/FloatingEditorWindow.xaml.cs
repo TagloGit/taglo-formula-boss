@@ -34,6 +34,9 @@ public partial class FloatingEditorWindow
 
         InitializeComponent();
 
+        // Load logo into the bottom bar
+        LoadLogo();
+
         // Apply saved size
         Width = _settings.Width;
         Height = _settings.Height;
@@ -117,6 +120,24 @@ public partial class FloatingEditorWindow
     }
 
     public event EventHandler<string>? FormulaApplied;
+
+    private void LoadLogo()
+    {
+        var assembly = typeof(FloatingEditorWindow).Assembly;
+        using var stream = assembly.GetManifestResourceStream("FormulaBoss.Resources.logo32.png");
+        if (stream == null)
+        {
+            return;
+        }
+
+        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+        bitmap.BeginInit();
+        bitmap.StreamSource = stream;
+        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        LogoImage.Source = bitmap;
+    }
 
     private void LoadSyntaxHighlighting()
     {
