@@ -362,7 +362,7 @@ internal static class SyntheticDocumentBuilder
             return result;
         }
 
-        var args = SplitArgumentsTolerant(fullText, letIdx + 4);
+        var args = LetArgumentSplitter.SplitTolerant(fullText, letIdx + 4);
         for (var i = 0; i + 1 < args.Count; i += 2)
         {
             if (args.Count % 2 == 1 && i == args.Count - 1)
@@ -391,76 +391,6 @@ internal static class SyntheticDocumentBuilder
         var value = rawValue.Trim();
         var typeName = ResolveBindingType(value, metadata, tableTypeNames);
         result.Add((varName, typeName));
-    }
-
-    /// <summary>
-    ///     Splits LET arguments tolerantly, respecting parens, strings, and backtick regions.
-    /// </summary>
-    private static List<string> SplitArgumentsTolerant(string text, int startPos)
-    {
-        var args = new List<string>();
-        var current = new StringBuilder();
-        var depth = 0;
-        var inBacktick = false;
-
-        for (var i = startPos; i < text.Length; i++)
-        {
-            var c = text[i];
-
-            if (inBacktick)
-            {
-                current.Append(c);
-                if (c == '`')
-                {
-                    inBacktick = false;
-                }
-
-                continue;
-            }
-
-            switch (c)
-            {
-                case '`':
-                    inBacktick = true;
-                    current.Append(c);
-                    break;
-                case '(':
-                    depth++;
-                    current.Append(c);
-                    break;
-                case ')':
-                    if (depth > 0)
-                    {
-                        depth--;
-                        current.Append(c);
-                    }
-                    else
-                    {
-                        if (current.Length > 0)
-                        {
-                            args.Add(current.ToString());
-                        }
-
-                        return args;
-                    }
-
-                    break;
-                case ',' when depth == 0:
-                    args.Add(current.ToString());
-                    current.Clear();
-                    break;
-                default:
-                    current.Append(c);
-                    break;
-            }
-        }
-
-        if (current.Length > 0)
-        {
-            args.Add(current.ToString());
-        }
-
-        return args;
     }
 
     private static string ResolveBindingType(

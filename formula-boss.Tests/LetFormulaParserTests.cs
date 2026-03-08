@@ -285,5 +285,53 @@ public class LetFormulaParserTests
         Assert.True(structure.Bindings[2].HasBacktick);  // filtered
     }
 
+    [Fact]
+    public void TryParse_HandlesCurlyBracesWithCommas()
+    {
+        var formula = @"=LET(
+    out, `{
+      var l = new List<int> { 1, 2, 3, 4, 5 };
+      return l.Where(x => x > 2).Sum();
+    }`,
+    out)";
+
+        var success = LetFormulaParser.TryParse(formula, out var structure);
+
+        Assert.True(success);
+        Assert.NotNull(structure);
+        Assert.Single(structure.Bindings);
+        Assert.Equal("out", structure.Bindings[0].VariableName);
+        Assert.True(structure.Bindings[0].HasBacktick);
+        Assert.Equal("out", structure.ResultExpression);
+    }
+
+    [Fact]
+    public void TryParse_HandlesSquareBracketsWithCommas()
+    {
+        var formula = "=LET(out, `new int[] { 1, 2, 3 }`, out)";
+
+        var success = LetFormulaParser.TryParse(formula, out var structure);
+
+        Assert.True(success);
+        Assert.NotNull(structure);
+        Assert.Single(structure.Bindings);
+        Assert.True(structure.Bindings[0].HasBacktick);
+    }
+
+    [Fact]
+    public void TryParse_HandlesBacktickWithNestedBrackets()
+    {
+        var formula = "=LET(t, Table1, out, `t.Rows.Where(r => r.Score > 0).Select(r => new { r.Name, r.Score })`, out)";
+
+        var success = LetFormulaParser.TryParse(formula, out var structure);
+
+        Assert.True(success);
+        Assert.NotNull(structure);
+        Assert.Equal(2, structure.Bindings.Count);
+        Assert.Equal("Table1", structure.Bindings[0].Value);
+        Assert.True(structure.Bindings[1].HasBacktick);
+        Assert.Equal("out", structure.ResultExpression);
+    }
+
     #endregion
 }
