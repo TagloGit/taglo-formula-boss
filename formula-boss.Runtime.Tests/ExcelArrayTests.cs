@@ -1,4 +1,6 @@
-﻿using Xunit;
+﻿using System.Collections.Generic;
+using System.Linq;
+using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -253,6 +255,43 @@ public class ExcelArrayTests
         Assert.Equal(1.0, (double)rows[0][0]);
         Assert.Equal(3.0, (double)rows[1][0]);
         Assert.Equal(6.0, (double)rows[2][0]);
+    }
+
+    // --- Foreach (IEnumerable<ExcelValue>) ---
+
+    [Fact]
+    public void Foreach_IteratesElementWise()
+    {
+        var arr = MakeSingleColumn();
+        var sum = 0.0;
+        foreach (var el in arr)
+        {
+            sum += (double)el;
+        }
+
+        Assert.Equal(6.0, sum);
+    }
+
+    [Fact]
+    public void Foreach_IteratesRowMajor_MultiColumn()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
+        var values = new List<double>();
+        foreach (var el in arr)
+        {
+            values.Add((double)el);
+        }
+
+        Assert.Equal(new[] { 1.0, 2.0, 3.0, 4.0 }, values);
+    }
+
+    [Fact]
+    public void LinqToList_WorksOnArray()
+    {
+        var arr = MakeSingleColumn();
+        var list = arr.ToList();
+        Assert.Equal(3, list.Count);
+        Assert.Equal(1.0, (double)list[0]);
     }
 
     // --- SelectMany ---

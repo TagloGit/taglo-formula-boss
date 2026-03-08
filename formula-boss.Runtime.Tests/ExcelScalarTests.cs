@@ -181,6 +181,22 @@ public class ExcelScalarTests
     }
 
     [Fact]
+    public void Foreach_IteratesOnce()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var count = 0;
+        var value = 0.0;
+        foreach (var el in scalar)
+        {
+            value = (double)el;
+            count++;
+        }
+
+        Assert.Equal(1, count);
+        Assert.Equal(42.0, value);
+    }
+
+    [Fact]
     public void SelectMany_FlattensResults()
     {
         var scalar = new ExcelScalar(3.0);
