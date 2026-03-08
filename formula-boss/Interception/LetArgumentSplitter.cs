@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace FormulaBoss.Interception;
 
@@ -12,24 +12,18 @@ internal static class LetArgumentSplitter
     ///     Splits LET arguments from a body string (content between the outer LET parentheses).
     ///     Requires the body to be already extracted (no outer parens).
     /// </summary>
-    public static List<string> Split(string body)
-    {
-        return SplitCore(body, 0, requireClosingParen: false);
-    }
+    public static List<string> Split(string body) => SplitCore(body, 0);
 
     /// <summary>
-    ///     Splits LET arguments starting at <paramref name="startPos"/> in <paramref name="text"/>,
+    ///     Splits LET arguments starting at <paramref name="startPos" /> in <paramref name="text" />,
     ///     stopping at the matching closing parenthesis. Tolerant of incomplete input
     ///     (missing closing paren returns whatever arguments were found).
     /// </summary>
-    public static List<string> SplitTolerant(string text, int startPos)
-    {
-        return SplitCore(text, startPos, requireClosingParen: false);
-    }
+    public static List<string> SplitTolerant(string text, int startPos) => SplitCore(text, startPos);
 
     /// <summary>
     ///     Finds the matching closing parenthesis for the opening parenthesis at
-    ///     <paramref name="openParenIndex"/>, correctly skipping nested brackets,
+    ///     <paramref name="openParenIndex" />, correctly skipping nested brackets,
     ///     backtick regions, and string literals.
     /// </summary>
     /// <returns>Index of the matching closing parenthesis, or -1 if not found.</returns>
@@ -47,7 +41,10 @@ internal static class LetArgumentSplitter
             if (inBacktick)
             {
                 if (c == '`')
+                {
                     inBacktick = false;
+                }
+
                 continue;
             }
 
@@ -56,10 +53,15 @@ internal static class LetArgumentSplitter
                 if (c == stringChar)
                 {
                     if (i + 1 < text.Length && text[i + 1] == stringChar)
+                    {
                         i++; // Skip doubled quote
+                    }
                     else
+                    {
                         inString = false;
+                    }
                 }
+
                 continue;
             }
 
@@ -83,7 +85,10 @@ internal static class LetArgumentSplitter
                 case ']':
                     depth--;
                     if (depth == 0 && c == ')')
+                    {
                         return i;
+                    }
+
                     break;
             }
         }
@@ -91,7 +96,7 @@ internal static class LetArgumentSplitter
         return -1;
     }
 
-    private static List<string> SplitCore(string text, int startPos, bool requireClosingParen)
+    private static List<string> SplitCore(string text, int startPos)
     {
         var args = new List<string>();
         var current = new StringBuilder();
@@ -109,7 +114,10 @@ internal static class LetArgumentSplitter
             {
                 current.Append(c);
                 if (c == '`')
+                {
                     inBacktick = false;
+                }
+
                 continue;
             }
 
@@ -129,6 +137,7 @@ internal static class LetArgumentSplitter
                         inString = false;
                     }
                 }
+
                 continue;
             }
 
@@ -165,9 +174,13 @@ internal static class LetArgumentSplitter
                     {
                         // Matching close paren for the outer LET( — stop here
                         if (current.Length > 0)
+                        {
                             args.Add(current.ToString());
+                        }
+
                         return args;
                     }
+
                     break;
                 case ',' when depth == 0:
                     args.Add(current.ToString());
@@ -181,7 +194,9 @@ internal static class LetArgumentSplitter
 
         // Reached end of text without closing paren
         if (current.Length > 0)
+        {
             args.Add(current.ToString());
+        }
 
         return args;
     }
