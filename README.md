@@ -1,8 +1,25 @@
-# Formula Boss
+<p align="center">
+  <img src="assets/logo-256.png" alt="Formula Boss logo" width="128" />
+</p>
 
-An Excel add-in that lets power users write inline C# expressions inside Excel formulas. Expressions operate on typed wrappers around Excel data and compile to UDFs at runtime via ExcelDNA and Roslyn. Built for competitive Excel.
+<h1 align="center">Formula Boss</h1>
 
-## What It Does
+<p align="center">
+  Write C# expressions directly in Excel formulas. Built for competitive Excel.
+</p>
+
+<p align="center">
+  <a href="#download">Download</a> &middot;
+  <a href="#quick-examples">Examples</a> &middot;
+  <a href="specs/0005-formula-boss-user-spec.md">Full Spec</a> &middot;
+  <a href="https://github.com/TagloGit">Taglo</a>
+</p>
+
+---
+
+## How It Works
+
+<!-- TODO: Replace with a GIF/screen recording of the backtick workflow -->
 
 Type a formula with backtick-delimited C# expressions:
 
@@ -10,7 +27,7 @@ Type a formula with backtick-delimited C# expressions:
 '=SUM(`data.Cells.Where(c => c.Color == 6).Select(c => c.Value)`)
 ```
 
-Formula Boss detects the expression, compiles it to a UDF, and rewrites the cell formula automatically.
+Formula Boss detects the expression, compiles it to a UDF via Roslyn, and rewrites the cell formula automatically.
 
 ## Quick Examples
 
@@ -40,9 +57,15 @@ Formula Boss detects the expression, compiles it to a UDF, and rewrites the cell
 - **LET integration** — backtick expressions work inside `=LET(...)` formulas
 - **Range references** — `A1:C10` works directly in expressions alongside named ranges and tables
 
+## Download
+
+<!-- TODO: Add link to GitHub Release once published -->
+
+No release is available yet. To try Formula Boss, build from source (see below).
+
 ## Building
 
-Requires .NET 6 SDK.
+Requires [.NET 6 SDK](https://dotnet.microsoft.com/download/dotnet/6.0).
 
 ```bash
 dotnet build formula-boss/formula-boss.slnx
@@ -60,6 +83,14 @@ dotnet test formula-boss/formula-boss.slnx
 - [User Specification](specs/0005-formula-boss-user-spec.md) — full expression language, type system, and operation reference
 - [Architecture Specification](specs/0006-formula-boss-architecture.md) — pipeline, runtime, and technical design
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, code style, and PR guidelines.
+
 ## License
 
-[TBD]
+[MIT](LICENSE)
+
+---
+
+<sub>Formula Boss is a [Taglo](https://github.com/TagloGit) project.</sub>
