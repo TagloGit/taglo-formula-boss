@@ -1,4 +1,6 @@
-﻿namespace FormulaBoss.Runtime;
+﻿using System.Collections.Generic;
+
+namespace FormulaBoss.Runtime;
 
 /// <summary>A 2D array of Excel values supporting element-wise operations.</summary>
 public class ExcelArray : ExcelValue, IExcelRange
@@ -230,6 +232,9 @@ public class ExcelArray : ExcelValue, IExcelRange
 
         return new ExcelArray(array);
     }
+
+    /// <inheritdoc />
+    public override IEnumerator<ExcelValue> GetEnumerator() => ElementWise().GetEnumerator();
 
     // --- Element-wise operations (iterate cell-by-cell, row-major) ---
 

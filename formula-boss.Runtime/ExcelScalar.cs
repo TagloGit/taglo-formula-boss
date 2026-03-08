@@ -1,4 +1,6 @@
-﻿namespace FormulaBoss.Runtime;
+﻿using System.Collections.Generic;
+
+namespace FormulaBoss.Runtime;
 
 /// <summary>A single Excel value (one cell or a computed scalar).</summary>
 public class ExcelScalar : ExcelValue, IExcelRange
@@ -39,6 +41,12 @@ public class ExcelScalar : ExcelValue, IExcelRange
 
             yield return RuntimeBridge.GetCell(_origin.SheetName, _origin.TopRow, _origin.LeftCol);
         }
+    }
+
+    /// <inheritdoc />
+    public override IEnumerator<ExcelValue> GetEnumerator()
+    {
+        yield return this;
     }
 
     // Element-wise: a scalar is a single element

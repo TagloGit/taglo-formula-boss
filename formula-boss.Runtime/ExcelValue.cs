@@ -1,8 +1,15 @@
-﻿namespace FormulaBoss.Runtime;
+﻿using System.Collections;
+
+namespace FormulaBoss.Runtime;
 
 /// <summary>Abstract base class for all Excel values (scalars, arrays, tables).</summary>
-public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, IComparable
+public abstract class ExcelValue : IExcelRange, IEnumerable<ExcelValue>, IComparable<ExcelValue>, IComparable
 {
+    /// <summary>Returns an enumerator that iterates element-wise over this value.</summary>
+    public abstract IEnumerator<ExcelValue> GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
     /// <summary>Gets the underlying raw value (a single object for scalars, object[,] for arrays).</summary>
     public abstract object? RawValue { get; }
 
