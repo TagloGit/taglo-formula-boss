@@ -5,6 +5,9 @@
 <h1 align="center">Formula Boss</h1>
 
 <p align="center">
+  This is the Formula Boss. It wants your formulas. You must feed it. NOW.
+</p>
+<p align="center">
   Write C# expressions directly in Excel formulas. Built for competitive Excel.
 </p>
 
@@ -26,6 +29,13 @@ Type a formula with backtick-delimited C# expressions:
 ```
 
 Formula Boss detects the expression, compiles it to a UDF via Roslyn, and rewrites the cell formula automatically.
+
+**But don't do it like that**:
+- Use the visual editor by pressing _Ctrl+Shift+`_.
+- Better yet, make your expression a LET argument, so that Formula Boss will give it a nice name.
+- Outside of a LET, your function won't be editable - inside a LET, you can use the visual editor to edit your function as much as you like.
+
+🚨 Warning: The Formula Boss is forgetful. It won't remember your functions next time you open Excel. If you used a LET function, you can recreate them, otherwise they're gone for good!
 
 ## Quick Examples
 
@@ -51,7 +61,7 @@ Formula Boss detects the expression, compiles it to a UDF via Roslyn, and rewrit
 - **Three wrapper types** — `ExcelScalar`, `ExcelArray`, `ExcelTable` with a unified operation API (`.Where()`, `.Select()`, `.Sum()`, `.Rows`, etc.)
 - **Automatic parameter detection** — all free variables become UDF parameters; no explicit declaration needed
 - **Cell formatting access** — filter/aggregate by color, bold, font via `.Cells`
-- **Floating editor** — `Ctrl+Shift+`` ` opens an editor with syntax highlighting, error squiggles, and Roslyn-powered autocomplete
+- **Floating editor** — `Ctrl+Shift+`` ` opens an editor with syntax highlighting, error squiggles, and autocomplete
 - **LET integration** — backtick expressions work inside `=LET(...)` formulas
 - **Range references** — `A1:C10` works directly in expressions alongside named ranges and tables
 
