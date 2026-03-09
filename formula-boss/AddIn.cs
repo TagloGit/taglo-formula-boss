@@ -28,6 +28,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             return;
         }
 
+        Logger.Info("Formula Boss add-in shutting down");
+
+        TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+
         // Unregister keyboard shortcuts
         try
         {
@@ -45,11 +49,19 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         _pipeline = null;
         _compiler = null;
         _disposed = true;
+
+        Logger.Info("Formula Boss add-in shutdown complete");
     }
 
     public void AutoOpen()
     {
         _instance = this;
+
+        Logger.Initialize();
+        Logger.Info("Formula Boss add-in loading");
+
+        // Catch exceptions from fire-and-forget tasks so they don't crash the process
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
         try
         {
@@ -141,10 +153,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 try
                 {
                     dynamic app = ExcelDnaUtil.Application;
-                    dynamic sheet = app.Sheets[sheetName];
-                    dynamic cell = sheet.Cells[row, col];
-                    dynamic interior = cell.Interior;
-                    dynamic font = cell.Font;
+                    var sheet = app.Sheets[sheetName];
+                    var cell = sheet.Cells[row, col];
+                    var interior = cell.Interior;
+                    var font = cell.Font;
                     var result = new Cell
                     {
                         Value = cell.Value2,
@@ -179,15 +191,21 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
 
-            Debug.WriteLine("Formula Boss add-in loaded successfully");
+            Logger.Info("Formula Boss add-in loaded successfully");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"AddIn.AutoOpen error: {ex}");
+            Logger.Error("AddIn.AutoOpen", ex);
         }
     }
 
     public void AutoClose() => Dispose();
+
+    private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        Logger.Error("Unobserved task", e.Exception);
+        e.SetObserved();
+    }
 
     private void InitializeInterception()
     {
@@ -205,11 +223,11 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // ^+` = Ctrl+Shift+` (^ = Ctrl, + = Shift)
             XlCall.Excel(XlCall.xlcOnKey, "^+`", "ShowFloatingEditor");
 
-            Debug.WriteLine("Formula Boss interception initialized");
+            Logger.Info("Formula Boss interception initialized");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"InitializeInterception error: {ex}");
+            Logger.Error("InitializeInterception", ex);
         }
     }
 

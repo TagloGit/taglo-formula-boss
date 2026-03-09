@@ -184,7 +184,7 @@ public class DynamicCompiler
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Failed to register {method.Name}: {ex.Message}");
+                    Logger.Error($"RegisterUDF({method.Name})", ex);
                 }
             }
         }
@@ -208,7 +208,7 @@ public class DynamicCompiler
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Failed to register {method.Name}: {ex.Message}");
+                    Logger.Error($"RegisterUDF({method.Name})", ex);
                 }
             }
         }
