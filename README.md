@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="#download">Download</a> &middot;
+  <a href="#demos">Demos</a> &middot;
   <a href="#quick-examples">Examples</a> &middot;
   <a href="specs/0005-formula-boss-user-spec.md">Full Spec</a> &middot;
   <a href="https://www.taglo.io">Taglo</a>
@@ -18,8 +18,6 @@
 ---
 
 ## How It Works
-
-<!-- TODO: Replace with a GIF/screen recording of the backtick workflow -->
 
 Type a formula with backtick-delimited C# expressions:
 
@@ -56,6 +54,26 @@ Formula Boss detects the expression, compiles it to a UDF via Roslyn, and rewrit
 - **Floating editor** — `Ctrl+Shift+`` ` opens an editor with syntax highlighting, error squiggles, and Roslyn-powered autocomplete
 - **LET integration** — backtick expressions work inside `=LET(...)` formulas
 - **Range references** — `A1:C10` works directly in expressions alongside named ranges and tables
+
+## Demos
+
+### Column name references
+
+Sum of `Price × Volume Sold` from a table — with column-name intellisense that auto-converts to bracket syntax. Shows editing the formula live to add `.Sum()`.
+
+<video src="assets/demo-column-references.mp4" controls width="100%"></video>
+
+### Cell properties
+
+Filter cells by formatting: `steps.Cells.Where(c => c.Bold)`. Toggling bold on cells updates the output in real time. Then editing the formula to handle the empty case with a statement block.
+
+<video src="assets/demo-cell-properties.mp4" controls width="100%"></video>
+
+### Recamán's sequence
+
+A statement expression with a `foreach` loop, `List<double>`, and visited-step tracking — computing the full Recamán's sequence. Then editing to `.Skip(1)` the starting step.
+
+<video src="assets/demo-recaman-sequence.mp4" controls width="100%"></video>
 
 ## Download
 
