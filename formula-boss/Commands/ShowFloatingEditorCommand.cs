@@ -254,9 +254,9 @@ public static class ShowFloatingEditorCommand
 
     private static void OnFormulaApplied(object? sender, string formula)
     {
-        // Play chomp animation on the WPF thread (non-blocking, DispatcherTimer-based).
+        // Play animation on the WPF thread (non-blocking, DispatcherTimer-based).
         // The overlay is non-focusable so it never steals focus from Excel.
-        var overlay = PlayChompAnimation();
+        var overlay = PlayAnimation();
 
         ExcelAsyncUtil.QueueAsMacro(() =>
         {
@@ -311,11 +311,21 @@ public static class ShowFloatingEditorCommand
         });
     }
 
-    private static AnimationOverlay? PlayChompAnimation()
+    private static AnimationOverlay? PlayAnimation()
     {
         try
         {
-            var frames = ChompAnimation.BuildFrames();
+            var settings = EditorSettings.Load();
+            if (settings.AnimationStyle == AnimationStyle.None)
+                return null;
+
+            var frames = settings.AnimationStyle switch
+            {
+                AnimationStyle.Roar => RoarAnimation.BuildFrames(),
+                AnimationStyle.Shuffle => ShuffleAnimation.BuildFrames(),
+                _ => ChompAnimation.BuildFrames()
+            };
+
             var overlay = new AnimationOverlay(frames, 100) { OneShot = true };
 
             // Position the native window BEFORE Show() so the first rendered frame
@@ -336,8 +346,47 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"PlayChompAnimation error: {ex.Message}");
+            Debug.WriteLine($"PlayAnimation error: {ex.Message}");
             return null;
+        }
+    }
+
+    /// <summary>
+    ///     Opens the settings dialog on the WPF thread.
+    /// </summary>
+    public static void ShowSettings()
+    {
+        try
+        {
+            EnsureWindowThread();
+
+            _windowDispatcher?.Invoke(() =>
+            {
+                var settings = EditorSettings.Load();
+                var dialog = new SettingsDialog(settings);
+
+                if (_window != null)
+                {
+                    dialog.Owner = _window;
+                }
+
+                if (dialog.ShowDialog() == true)
+                {
+                    settings.AnimationStyle = dialog.SelectedAnimation;
+                    settings.IndentSize = dialog.SelectedIndentSize;
+                    settings.Save();
+
+                    // Apply indent size immediately if editor is open
+                    if (_window is { IsVisible: true })
+                    {
+                        _window.ApplyIndentSize(settings.IndentSize);
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ShowSettings error: {ex.Message}");
         }
     }
 

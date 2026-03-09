@@ -27,6 +27,15 @@ public class RibbonController : ExcelRibbon
                           screentip='Open Floating Editor'
                           supertip='Open the Formula Boss floating editor (Ctrl+Shift+`)' />
                 </group>
+                <group id='settingsGroup' label='Settings'>
+                  <button id='openSettings'
+                          label='Settings'
+                          imageMso='ControlProperties'
+                          size='normal'
+                          onAction='OnOpenSettings'
+                          screentip='Formula Boss Settings'
+                          supertip='Configure animation style, indent size, and other preferences' />
+                </group>
               </tab>
             </tabs>
           </ribbon>
@@ -35,4 +44,6 @@ public class RibbonController : ExcelRibbon
     public Bitmap GetEditorButtonImage(IRibbonControl control) => (Bitmap)base.LoadImage("logo32");
 
     public void OnOpenEditor(IRibbonControl control) => ShowFloatingEditorCommand.ShowFloatingEditor();
+
+    public void OnOpenSettings(IRibbonControl control) => ShowFloatingEditorCommand.ShowSettings();
 }
