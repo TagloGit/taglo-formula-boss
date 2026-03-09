@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
@@ -37,9 +38,13 @@ public partial class FloatingEditorWindow
         // Load logo into the bottom bar
         LoadLogo();
 
-        // Apply saved size
+        // Apply saved size and font size
         Width = _settings.Width;
         Height = _settings.Height;
+        FormulaEditor.FontSize = _settings.FontSize;
+
+        // Ctrl+MouseWheel zoom
+        FormulaEditor.PreviewMouseWheel += OnEditorPreviewMouseWheel;
 
         // Load syntax highlighting
         LoadSyntaxHighlighting();
@@ -325,6 +330,25 @@ public partial class FloatingEditorWindow
             _settings.Save();
             _sizeChanged = false;
         }
+    }
+
+    private void OnEditorPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        const double minFontSize = 8;
+        const double maxFontSize = 30;
+        var delta = e.Delta > 0 ? 1.0 : -1.0;
+        var newSize = Math.Clamp(FormulaEditor.FontSize + delta, minFontSize, maxFontSize);
+
+        FormulaEditor.FontSize = newSize;
+        _settings.FontSize = newSize;
+        _settings.Save();
     }
 
     private void ApplyButton_Click(object sender, RoutedEventArgs e)
