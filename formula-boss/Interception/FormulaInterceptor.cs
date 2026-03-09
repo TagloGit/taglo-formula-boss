@@ -55,9 +55,6 @@ public class FormulaInterceptor : IDisposable
     {
         if (_app != null)
         {
-            var sw = Stopwatch.StartNew();
-            Logger.Info("  [interceptor] Stop() begin");
-
             try
             {
                 _app.SheetChange -= new SheetChangeHandler(OnSheetChange);
@@ -67,8 +64,6 @@ public class FormulaInterceptor : IDisposable
                 // Ignore errors during cleanup
             }
 
-            Logger.Info($"  [interceptor] SheetChange unhooked ({sw.ElapsedMilliseconds}ms)");
-
             try
             {
                 Marshal.ReleaseComObject(_app);
@@ -77,8 +72,6 @@ public class FormulaInterceptor : IDisposable
             {
                 // Ignore — may already be released
             }
-
-            Logger.Info($"  [interceptor] COM released ({sw.ElapsedMilliseconds}ms)");
 
             _app = null;
         }

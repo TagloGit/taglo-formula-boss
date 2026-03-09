@@ -47,24 +47,17 @@ public static class ShowFloatingEditorCommand
     /// </summary>
     public static void Cleanup()
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        Logger.Info("  [editor] Cleanup() begin");
-
         // 1. Release stored COM references BEFORE shutting down threads
         ReleaseTargetWorksheet();
-        Logger.Info($"  [editor] worksheet released ({sw.ElapsedMilliseconds}ms)");
 
         // 2. Shut down the WPF dispatcher
         _windowDispatcher?.InvokeShutdown();
-        Logger.Info($"  [editor] dispatcher shutdown requested ({sw.ElapsedMilliseconds}ms)");
 
         // 3. Wait for the WPF thread to actually finish (InvokeShutdown is async)
         if (_windowThread is { IsAlive: true })
         {
             _windowThread.Join(TimeSpan.FromSeconds(2));
         }
-
-        Logger.Info($"  [editor] thread joined ({sw.ElapsedMilliseconds}ms)");
 
         // 4. Null out all references
         _windowDispatcher = null;
@@ -73,7 +66,6 @@ public static class ShowFloatingEditorCommand
         _app = null;
         _targetAddress = null;
         _hasBeenPositioned = false;
-        Logger.Info($"  [editor] Cleanup() done ({sw.ElapsedMilliseconds}ms)");
     }
 
     /// <summary>

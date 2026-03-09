@@ -19,8 +19,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
     private DynamicCompiler? _compiler;
     private bool _disposed;
-    private bool _isExcelShutdown;
     private FormulaInterceptor? _interceptor;
+    private bool _isExcelShutdown;
     private FormulaPipeline? _pipeline;
 
     public void Dispose()
@@ -30,11 +30,9 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             return;
         }
 
-        var sw = Stopwatch.StartNew();
         Logger.Info("Formula Boss add-in shutting down");
 
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
-        Logger.Info($"  [shutdown] UnobservedTaskException unhooked ({sw.ElapsedMilliseconds}ms)");
 
         // Unregister keyboard shortcuts — but only when the add-in is being removed
         // while Excel stays running (AutoClose). During Excel shutdown (OnBeginShutdown),
@@ -51,21 +49,15 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             }
         }
 
-        Logger.Info($"  [shutdown] keyboard shortcut step done ({sw.ElapsedMilliseconds}ms)");
-
         ShowFloatingEditorCommand.Cleanup();
-        Logger.Info($"  [shutdown] ShowFloatingEditorCommand.Cleanup done ({sw.ElapsedMilliseconds}ms)");
 
-        Logger.Info($"  [shutdown] interceptor is {(_interceptor == null ? "null" : "set")}");
         _interceptor?.Dispose();
-        Logger.Info($"  [shutdown] interceptor disposed ({sw.ElapsedMilliseconds}ms)");
-
         _interceptor = null;
         _pipeline = null;
         _compiler = null;
         _disposed = true;
 
-        Logger.Info($"  [shutdown] complete ({sw.ElapsedMilliseconds}ms)");
+        Logger.Info("Formula Boss add-in shutdown complete");
     }
 
     public void AutoOpen()
