@@ -20,6 +20,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     private DynamicCompiler? _compiler;
     private bool _disposed;
     private FormulaInterceptor? _interceptor;
+    private bool _isExcelShutdown;
     private FormulaPipeline? _pipeline;
 
     public void Dispose()
@@ -33,14 +34,19 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
 
-        // Unregister keyboard shortcuts
-        try
+        // Unregister keyboard shortcuts — but only when the add-in is being removed
+        // while Excel stays running (AutoClose). During Excel shutdown (OnBeginShutdown),
+        // the C API macro context is not available and xlcOnKey blocks indefinitely.
+        if (!_isExcelShutdown)
         {
-            XlCall.Excel(XlCall.xlcOnKey, "^+`");
-        }
-        catch
-        {
-            // Ignore errors during cleanup — Excel may already be shutting down
+            try
+            {
+                XlCall.Excel(XlCall.xlcOnKey, "^+`");
+            }
+            catch
+            {
+                // Ignore errors during cleanup
+            }
         }
 
         ShowFloatingEditorCommand.Cleanup();
@@ -240,6 +246,13 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     /// </summary>
     private class ShutdownMonitor : ExcelComAddIn
     {
-        public override void OnBeginShutdown(ref Array custom) => _instance?.Dispose();
+        public override void OnBeginShutdown(ref Array custom)
+        {
+            if (_instance != null)
+            {
+                _instance._isExcelShutdown = true;
+                _instance.Dispose();
+            }
+        }
     }
 }

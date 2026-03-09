@@ -1,6 +1,8 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
+
+using ExcelDna.Integration.CustomUI;
 
 namespace FormulaBoss.Updates;
 
@@ -36,7 +38,8 @@ internal static class UpdateChecker
     {
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
             var version = Assembly.GetExecutingAssembly().GetName().Version;
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"FormulaBoss/{version}");
 
