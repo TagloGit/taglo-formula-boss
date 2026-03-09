@@ -7,18 +7,21 @@
     Must be run from the main branch with a clean working directory.
 
     Steps:
-      1. Prompt for new version and update Directory.Build.props
-      2. Commit version bump and push to main
+      1. Prompt for new version, certificate path, and password
+      2. Create release branch, bump version, push, and open PR
       3. Build in Release configuration
       4. Run tests
       5. Sign the XLL with code-signing certificate
       6. Sync version to InnoSetup script
       7. Compile the installer
       8. Sign the installer
-      9. Create git tag
-     10. Create GitHub Release (draft) with signed installer
+      9. Merge the version bump PR (only after build+sign succeed)
+     10. Create git tag on the merge commit
+     11. Create GitHub Release (draft) with signed installer
 
     Prompts for version, certificate path, and password. No secrets are stored.
+    The version bump only lands on main after the entire build and sign process
+    succeeds, so a failed release never leaves main in a bumped state.
 
 .PARAMETER Version
     The version to release (e.g. "0.2.0"). Prompted if not provided.
@@ -126,10 +129,11 @@ if ($gitStatus) {
 git -C $RepoRoot pull --ff-only
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull latest main. Resolve any divergence first." }
 
-# --- Step 1: Version bump ---
+# --- Step 1: Collect inputs ---
 
-Write-Step 1 "Version bump"
+Write-Step 1 "Collect release inputs"
 
+# Version
 $propsFile = "$RepoRoot\Directory.Build.props"
 [xml]$props = Get-Content $propsFile
 $currentVersion = $props.Project.PropertyGroup.Version
@@ -157,6 +161,7 @@ $xllPath = "$BuildOutput\formula-boss64.xll"
 $installerName = "FormulaBoss-$version-Setup.exe"
 $installerPath = "$InstallerDir\output\$installerName"
 $tag = "v$version"
+$releaseBranch = "release/v$version"
 
 # Check if tag already exists
 $existingTag = git -C $RepoRoot tag -l $tag
@@ -166,32 +171,8 @@ if ($existingTag) {
     Confirm-Continue "This will overwrite the existing tag. Continue?"
 }
 
-# Update Directory.Build.props
-$propsContent = Get-Content $propsFile -Raw
-$propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
-Set-Content $propsFile $propsContent -NoNewline
-
-Write-Success "Updated Directory.Build.props: $currentVersion -> $version"
-Write-Host "  Installer: $installerName"
-Write-Host "  Tag:       $tag"
-
-# Commit and push version bump
-if (-not $DryRun) {
-    git -C $RepoRoot add $propsFile
-    git -C $RepoRoot commit -m "Bump version to $version"
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to commit version bump." }
-    git -C $RepoRoot push
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push version bump." }
-    Write-Success "Version bump committed and pushed"
-} else {
-    Write-Skip "Version bump commit (--DryRun)"
-}
-
-# --- Step 2: Collect signing credentials ---
-
+# Signing credentials
 if (-not $SkipSign) {
-    Write-Step 2 "Collect signing credentials"
-
     if (-not $CertPath) {
         $CertPath = Read-Host "Path to .pfx certificate"
     }
@@ -208,6 +189,47 @@ if (-not $SkipSign) {
     }
 } else {
     Write-Skip "Code signing (--SkipSign)"
+}
+
+Write-Host ""
+Write-Host "  Version:   $currentVersion -> $version"
+Write-Host "  Branch:    $releaseBranch"
+Write-Host "  Installer: $installerName"
+Write-Host "  Tag:       $tag"
+
+# --- Step 2: Create release branch and version bump PR ---
+
+Write-Step 2 "Create version bump PR"
+
+if (-not $DryRun) {
+    git -C $RepoRoot checkout -b $releaseBranch
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to create branch $releaseBranch" }
+
+    # Update Directory.Build.props
+    $propsContent = Get-Content $propsFile -Raw
+    $propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
+    Set-Content $propsFile $propsContent -NoNewline
+
+    git -C $RepoRoot add $propsFile
+    git -C $RepoRoot commit -m "Bump version to $version"
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to commit version bump." }
+
+    git -C $RepoRoot push -u origin $releaseBranch
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push release branch." }
+
+    gh pr create --repo TagloGit/taglo-formula-boss `
+        --base main `
+        --head $releaseBranch `
+        --title "Release v$version" `
+        --body "Version bump for v$version release. Will be merged automatically by the publish script after build and signing succeed."
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to create PR." }
+    Write-Success "Release branch and PR created"
+} else {
+    # Still need to bump locally for the build
+    $propsContent = Get-Content $propsFile -Raw
+    $propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
+    Set-Content $propsFile $propsContent -NoNewline
+    Write-Skip "Release branch and PR (--DryRun)"
 }
 
 # --- Step 3: Build ---
@@ -319,20 +341,40 @@ Write-Host ("  Size:      {0:N1} MB" -f $installerSize)
 Write-Host ""
 
 if ($DryRun) {
-    Write-Host "DRY RUN -- skipping tag and GitHub Release creation." -ForegroundColor Yellow
+    Write-Host "DRY RUN -- skipping PR merge, tag, and GitHub Release." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Would run:" -ForegroundColor Yellow
+    Write-Host "  gh pr merge $releaseBranch --squash --delete-branch"
     Write-Host "  git tag $tag"
     Write-Host "  git push origin $tag"
     Write-Host "  gh release create $tag --title 'Formula Boss $version' ..."
+    # Restore Directory.Build.props since we modified it locally for the build
+    git -C $RepoRoot checkout -- $propsFile
     exit 0
 }
 
-Confirm-Continue "Create git tag and GitHub Release?"
+Confirm-Continue "Merge version bump PR, tag, and create GitHub Release?"
 
-# --- Step 10: Tag and release ---
+# --- Step 9: Merge version bump PR ---
 
-Write-Step 9 "Create git tag"
+Write-Step 9 "Merge version bump PR"
+
+gh pr merge $releaseBranch `
+    --repo TagloGit/taglo-formula-boss `
+    --squash `
+    --delete-branch
+if ($LASTEXITCODE -ne 0) { Write-Error "Failed to merge PR. Merge manually and re-run." }
+Write-Success "Version bump PR merged"
+
+# Switch back to main and pull the merge commit
+git -C $RepoRoot checkout main
+git -C $RepoRoot pull --ff-only
+if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull merged main." }
+Write-Success "On main with version bump"
+
+# --- Step 10: Tag the merge commit ---
+
+Write-Step 10 "Create git tag"
 
 # Delete existing tag if present (user already confirmed above)
 $existingTag = git -C $RepoRoot tag -l $tag
@@ -348,7 +390,7 @@ git -C $RepoRoot push origin $tag
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push tag." }
 Write-Success "Tag pushed to origin"
 
-Write-Step 10 "Create GitHub Release"
+Write-Step 11 "Create GitHub Release"
 
 # Write release notes to a temp file to avoid here-string parsing issues
 $releaseNotesFile = [System.IO.Path]::GetTempFileName()
