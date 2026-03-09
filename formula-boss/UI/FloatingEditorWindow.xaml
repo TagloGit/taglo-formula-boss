@@ -78,6 +78,11 @@
                         <Run Text="Formula Boss" Foreground="#cccccc" FontWeight="SemiBold" />
                         <Run Text="from Taglo" />
                     </TextBlock>
+                    <TextBlock x:Name="VersionLabel"
+                               Foreground="#888888"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0" />
                 </StackPanel>
             </DockPanel>
         </Border>
