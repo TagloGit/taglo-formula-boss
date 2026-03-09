@@ -3,19 +3,25 @@
     End-to-end release publishing script for Formula Boss.
 
 .DESCRIPTION
-    Walks through every step of building, signing, and publishing a Formula Boss release:
-      1. Read version from Directory.Build.props
-      2. Build in Release configuration
-      3. Run tests
-      4. Sign the XLL with code-signing certificate
-      5. Sync version to InnoSetup script
-      6. Compile the installer
-      7. Sign the installer
-      8. Verify both signatures
-      9. Create git tag
-     10. Create GitHub Release with signed installer
+    Walks through every step of building, signing, and publishing a Formula Boss release.
+    Must be run from the main branch with a clean working directory.
 
-    Prompts for certificate path and password. No secrets are stored.
+    Steps:
+      1. Prompt for new version and update Directory.Build.props
+      2. Commit version bump and push to main
+      3. Build in Release configuration
+      4. Run tests
+      5. Sign the XLL with code-signing certificate
+      6. Sync version to InnoSetup script
+      7. Compile the installer
+      8. Sign the installer
+      9. Create git tag
+     10. Create GitHub Release (draft) with signed installer
+
+    Prompts for version, certificate path, and password. No secrets are stored.
+
+.PARAMETER Version
+    The version to release (e.g. "0.2.0"). Prompted if not provided.
 
 .PARAMETER CertPath
     Path to the .pfx code-signing certificate. Prompted if not provided.
@@ -30,16 +36,17 @@
     Skip code signing (for local testing only).
 
 .PARAMETER DryRun
-    Show what would happen without executing destructive steps (tag, release).
+    Show what would happen without executing destructive steps (commit, tag, release).
 
 .EXAMPLE
     .\scripts\publish-release.ps1
-    .\scripts\publish-release.ps1 -CertPath "C:\certs\sectigo.pfx" -SkipTests
-    .\scripts\publish-release.ps1 -DryRun
+    .\scripts\publish-release.ps1 -Version "0.2.0" -CertPath "C:\certs\sectigo.pfx"
+    .\scripts\publish-release.ps1 -DryRun -SkipSign
 #>
 
 [CmdletBinding()]
 param(
+    [string]$Version,
     [string]$CertPath,
     [string]$CertPassword,
     [switch]$SkipTests,
@@ -100,35 +107,56 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Error ".NET SDK not found on PATH."
 }
 
-# Check working directory is clean
+# Must be on main
+$currentBranch = git -C $RepoRoot rev-parse --abbrev-ref HEAD
+if ($currentBranch -ne "main") {
+    Write-Error "Must be on the main branch to publish a release. Current branch: $currentBranch"
+}
+
+# Working directory must be clean
 $gitStatus = git -C $RepoRoot status --porcelain
 if ($gitStatus) {
     Write-Host ""
-    Write-Host "WARNING: Working directory has uncommitted changes:" -ForegroundColor Yellow
+    Write-Host "Uncommitted changes:" -ForegroundColor Red
     Write-Host $gitStatus
-    Confirm-Continue "Continue anyway?"
+    Write-Error "Working directory must be clean before publishing. Commit or stash your changes."
 }
 
-# --- Step 1: Read version ---
+# Pull latest
+git -C $RepoRoot pull --ff-only
+if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull latest main. Resolve any divergence first." }
 
-Write-Step 1 "Read version from Directory.Build.props"
+# --- Step 1: Version bump ---
+
+Write-Step 1 "Version bump"
 
 $propsFile = "$RepoRoot\Directory.Build.props"
 [xml]$props = Get-Content $propsFile
-$version = $props.Project.PropertyGroup.Version
-if (-not $version) {
+$currentVersion = $props.Project.PropertyGroup.Version
+if (-not $currentVersion) {
     Write-Error "Could not read <Version> from $propsFile"
 }
 
+Write-Host "  Current version: $currentVersion"
+
+if (-not $Version) {
+    $Version = Read-Host "New version (e.g. 0.2.0)"
+}
+
+if (-not ($Version -match '^\d+\.\d+\.\d+$')) {
+    Write-Error "Invalid version format: $Version (expected X.Y.Z)"
+}
+
+if ($Version -eq $currentVersion) {
+    Write-Host "  Version unchanged: $Version" -ForegroundColor Yellow
+    Confirm-Continue "Release with the same version?"
+}
+
+$version = $Version
 $xllPath = "$BuildOutput\formula-boss64.xll"
 $installerName = "FormulaBoss-$version-Setup.exe"
 $installerPath = "$InstallerDir\output\$installerName"
 $tag = "v$version"
-
-Write-Success "Version: $version"
-Write-Host "  XLL:       $xllPath"
-Write-Host "  Installer: $installerPath"
-Write-Host "  Tag:       $tag"
 
 # Check if tag already exists
 $existingTag = git -C $RepoRoot tag -l $tag
@@ -136,6 +164,27 @@ if ($existingTag) {
     Write-Host ""
     Write-Host "WARNING: Tag $tag already exists!" -ForegroundColor Yellow
     Confirm-Continue "This will overwrite the existing tag. Continue?"
+}
+
+# Update Directory.Build.props
+$propsContent = Get-Content $propsFile -Raw
+$propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
+Set-Content $propsFile $propsContent -NoNewline
+
+Write-Success "Updated Directory.Build.props: $currentVersion -> $version"
+Write-Host "  Installer: $installerName"
+Write-Host "  Tag:       $tag"
+
+# Commit and push version bump
+if (-not $DryRun) {
+    git -C $RepoRoot add $propsFile
+    git -C $RepoRoot commit -m "Bump version to $version"
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to commit version bump." }
+    git -C $RepoRoot push
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push version bump." }
+    Write-Success "Version bump committed and pushed"
+} else {
+    Write-Skip "Version bump commit (--DryRun)"
 }
 
 # --- Step 2: Collect signing credentials ---
