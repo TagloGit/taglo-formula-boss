@@ -367,7 +367,9 @@ public static class ShowFloatingEditorCommand
                 var settings = EditorSettings.Load();
                 var dialog = new SettingsDialog(settings);
 
-                if (_window != null)
+                // Only set owner if the editor window is visible — setting owner
+                // to a hidden window prevents the dialog from appearing
+                if (_window is { IsVisible: true })
                 {
                     dialog.Owner = _window;
                 }
@@ -378,7 +380,6 @@ public static class ShowFloatingEditorCommand
                     settings.IndentSize = dialog.SelectedIndentSize;
                     settings.Save();
 
-                    // Apply indent size immediately if editor is open
                     if (_window is { IsVisible: true })
                     {
                         _window.ApplyIndentSize(settings.IndentSize);
