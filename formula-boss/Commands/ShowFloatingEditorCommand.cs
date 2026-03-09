@@ -92,6 +92,7 @@ public static class ShowFloatingEditorCommand
             // Capture worksheet on the Excel thread (not inside the WPF dispatcher)
             // to avoid cross-apartment COM proxy complications
             worksheet = cell.Worksheet;
+            var sheetName = worksheet.Name as string;
 
             // Capture cell screen position for animation placement
             CaptureTargetCellPosition(cell);
@@ -119,6 +120,7 @@ public static class ShowFloatingEditorCommand
                         _targetWorksheet = worksheet;
                         worksheet = null; // Ownership transferred
                         _targetAddress = currentAddress;
+                        _window.UpdateTitle(sheetName, currentAddress);
                         _window.Metadata = metadata;
                         _window.FormulaText = editorContent;
                     }
@@ -130,6 +132,7 @@ public static class ShowFloatingEditorCommand
                     _targetWorksheet = worksheet;
                     worksheet = null; // Ownership transferred
                     _targetAddress = currentAddress;
+                    _window.UpdateTitle(sheetName, currentAddress);
                     _window.Metadata = metadata;
                     _window.FormulaText = editorContent;
 

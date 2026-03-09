@@ -124,6 +124,21 @@ public partial class FloatingEditorWindow
         set => FormulaEditor.Text = value;
     }
 
+    /// <summary>
+    ///     Updates the title bar to show the cell being edited.
+    /// </summary>
+    public void UpdateTitle(string? sheetName, string? address)
+    {
+        if (string.IsNullOrEmpty(sheetName) || string.IsNullOrEmpty(address))
+        {
+            Title = "Formula Boss";
+            return;
+        }
+
+        var cleanAddress = address.Replace("$", "");
+        Title = $"Formula Boss \u2014 {sheetName}!{cleanAddress}";
+    }
+
     public event EventHandler<string>? FormulaApplied;
 
     private void LoadLogo()
