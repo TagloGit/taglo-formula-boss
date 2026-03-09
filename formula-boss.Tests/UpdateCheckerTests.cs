@@ -1,4 +1,4 @@
-using FormulaBoss.Updates;
+﻿using FormulaBoss.Updates;
 
 using Xunit;
 
@@ -17,7 +17,7 @@ public class UpdateCheckerTests
         var result = UpdateChecker.ParseVersion(tag);
 
         Assert.NotNull(result);
-        Assert.Equal(major, result!.Major);
+        Assert.Equal(major, result.Major);
         Assert.Equal(minor, result.Minor);
         Assert.Equal(build, result.Build);
     }
