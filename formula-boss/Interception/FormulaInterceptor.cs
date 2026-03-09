@@ -108,13 +108,13 @@ public class FormulaInterceptor : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"ProcessCell error for {address}: {ex.Message}");
+                    Logger.Error($"ProcessCell({address})", ex);
                 }
             });
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"OnSheetChange error: {ex.Message}");
+            Logger.Error("OnSheetChange", ex);
         }
         finally
         {
@@ -155,7 +155,7 @@ public class FormulaInterceptor : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ProcessCell error: {ex.Message}");
+            Logger.Error("ProcessCell", ex);
             SetCellError(cell, $"Internal error: {ex.Message}");
         }
     }

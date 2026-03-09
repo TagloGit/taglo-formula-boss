@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
@@ -150,7 +149,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ShowFloatingEditor error: {ex.Message}");
+            Logger.Error("ShowFloatingEditor", ex);
         }
         finally
         {
@@ -213,7 +212,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"CaptureTargetCellPosition error: {ex}");
+            Logger.Error("CaptureTargetCellPosition", ex);
             _targetCellScreenLeft = 0;
             _targetCellScreenTop = 0;
         }
@@ -240,6 +239,14 @@ public static class ShowFloatingEditorCommand
             _window = new FloatingEditorWindow();
             _window.FormulaApplied += OnFormulaApplied;
             _windowDispatcher = Dispatcher.CurrentDispatcher;
+
+            // Catch unhandled exceptions on the WPF thread so they don't crash Excel
+            _windowDispatcher.UnhandledException += (_, e) =>
+            {
+                Logger.Error("WPF dispatcher", e.Exception);
+                e.Handled = true;
+            };
+
             readyEvent.Set();
 
             Dispatcher.Run();
@@ -296,7 +303,7 @@ public static class ShowFloatingEditorCommand
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"OnFormulaApplied error: {ex.Message}");
+                Logger.Error("OnFormulaApplied", ex);
             }
             finally
             {
@@ -348,7 +355,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"PlayAnimation error: {ex.Message}");
+            Logger.Error("PlayAnimation", ex);
             return null;
         }
     }
@@ -397,7 +404,7 @@ public static class ShowFloatingEditorCommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ShowSettings error: {ex.Message}");
+            Logger.Error("ShowSettings", ex);
         }
     }
 
