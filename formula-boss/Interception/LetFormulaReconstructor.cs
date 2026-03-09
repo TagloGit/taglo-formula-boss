@@ -89,13 +89,6 @@ public static class LetFormulaReconstructor
                 continue;
             }
 
-            // Skip auto-generated _result / _result_N bindings - these become backtick result expressions
-            if ((varName == "_result" || varName.StartsWith("_result_", StringComparison.Ordinal)) &&
-                sourceExpressions.ContainsKey(varName))
-            {
-                continue;
-            }
-
             sb.Append(Indent);
             sb.Append(varName);
             sb.Append(", ");
@@ -117,36 +110,10 @@ public static class LetFormulaReconstructor
             sb.Append(',').Append(NewLine);
         }
 
-        // Handle result expression
+        // Handle result expression - emit as-is (variable references like _result
+        // are just normal LET bindings, same as any user-chosen name)
         sb.Append(Indent);
-        var resultExpr = structure.ResultExpression.Trim();
-
-        // Check for _result or _result_N variables and replace with backtick expressions
-        if (resultExpr == "_result" && sourceExpressions.TryGetValue("_result", out var resultDsl))
-        {
-            // Single backtick result
-            sb.Append('`');
-            sb.Append(resultDsl);
-            sb.Append('`');
-        }
-        else
-        {
-            // Check for multiple _result_N references in the result expression
-            var reconstructed = resultExpr;
-            var hasResultVars = false;
-            foreach (var (varName, dsl) in sourceExpressions)
-            {
-                if (!varName.StartsWith("_result_", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                reconstructed = reconstructed.Replace(varName, $"`{dsl}`");
-                hasResultVars = true;
-            }
-
-            sb.Append(hasResultVars ? reconstructed : resultExpr);
-        }
+        sb.Append(structure.ResultExpression.Trim());
 
         sb.Append(')');
 
