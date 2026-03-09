@@ -84,7 +84,6 @@
         <!-- Editor fills remaining space -->
         <avalonedit:TextEditor x:Name="FormulaEditor"
                                FontFamily="Consolas"
-                               FontSize="13"
                                ShowLineNumbers="True"
                                HorizontalScrollBarVisibility="Auto"
                                VerticalScrollBarVisibility="Auto"
