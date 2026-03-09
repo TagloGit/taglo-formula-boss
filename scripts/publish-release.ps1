@@ -362,6 +362,7 @@ Write-Step 9 "Merge version bump PR"
 gh pr merge $releaseBranch `
     --repo TagloGit/taglo-formula-boss `
     --squash `
+    --admin `
     --delete-branch
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to merge PR. Merge manually and re-run." }
 Write-Success "Version bump PR merged"
