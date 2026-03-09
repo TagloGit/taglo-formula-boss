@@ -29,9 +29,11 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             return;
         }
 
+        var sw = Stopwatch.StartNew();
         Logger.Info("Formula Boss add-in shutting down");
 
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+        Logger.Info($"  [shutdown] UnobservedTaskException unhooked ({sw.ElapsedMilliseconds}ms)");
 
         // Unregister keyboard shortcuts
         try
@@ -43,15 +45,21 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Ignore errors during cleanup — Excel may already be shutting down
         }
 
-        ShowFloatingEditorCommand.Cleanup();
+        Logger.Info($"  [shutdown] keyboard shortcut unregistered ({sw.ElapsedMilliseconds}ms)");
 
+        ShowFloatingEditorCommand.Cleanup();
+        Logger.Info($"  [shutdown] ShowFloatingEditorCommand.Cleanup done ({sw.ElapsedMilliseconds}ms)");
+
+        Logger.Info($"  [shutdown] interceptor is {(_interceptor == null ? "null" : "set")}");
         _interceptor?.Dispose();
+        Logger.Info($"  [shutdown] interceptor disposed ({sw.ElapsedMilliseconds}ms)");
+
         _interceptor = null;
         _pipeline = null;
         _compiler = null;
         _disposed = true;
 
-        Logger.Info("Formula Boss add-in shutdown complete");
+        Logger.Info($"  [shutdown] complete ({sw.ElapsedMilliseconds}ms)");
     }
 
     public void AutoOpen()
