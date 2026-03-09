@@ -193,6 +193,37 @@ begin
   Result := OpenKeyName;
 end;
 
+function IsExcelRunning: Boolean;
+var
+  WMIService: Variant;
+  Processes: Variant;
+begin
+  try
+    WMIService := CreateOleObject('WbemScripting.SWbemLocator');
+    WMIService := WMIService.ConnectServer('.', 'root\cimv2');
+    Processes := WMIService.ExecQuery('SELECT Name FROM Win32_Process WHERE Name = "EXCEL.EXE"');
+    Result := (Processes.Count > 0);
+  except
+    // If WMI fails, fall back to assuming Excel is not running
+    Result := False;
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  while IsExcelRunning do
+  begin
+    if MsgBox('Excel is currently running and must be closed before Formula Boss can be installed.' + #13#10 + #13#10 +
+              'Please close Excel and click OK to continue, or click Cancel to abort the installation.',
+              mbError, MB_OKCANCEL) = IDCANCEL then
+    begin
+      Result := 'Installation cancelled. Please close Excel and try again.';
+      Exit;
+    end;
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   I: Integer;
