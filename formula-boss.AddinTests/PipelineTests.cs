@@ -1146,6 +1146,91 @@ public class PipelineTests
     }
 
     [Fact]
+    public void CellsWhereBold_ReturnsValues()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+            TestUtilities.SetCellValue(ws, "A4", 40.0);
+
+            // Bold A2 and A4
+            TestUtilities.SetCellBold(ws, "A2", true);
+            TestUtilities.SetCellBold(ws, "A4", true);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A4.Cells.Where(c => c.Bold)`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}");
+            _output.WriteLine($"B1 comment: {TestUtilities.GetCellComment(ws, "B1")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(20.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
+            Assert.Equal(40.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B2")));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void SingleRow_ReturnsHorizontalArray()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Name");
+            TestUtilities.SetCellValue(ws, "B1", "Amount");
+            TestUtilities.SetCellValue(ws, "A2", "Alice");
+            TestUtilities.SetCellValue(ws, "B2", 100.0);
+            TestUtilities.SetCellValue(ws, "A3", "Bob");
+            TestUtilities.SetCellValue(ws, "B3", 200.0);
+
+            var range = ws.Range["A1:B3"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Rows.First()`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal("Alice", TestUtilities.GetCellValue(ws, "D1"));
+                    Assert.Equal(100.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "E1")));
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void CrossSheetRangeRef_SumsCorrectly()
     {
         // Create a second worksheet with data, then reference it from the first

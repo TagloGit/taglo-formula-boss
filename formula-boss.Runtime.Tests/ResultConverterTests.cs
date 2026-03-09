@@ -141,4 +141,57 @@ public class ResultConverterTests
         Assert.Equal(1, arr.GetLength(0));
         Assert.Equal(42.0, arr[0, 0]);
     }
+
+    [Fact]
+    public void Convert_Cell_UnwrapsToValue()
+    {
+        var result = ResultConverter.Convert(new Cell { Value = 42.0 });
+        Assert.Equal(42.0, result);
+    }
+
+    [Fact]
+    public void Convert_Cell_NullValueReturnsEmpty()
+    {
+        var result = ResultConverter.Convert(new Cell { Value = null });
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Convert_EnumerableCell_ReturnsVerticalArray()
+    {
+        IEnumerable<Cell> cells = new[]
+        {
+            new Cell { Value = 10.0 },
+            new Cell { Value = 20.0 },
+            new Cell { Value = 30.0 }
+        };
+
+        var result = ResultConverter.Convert(cells);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(1, arr.GetLength(1));
+        Assert.Equal(10.0, arr[0, 0]);
+        Assert.Equal(20.0, arr[1, 0]);
+        Assert.Equal(30.0, arr[2, 0]);
+    }
+
+    [Fact]
+    public void Convert_EnumerableCell_EmptyReturnsEmpty()
+    {
+        IEnumerable<Cell> cells = Array.Empty<Cell>();
+        var result = ResultConverter.Convert(cells);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Convert_SingleRow_ReturnsHorizontalArray()
+    {
+        var row = new Row(["Alice", 30.0], null);
+        var result = ResultConverter.Convert(row);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(1, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal("Alice", arr[0, 0]);
+        Assert.Equal(30.0, arr[0, 1]);
+    }
 }
