@@ -236,6 +236,7 @@ public class LetFormulaReconstructorTests
     [Fact]
     public void TryReconstruct_HandlesBacktickResultExpression()
     {
+        // _result is treated as a normal variable name — same as if the user named it _result
         var processed = @"=LET(data, A1:A10,
             _src_filtered, ""data.where(v => v > 0)"",
             filtered, FILTERED(data),
@@ -248,13 +249,14 @@ public class LetFormulaReconstructorTests
         Assert.True(result);
         Assert.NotNull(editable);
         Assert.Contains("`data.where(v => v > 0)`", editable);
-        // The result expression should be reconstructed with backticks
-        Assert.Contains("`filtered.max()`", editable);
+        Assert.Contains("_result, `filtered.max()`", editable);
+        Assert.EndsWith("_result)", editable);
     }
 
     [Fact]
     public void TryReconstruct_HandlesMultipleBacktickResultExpressions()
     {
+        // _result_N bindings are normal variables — result expression references them by name
         var processed = @"=LET(a, A1:A3, b, B1:B3,
             _src__result_1, ""a.Sum()"",
             _result_1, _RESULT_1(a),
@@ -266,7 +268,29 @@ public class LetFormulaReconstructorTests
 
         Assert.True(result);
         Assert.NotNull(editable);
-        Assert.EndsWith("`a.Sum()` + `b.Sum()`)", editable);
+        Assert.Contains("_result_1, `a.Sum()`", editable);
+        Assert.Contains("_result_2, `b.Sum()`", editable);
+        Assert.EndsWith("_result_1 + _result_2)", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_AutoResultWithNoExplicitVariable()
+    {
+        // Regression: issue #202 — _result is just a normal binding, not expanded in result position
+        var processed = @"=LET(
+            steps, SEQUENCE(10),
+            _src__result, ""steps.Select(s => s*3)"",
+            _result, __FB__RESULT(steps),
+            _result)";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains("steps, SEQUENCE(10)", editable);
+        Assert.Contains("_result, `steps.Select(s => s*3)`", editable);
+        Assert.EndsWith("_result)", editable);
+        Assert.DoesNotContain("_src_", editable);
     }
 
     #endregion
