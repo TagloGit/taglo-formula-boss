@@ -6,7 +6,7 @@ namespace FormulaBoss;
 ///     Simple file logger for crash diagnostics. Writes to %LOCALAPPDATA%\FormulaBoss\logs\formulaboss.log.
 ///     All I/O failures are silently ignored — the logger must never itself cause a crash.
 /// </summary>
-public static class Logger
+internal static class Logger
 {
     private const long MaxFileSize = 1_048_576; // 1 MB
 
