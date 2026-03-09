@@ -61,19 +61,19 @@ Formula Boss detects the expression, compiles it to a UDF via Roslyn, and rewrit
 
 Sum of `Price × Volume Sold` from a table — with column-name intellisense that auto-converts to bracket syntax. Shows editing the formula live to add `.Sum()`.
 
-<video src="assets/demo-column-references.mp4" controls width="100%"></video>
+<video src="https://private-user-images.githubusercontent.com/53003551/560283047-9d04fa83-2db5-4cea-af4e-9ca30a71bcb5.mp4" controls width="100%"></video>
 
 ### Cell properties
 
 Filter cells by formatting: `steps.Cells.Where(c => c.Bold)`. Toggling bold on cells updates the output in real time. Then editing the formula to handle the empty case with a statement block.
 
-<video src="assets/demo-cell-properties.mp4" controls width="100%"></video>
+<video src="https://private-user-images.githubusercontent.com/53003551/560281967-4eb56f3b-4d52-4048-bc08-10b7145174ec.mp4" controls width="100%"></video>
 
 ### Recamán's sequence
 
 A statement expression with a `foreach` loop, `List<double>`, and visited-step tracking — computing the full Recamán's sequence. Then editing to `.Skip(1)` the starting step.
 
-<video src="assets/demo-recaman-sequence.mp4" controls width="100%"></video>
+<video src="https://private-user-images.githubusercontent.com/53003551/560282147-16d3d2cc-38b2-4be2-96fc-1d917a368de7.mp4" controls width="100%"></video>
 
 ## Download
 
