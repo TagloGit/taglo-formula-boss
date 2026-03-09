@@ -8,16 +8,15 @@
 
     Steps:
       1. Prompt for new version, certificate path, and password
-      2. Create release branch, bump version, push, and open PR
+      2. Create release branch, bump version (props + .iss), push, and open PR
       3. Build in Release configuration
       4. Run tests
       5. Sign the XLL with code-signing certificate
-      6. Sync version to InnoSetup script
-      7. Compile the installer
-      8. Sign the installer
-      9. Merge the version bump PR (only after build+sign succeed)
-     10. Create git tag on the merge commit
-     11. Create GitHub Release (draft) with signed installer
+      6. Compile the installer
+      7. Sign the installer
+      8. Merge the version bump PR (only after build+sign succeed)
+      9. Create git tag on the merge commit
+     10. Create GitHub Release (draft) with signed installer
 
     Prompts for version, certificate path, and password. No secrets are stored.
     The version bump only lands on main after the entire build and sign process
@@ -63,6 +62,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $BuildOutput = "$RepoRoot\formula-boss\bin\Release\net6.0-windows"
 $InstallerDir = "$RepoRoot\installer"
+$IssFile = "$InstallerDir\formula-boss.iss"
 $SignTool = "C:\Program Files (x86)\Microsoft SDKs\ClickOnce\SignTool\signtool.exe"
 $IsccExe = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 $TimestampServer = "http://timestamp.sectigo.com"
@@ -210,7 +210,12 @@ if (-not $DryRun) {
     $propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
     Set-Content $propsFile $propsContent -NoNewline
 
-    git -C $RepoRoot add $propsFile
+    # Sync version to InnoSetup script
+    $issContent = Get-Content $IssFile -Raw
+    $issContent = $issContent -replace '#define MyAppVersion ".*?"', "#define MyAppVersion ""$version"""
+    Set-Content $IssFile $issContent -NoNewline
+
+    git -C $RepoRoot add $propsFile $IssFile
     git -C $RepoRoot commit -m "Bump version to $version"
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to commit version bump." }
 
@@ -229,6 +234,10 @@ if (-not $DryRun) {
     $propsContent = Get-Content $propsFile -Raw
     $propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
     Set-Content $propsFile $propsContent -NoNewline
+
+    $issContent = Get-Content $IssFile -Raw
+    $issContent = $issContent -replace '#define MyAppVersion ".*?"', "#define MyAppVersion ""$version"""
+    Set-Content $IssFile $issContent -NoNewline
     Write-Skip "Release branch and PR (--DryRun)"
 }
 
@@ -272,26 +281,9 @@ if (-not $SkipSign) {
     Write-Skip "XLL signing (--SkipSign)"
 }
 
-# --- Step 6: Sync version to InnoSetup script ---
+# --- Step 6: Compile the installer ---
 
-Write-Step 6 "Sync version to InnoSetup script"
-
-$issFile = "$InstallerDir\formula-boss.iss"
-$issContent = Get-Content $issFile -Raw
-$issVersionPattern = '#define MyAppVersion ".*?"'
-$issVersionNew = "#define MyAppVersion ""$version"""
-
-if ($issContent -match [regex]::Escape($issVersionNew)) {
-    Write-Success "InnoSetup version already matches: $version"
-} else {
-    $issContent = $issContent -replace $issVersionPattern, $issVersionNew
-    Set-Content $issFile $issContent -NoNewline
-    Write-Success "Updated InnoSetup version to: $version"
-}
-
-# --- Step 7: Compile the installer ---
-
-Write-Step 7 "Compile the installer"
+Write-Step 6 "Compile the installer"
 
 # Check bundled runtime exists
 $runtimeFiles = Get-ChildItem "$InstallerDir\bundled-runtime\windowsdesktop-runtime-6.0.*-win-x64.exe" -ErrorAction SilentlyContinue
@@ -302,7 +294,7 @@ if (-not $runtimeFiles) {
     Confirm-Continue "Continue without bundled runtime?"
 }
 
-& $IsccExe $issFile
+& $IsccExe $IssFile
 if ($LASTEXITCODE -ne 0) { Write-Error "InnoSetup compilation failed." }
 
 if (-not (Test-Path $installerPath)) {
@@ -310,10 +302,10 @@ if (-not (Test-Path $installerPath)) {
 }
 Write-Success "Installer built: $installerPath"
 
-# --- Step 8: Sign the installer ---
+# --- Step 7: Sign the installer ---
 
 if (-not $SkipSign) {
-    Write-Step 8 "Sign the installer"
+    Write-Step 7 "Sign the installer"
 
     & $SignTool sign /f $CertPath /p $CertPassword /fd sha256 /tr $TimestampServer /td sha256 $installerPath
     if ($LASTEXITCODE -ne 0) { Write-Error "Installer signing failed." }
@@ -322,11 +314,11 @@ if (-not $SkipSign) {
     if ($LASTEXITCODE -ne 0) { Write-Error "Installer signature verification failed." }
     Write-Success "Installer signed and verified"
 } else {
-    Write-Step 8 "Sign the installer"
+    Write-Step 7 "Sign the installer"
     Write-Skip "Installer signing (--SkipSign)"
 }
 
-# --- Step 9: Summary before publish ---
+# --- Summary before publish ---
 
 Write-Host ""
 Write-Host "==============================" -ForegroundColor Magenta
@@ -348,16 +340,16 @@ if ($DryRun) {
     Write-Host "  git tag $tag"
     Write-Host "  git push origin $tag"
     Write-Host "  gh release create $tag --title 'Formula Boss $version' ..."
-    # Restore Directory.Build.props since we modified it locally for the build
-    git -C $RepoRoot checkout -- $propsFile
+    # Restore locally modified files since we won't be committing
+    git -C $RepoRoot checkout -- $propsFile $IssFile
     exit 0
 }
 
 Confirm-Continue "Merge version bump PR, tag, and create GitHub Release?"
 
-# --- Step 9: Merge version bump PR ---
+# --- Step 8: Merge version bump PR ---
 
-Write-Step 9 "Merge version bump PR"
+Write-Step 8 "Merge version bump PR"
 
 gh pr merge $releaseBranch `
     --repo TagloGit/taglo-formula-boss `
@@ -373,9 +365,9 @@ git -C $RepoRoot pull --ff-only
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull merged main." }
 Write-Success "On main with version bump"
 
-# --- Step 10: Tag the merge commit ---
+# --- Step 9: Tag the merge commit ---
 
-Write-Step 10 "Create git tag"
+Write-Step 9 "Create git tag"
 
 # Delete existing tag if present (user already confirmed above)
 $existingTag = git -C $RepoRoot tag -l $tag
@@ -391,7 +383,7 @@ git -C $RepoRoot push origin $tag
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push tag." }
 Write-Success "Tag pushed to origin"
 
-Write-Step 11 "Create GitHub Release"
+Write-Step 10 "Create GitHub Release"
 
 # Write release notes to a temp file to avoid here-string parsing issues
 $releaseNotesFile = [System.IO.Path]::GetTempFileName()
