@@ -409,6 +409,41 @@ public static class ShowFloatingEditorCommand
     }
 
     /// <summary>
+    ///     Opens the About dialog on the WPF thread.
+    /// </summary>
+    public static void ShowAbout()
+    {
+        try
+        {
+            _app ??= ExcelDnaUtil.Application;
+            var excelHwnd = new IntPtr(_app.Hwnd);
+
+            EnsureWindowThread();
+
+            _windowDispatcher?.Invoke(() =>
+            {
+                var dialog = new AboutDialog();
+
+                if (_window is { IsVisible: true })
+                {
+                    dialog.Owner = _window;
+                }
+                else
+                {
+                    var dialogHwnd = new WindowInteropHelper(dialog).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, dialogHwnd);
+                }
+
+                dialog.ShowDialog();
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ShowAbout", ex);
+        }
+    }
+
+    /// <summary>
     ///     Releases the stored target worksheet COM reference.
     /// </summary>
     private static void ReleaseTargetWorksheet()

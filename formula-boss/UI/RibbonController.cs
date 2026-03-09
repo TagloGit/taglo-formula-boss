@@ -35,6 +35,11 @@ public class RibbonController : ExcelRibbon
                           onAction='OnOpenSettings'
                           screentip='Formula Boss Settings'
                           supertip='Configure animation style, indent size, and other preferences' />
+                  <button id='aboutButton'
+                          label='About'
+                          imageMso='Info'
+                          size='normal'
+                          onAction='OnAbout' />
                 </group>
               </tab>
             </tabs>
@@ -46,4 +51,6 @@ public class RibbonController : ExcelRibbon
     public void OnOpenEditor(IRibbonControl control) => ShowFloatingEditorCommand.ShowFloatingEditor();
 
     public void OnOpenSettings(IRibbonControl control) => ShowFloatingEditorCommand.ShowSettings();
+
+    public void OnAbout(IRibbonControl control) => ShowFloatingEditorCommand.ShowAbout();
 }

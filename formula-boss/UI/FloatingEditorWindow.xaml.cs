@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -37,6 +38,13 @@ public partial class FloatingEditorWindow
 
         // Load logo into the bottom bar
         LoadLogo();
+
+        // Set version label
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        if (version != null)
+        {
+            VersionLabel.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+        }
 
         // Apply saved size and font size
         Width = _settings.Width;
