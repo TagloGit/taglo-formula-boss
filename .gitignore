@@ -431,3 +431,13 @@ secrets/
 # Claude Code — track skills/agents, ignore local settings
 .claude/settings.local.json
 .claude/settings.local.*.json
+
+###############################
+# Installer                   #
+###############################
+
+# Bundled .NET runtime (downloaded, not committed)
+installer/bundled-runtime/
+
+# InnoSetup output
+installer/output/
