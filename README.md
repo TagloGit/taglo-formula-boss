@@ -87,9 +87,9 @@ A statement expression with a `foreach` loop, `List<double>`, and visited-step t
 
 ## Download
 
-<!-- TODO: Add link to GitHub Release once published -->
+**[Download the latest release](https://github.com/TagloGit/taglo-formula-boss/releases/latest)** — runs the installer, no admin rights needed.
 
-No release is available yet. To try Formula Boss, build from source (see below).
+Requires **64-bit Excel** (Microsoft 365 or Excel 2019+) on Windows 10/11. The installer bundles the .NET 6 runtime.
 
 ## Building
 
