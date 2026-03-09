@@ -6,6 +6,7 @@ using FormulaBoss.Commands;
 using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 using FormulaBoss.Runtime;
+using FormulaBoss.Updates;
 
 namespace FormulaBoss;
 
@@ -190,6 +191,9 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
+
+            // Fire-and-forget update check — runs on background thread, silent on failure
+            UpdateChecker.CheckForUpdateAsync();
 
             Logger.Info("Formula Boss add-in loaded successfully");
         }

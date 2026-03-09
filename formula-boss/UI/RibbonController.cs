@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 
 using ExcelDna.Integration.CustomUI;
 
 using FormulaBoss.Commands;
+using FormulaBoss.Updates;
 
 namespace FormulaBoss.UI;
 
@@ -13,8 +15,11 @@ namespace FormulaBoss.UI;
 [ComVisible(true)]
 public class RibbonController : ExcelRibbon
 {
+    private IRibbonUI? _ribbonUi;
+
     public override string GetCustomUI(string ribbonId) =>
-        @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'>
+        @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'
+                    onLoad='OnRibbonLoad'>
           <ribbon>
             <tabs>
               <tab id='formulaBossTab' label='Formula Boss'>
@@ -41,10 +46,26 @@ public class RibbonController : ExcelRibbon
                           size='normal'
                           onAction='OnAbout' />
                 </group>
+                <group id='updateGroup' label='Updates'>
+                  <button id='updateNotification'
+                          getLabel='GetUpdateLabel'
+                          getVisible='GetUpdateVisible'
+                          imageMso='Refresh'
+                          size='normal'
+                          onAction='OnUpdateClick'
+                          screentip='Update Available'
+                          supertip='A newer version of Formula Boss is available. Click to download.' />
+                </group>
               </tab>
             </tabs>
           </ribbon>
         </customUI>";
+
+    public void OnRibbonLoad(IRibbonUI ribbonUi)
+    {
+        _ribbonUi = ribbonUi;
+        UpdateChecker.UpdateAvailable += OnUpdateAvailable;
+    }
 
     public Bitmap GetEditorButtonImage(IRibbonControl control) => (Bitmap)base.LoadImage("logo32");
 
@@ -53,4 +74,32 @@ public class RibbonController : ExcelRibbon
     public void OnOpenSettings(IRibbonControl control) => ShowFloatingEditorCommand.ShowSettings();
 
     public void OnAbout(IRibbonControl control) => ShowFloatingEditorCommand.ShowAbout();
+
+    public string GetUpdateLabel(IRibbonControl control) =>
+        UpdateChecker.NewVersionAvailable != null
+            ? $"Update: v{UpdateChecker.NewVersionAvailable}"
+            : "No Updates";
+
+    public bool GetUpdateVisible(IRibbonControl control) =>
+        UpdateChecker.NewVersionAvailable != null;
+
+    public void OnUpdateClick(IRibbonControl control)
+    {
+        if (UpdateChecker.ReleaseUrl != null)
+        {
+            Process.Start(new ProcessStartInfo(UpdateChecker.ReleaseUrl) { UseShellExecute = true });
+        }
+    }
+
+    private void OnUpdateAvailable()
+    {
+        try
+        {
+            _ribbonUi?.InvalidateControl("updateNotification");
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"Failed to invalidate ribbon control: {ex.Message}");
+        }
+    }
 }
