@@ -1,8 +1,8 @@
-using System.Windows;
+﻿using System.Windows;
 
 namespace FormulaBoss.UI;
 
-public partial class SettingsDialog : Window
+public partial class SettingsDialog
 {
     public SettingsDialog(EditorSettings settings)
     {

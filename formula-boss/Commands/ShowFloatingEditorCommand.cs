@@ -317,7 +317,9 @@ public static class ShowFloatingEditorCommand
         {
             var settings = EditorSettings.Load();
             if (settings.AnimationStyle == AnimationStyle.None)
+            {
                 return null;
+            }
 
             var frames = settings.AnimationStyle switch
             {

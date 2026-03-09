@@ -1,8 +1,11 @@
-namespace FormulaBoss.UI.Animation;
+﻿namespace FormulaBoss.UI.Animation;
 
 public static class ShuffleAnimation
 {
     private const int _ = 0, D = 1, W = 5, R = 49, O = 52, L = 53, E = 55, J = 56, K = 57;
+
+    private const int CanvasWidth = 24;
+    private const int Pad = 2;
 
     private static readonly int[][] Base =
     [
@@ -21,7 +24,7 @@ public static class ShuffleAnimation
         [_, D, J, J, D, R, R, R, O, O, O, R, R, R, R, D, J, J, D, _], // 12 mouth interior
         [_, D, K, K, D, D, W, D, W, D, W, D, W, D, D, D, K, K, D, _], // 13 lower teeth
         [_, D, K, K, K, R, R, R, R, R, R, R, R, R, R, K, K, K, D, _], // 14 chin
-        [_, D, K, K, K, D, D, D, D, D, D, D, D, D, D, K, K, K, D, _]  // 15 chin border
+        [_, D, K, K, K, D, D, D, D, D, D, D, D, D, D, K, K, K, D, _] // 15 chin border
     ];
 
     // Fist rows (separate from body for independent vertical placement)
@@ -30,16 +33,13 @@ public static class ShuffleAnimation
         [D, E, E, K, K, D, _, _, _, _, _, _, _, _, D, K, K, E, E, D], // top
         [D, E, L, D, K, K, D, _, _, _, _, _, _, D, K, K, D, L, E, D], // mid
         [D, E, L, D, K, K, D, _, _, _, _, _, _, D, K, K, D, L, E, D], // bottom
-        [D, D, D, D, D, D, D, _, _, _, _, _, _, D, D, D, D, D, D, D]  // base
+        [D, D, D, D, D, D, D, _, _, _, _, _, _, D, D, D, D, D, D, D] // base
     ];
-
-    private const int CanvasWidth = 24;
-    private const int Pad = 2;
 
     public static List<SpriteFrame> BuildFrames()
     {
-        return new List<SpriteFrame>
-        {
+        return
+        [
             // Frame 0: Idle (centered)
             BuildFrame(0, false, false, 0, false, "Idle", 2.0),
             // Frame 1: Lean left — shift 1px left, right fist up, eyes left, squash
@@ -56,7 +56,7 @@ public static class ShuffleAnimation
             BuildFrame(0, false, false, 0, true, "Bounce", 0.7),
             // Frame 7: Idle
             BuildFrame(0, false, false, 0, false, "Idle", 2.0)
-        };
+        ];
     }
 
     private static SpriteFrame BuildFrame(
@@ -113,14 +113,20 @@ public static class ShuffleAnimation
         for (var fi = 0; fi < 4; fi++)
         {
             var rowIdx = bodyEnd + leftStart + fi;
-            if (rowIdx < 0 || rowIdx >= totalRows) continue;
+            if (rowIdx < 0 || rowIdx >= totalRows)
+            {
+                continue;
+            }
+
             var pixels = leftFist[fi];
             var startX = Pad + bodyOffset;
             for (var px = 0; px < pixels.Length; px++)
             {
                 var x = startX + px;
                 if (x >= 0 && x < CanvasWidth && pixels[px] != _)
+                {
                     rows[rowIdx][x] = pixels[px];
+                }
             }
         }
 
@@ -128,14 +134,20 @@ public static class ShuffleAnimation
         for (var fi = 0; fi < 4; fi++)
         {
             var rowIdx = bodyEnd + rightStart + fi;
-            if (rowIdx < 0 || rowIdx >= totalRows) continue;
+            if (rowIdx < 0 || rowIdx >= totalRows)
+            {
+                continue;
+            }
+
             var pixels = rightFist[fi];
             var startX = Pad + bodyOffset + 13;
             for (var px = 0; px < pixels.Length; px++)
             {
                 var x = startX + px;
                 if (x >= 0 && x < CanvasWidth && pixels[px] != _)
+                {
                     rows[rowIdx][x] = pixels[px];
+                }
             }
         }
 
@@ -150,7 +162,9 @@ public static class ShuffleAnimation
         {
             var x = startX + i;
             if (x >= 0 && x < CanvasWidth)
+            {
                 result[x] = row[i];
+            }
         }
 
         return result;
