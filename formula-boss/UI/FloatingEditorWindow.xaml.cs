@@ -382,6 +382,11 @@ public partial class FloatingEditorWindow
         Hide();
     }
 
+    internal void ApplyIndentSize(int indentSize)
+    {
+        FormulaEditor.Options.IndentationSize = indentSize;
+    }
+
     internal void DisposeWorkspace()
     {
         _completionCts?.Cancel();

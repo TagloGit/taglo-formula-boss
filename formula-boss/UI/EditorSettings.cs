@@ -1,6 +1,16 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FormulaBoss.UI;
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum AnimationStyle
+{
+    Chomp,
+    Roar,
+    Shuffle,
+    None
+}
 
 public class EditorSettings
 {
@@ -10,6 +20,7 @@ public class EditorSettings
     public double Height { get; set; } = 300;
     public int IndentSize { get; set; } = 2;
     public double FontSize { get; set; } = 13;
+    public AnimationStyle AnimationStyle { get; set; } = AnimationStyle.Chomp;
 
     private static string SettingsDirectory =>
         Path.Combine(
