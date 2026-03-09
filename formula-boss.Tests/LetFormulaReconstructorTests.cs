@@ -250,6 +250,8 @@ public class LetFormulaReconstructorTests
         Assert.Contains("`data.where(v => v > 0)`", editable);
         // The result expression should be reconstructed with backticks
         Assert.Contains("`filtered.max()`", editable);
+        // _result should NOT appear as a named binding step
+        Assert.DoesNotContain("_result,", editable);
     }
 
     [Fact]
@@ -267,6 +269,30 @@ public class LetFormulaReconstructorTests
         Assert.True(result);
         Assert.NotNull(editable);
         Assert.EndsWith("`a.Sum()` + `b.Sum()`)", editable);
+        // _result_N should NOT appear as named binding steps
+        Assert.DoesNotContain("_result_1,", editable);
+        Assert.DoesNotContain("_result_2,", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_AutoResultWithNoExplicitVariable()
+    {
+        // Regression: issue #202 — backtick as final output with no explicit variable name
+        var processed = @"=LET(
+            steps, SEQUENCE(10),
+            _src__result, ""steps.Select(s => s*3)"",
+            _result, __FB__RESULT(steps),
+            _result)";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        // Should reconstruct as: steps binding + backtick result (no _result step)
+        Assert.Contains("steps, SEQUENCE(10)", editable);
+        Assert.EndsWith("`steps.Select(s => s*3)`)", editable);
+        Assert.DoesNotContain("_result,", editable);
+        Assert.DoesNotContain("_src_", editable);
     }
 
     #endregion

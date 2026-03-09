@@ -89,6 +89,13 @@ public static class LetFormulaReconstructor
                 continue;
             }
 
+            // Skip auto-generated _result / _result_N bindings - these become backtick result expressions
+            if ((varName == "_result" || varName.StartsWith("_result_", StringComparison.Ordinal)) &&
+                sourceExpressions.ContainsKey(varName))
+            {
+                continue;
+            }
+
             sb.Append(Indent);
             sb.Append(varName);
             sb.Append(", ");
