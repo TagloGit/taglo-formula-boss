@@ -360,6 +360,9 @@ public static class ShowFloatingEditorCommand
     {
         try
         {
+            _app ??= ExcelDnaUtil.Application;
+            var excelHwnd = new IntPtr(_app.Hwnd);
+
             EnsureWindowThread();
 
             _windowDispatcher?.Invoke(() =>
@@ -367,11 +370,16 @@ public static class ShowFloatingEditorCommand
                 var settings = EditorSettings.Load();
                 var dialog = new SettingsDialog(settings);
 
-                // Only set owner if the editor window is visible — setting owner
-                // to a hidden window prevents the dialog from appearing
                 if (_window is { IsVisible: true })
                 {
+                    // Editor is open — position on top of it
                     dialog.Owner = _window;
+                }
+                else
+                {
+                    // Editor not open — center on Excel window
+                    var dialogHwnd = new WindowInteropHelper(dialog).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, dialogHwnd);
                 }
 
                 if (dialog.ShowDialog() == true)
