@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 using ExcelDna.Integration;
 
@@ -61,6 +62,15 @@ public class FormulaInterceptor : IDisposable
             catch
             {
                 // Ignore errors during cleanup
+            }
+
+            try
+            {
+                Marshal.ReleaseComObject(_app);
+            }
+            catch
+            {
+                // Ignore — may already be released
             }
 
             _app = null;
