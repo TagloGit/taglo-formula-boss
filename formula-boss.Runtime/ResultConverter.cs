@@ -30,6 +30,23 @@ public static class ResultConverter
             return colVal.Value ?? string.Empty;
         }
 
+        if (result is Cell cell)
+        {
+            return cell.Value ?? string.Empty;
+        }
+
+        if (result is Row singleRow)
+        {
+            var cols = singleRow.ColumnCount;
+            var arr = new object?[1, cols];
+            for (var c = 0; c < cols; c++)
+            {
+                arr[0, c] = singleRow[c].Value;
+            }
+
+            return arr;
+        }
+
         if (result is bool or int or double or string)
         {
             return result;
@@ -85,6 +102,23 @@ public static class ResultConverter
                 {
                     arr[r, c] = rowList[r][c].Value;
                 }
+
+            return arr;
+        }
+
+        if (result is IEnumerable<Cell> cells)
+        {
+            var list = cells.ToList();
+            if (list.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var arr = new object?[list.Count, 1];
+            for (var r = 0; r < list.Count; r++)
+            {
+                arr[r, 0] = list[r].Value;
+            }
 
             return arr;
         }
