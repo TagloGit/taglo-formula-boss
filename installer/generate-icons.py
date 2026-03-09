@@ -112,9 +112,18 @@ def make_wizard_banner(base: Image.Image, path: str) -> None:
     banner.save(path, format="BMP")
 
 
+def make_wizard_small(base: Image.Image, path: str) -> None:
+    """Create InnoSetup small wizard image (55x55 BMP)."""
+    logo = base.resize((55, 55), Image.NEAREST)
+    logo_rgb = Image.new("RGB", (55, 55), (255, 255, 255))
+    logo_rgb.paste(logo, mask=logo.split()[3])
+    logo_rgb.save(path, format="BMP")
+
+
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base = render_base()
     make_ico(base, os.path.join(script_dir, "logo.ico"))
     make_wizard_banner(base, os.path.join(script_dir, "wizard-banner.bmp"))
-    print("Generated: installer/logo.ico, installer/wizard-banner.bmp")
+    make_wizard_small(base, os.path.join(script_dir, "wizard-small.bmp"))
+    print("Generated: installer/logo.ico, installer/wizard-banner.bmp, installer/wizard-small.bmp")
