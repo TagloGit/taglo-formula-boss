@@ -1,7 +1,7 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 /// <summary>Represents a range of Excel values supporting element-wise operations and aggregations.</summary>
-public interface IExcelRange
+public interface IExcelRange : IEnumerable<ExcelValue>
 {
     /// <summary>Gets the rows of this range as a <see cref="RowCollection" />.</summary>
     RowCollection Rows { get; }
