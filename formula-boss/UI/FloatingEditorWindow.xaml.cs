@@ -51,7 +51,6 @@ public partial class FloatingEditorWindow
         Height = _settings.Height;
         FormulaEditor.FontSize = _settings.FontSize;
         FormulaEditor.WordWrap = _settings.WordWrap;
-        UpdateWordWrapButton();
 
         // Ctrl+MouseWheel zoom
         FormulaEditor.PreviewMouseWheel += OnEditorPreviewMouseWheel;
@@ -389,19 +388,11 @@ public partial class FloatingEditorWindow
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Hide();
 
-    private void WordWrapButton_Click(object sender, RoutedEventArgs e) => ToggleWordWrap();
-
     private void ToggleWordWrap()
     {
         FormulaEditor.WordWrap = !FormulaEditor.WordWrap;
         _settings.WordWrap = FormulaEditor.WordWrap;
         _settings.Save();
-        UpdateWordWrapButton();
-    }
-
-    private void UpdateWordWrapButton()
-    {
-        WordWrapButton.Content = FormulaEditor.WordWrap ? "Wrap: On" : "Wrap: Off";
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -410,6 +401,11 @@ public partial class FloatingEditorWindow
         e.Cancel = true;
         DismissSignatureHelp();
         Hide();
+    }
+
+    internal void ApplyWordWrap(bool wordWrap)
+    {
+        FormulaEditor.WordWrap = wordWrap;
     }
 
     internal void ApplyIndentSize(int indentSize)

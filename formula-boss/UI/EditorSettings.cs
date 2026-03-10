@@ -21,7 +21,7 @@ public class EditorSettings
     public int IndentSize { get; set; } = 2;
     public double FontSize { get; set; } = 13;
     public AnimationStyle AnimationStyle { get; set; } = AnimationStyle.Chomp;
-    public bool WordWrap { get; set; }
+    public bool WordWrap { get; set; } = true;
 
     private static string SettingsDirectory =>
         Path.Combine(

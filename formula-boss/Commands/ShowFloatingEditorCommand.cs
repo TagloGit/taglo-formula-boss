@@ -393,11 +393,13 @@ public static class ShowFloatingEditorCommand
                 {
                     settings.AnimationStyle = dialog.SelectedAnimation;
                     settings.IndentSize = dialog.SelectedIndentSize;
+                    settings.WordWrap = dialog.SelectedWordWrap;
                     settings.Save();
 
                     if (_window is { IsVisible: true })
                     {
                         _window.ApplyIndentSize(settings.IndentSize);
+                        _window.ApplyWordWrap(settings.WordWrap);
                     }
                 }
             });

@@ -74,6 +74,8 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="16" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -91,6 +93,11 @@
                      Width="60" HorizontalAlignment="Left"
                      VerticalContentAlignment="Center"
                      Height="26" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Word wrap"
+                       Style="{StaticResource LabelStyle}" />
+            <CheckBox x:Name="WordWrapCheck" Grid.Row="4" Grid.Column="1"
+                      VerticalAlignment="Center" />
         </Grid>
     </DockPanel>
 </Window>

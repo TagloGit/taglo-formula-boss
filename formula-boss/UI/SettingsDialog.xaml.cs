@@ -12,6 +12,8 @@ public partial class SettingsDialog
         AnimationCombo.SelectedItem = settings.AnimationStyle;
 
         IndentSizeBox.Text = settings.IndentSize.ToString();
+
+        WordWrapCheck.IsChecked = settings.WordWrap;
     }
 
     public AnimationStyle SelectedAnimation =>
@@ -19,6 +21,8 @@ public partial class SettingsDialog
 
     public int SelectedIndentSize =>
         int.TryParse(IndentSizeBox.Text, out var size) && size is >= 1 and <= 8 ? size : 2;
+
+    public bool SelectedWordWrap => WordWrapCheck.IsChecked == true;
 
     private void OnOk(object sender, RoutedEventArgs e)
     {
