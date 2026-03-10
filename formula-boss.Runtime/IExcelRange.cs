@@ -99,4 +99,21 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <param name="seed">The initial accumulator value.</param>
     /// <param name="func">A function that takes (accumulator, element) and returns the new accumulator.</param>
     IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func);
+
+    /// <summary>Gets the element at the specified row and column.</summary>
+    /// <param name="row">Zero-based row index.</param>
+    /// <param name="col">Zero-based column index.</param>
+    ExcelScalar this[int row, int col] { get; }
+
+    /// <summary>Gets the element at the specified linear (row-major) position.</summary>
+    /// <param name="index">Zero-based linear index.</param>
+    ExcelScalar this[int index] { get; }
+
+    /// <summary>Returns the linear (row-major) index of the first element matching the given value, or -1 if not found.</summary>
+    /// <param name="value">The value to search for.</param>
+    int IndexOf(ExcelValue value);
+
+    /// <summary>Returns the linear (row-major) index of the first element matching the given raw value, or -1 if not found.</summary>
+    /// <param name="value">The raw value to search for (string, double, etc.).</param>
+    int IndexOf(object? value);
 }

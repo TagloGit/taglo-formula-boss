@@ -251,6 +251,68 @@ public class ExcelScalarTests
         Assert.Equal(42.0, (double)scalar.Max());
     }
 
+    // --- Indexers ---
+
+    [Fact]
+    public void Indexer2D_ZeroZero_ReturnsSelf()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(42.0, (double)scalar[0, 0]);
+    }
+
+    [Fact]
+    public void Indexer2D_NonZero_Throws()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Throws<IndexOutOfRangeException>(() => scalar[0, 1]);
+        Assert.Throws<IndexOutOfRangeException>(() => scalar[1, 0]);
+    }
+
+    [Fact]
+    public void IndexerLinear_Zero_ReturnsSelf()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(42.0, (double)scalar[0]);
+    }
+
+    [Fact]
+    public void IndexerLinear_NonZero_Throws()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Throws<IndexOutOfRangeException>(() => scalar[1]);
+        Assert.Throws<IndexOutOfRangeException>(() => scalar[-1]);
+    }
+
+    // --- IndexOf ---
+
+    [Fact]
+    public void IndexOf_MatchingValue_ReturnsZero()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(0, scalar.IndexOf(new ExcelScalar(42.0)));
+    }
+
+    [Fact]
+    public void IndexOf_NonMatchingValue_ReturnsMinusOne()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(-1, scalar.IndexOf(new ExcelScalar(99.0)));
+    }
+
+    [Fact]
+    public void IndexOf_RawValue_MatchingReturnsZero()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(0, scalar.IndexOf(42.0));
+    }
+
+    [Fact]
+    public void IndexOf_RawValue_NonMatchingReturnsMinusOne()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(-1, scalar.IndexOf(99.0));
+    }
+
     [Fact]
     public void ArithmeticOperators_Work()
     {
