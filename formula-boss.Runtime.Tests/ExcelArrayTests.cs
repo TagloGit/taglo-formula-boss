@@ -477,9 +477,9 @@ public class ExcelArrayTests
     {
         var arr = MakeArray();
         Assert.Equal(1.0, (double)arr[0, 0]);
-        Assert.Equal("Alice", (string?)arr[0, 1]);
+        Assert.Equal("Alice", arr[0, 1]);
         Assert.Equal(3.0, (double)arr[2, 0]);
-        Assert.Equal("Charlie", (string?)arr[2, 1]);
+        Assert.Equal("Charlie", arr[2, 1]);
     }
 
     [Fact]
@@ -496,11 +496,11 @@ public class ExcelArrayTests
     {
         var arr = MakeArray(); // 3x2: {1,"Alice"},{2,"Bob"},{3,"Charlie"}
         Assert.Equal(1.0, (double)arr[0]);
-        Assert.Equal("Alice", (string?)arr[1]);
+        Assert.Equal("Alice", arr[1]);
         Assert.Equal(2.0, (double)arr[2]);
-        Assert.Equal("Bob", (string?)arr[3]);
+        Assert.Equal("Bob", arr[3]);
         Assert.Equal(3.0, (double)arr[4]);
-        Assert.Equal("Charlie", (string?)arr[5]);
+        Assert.Equal("Charlie", arr[5]);
     }
 
     [Fact]
@@ -535,7 +535,7 @@ public class ExcelArrayTests
     {
         var arr = MakeArray();
         var idx = arr.IndexOf(new ExcelScalar("Bob"));
-        Assert.Equal("Bob", (string?)arr[idx]);
+        Assert.Equal("Bob", arr[idx]);
     }
 
     // --- Map ---
