@@ -113,11 +113,15 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
     public static bool operator <=(int a, ColumnValue b) => a <= b.ToDouble();
 
     // ExcelValue comparison operators (so r[0] > maxVal works when maxVal is ExcelValue)
+    public static bool operator ==(ColumnValue? a, ExcelValue? b) => Equals(a?.Value, b?.RawValue);
+    public static bool operator !=(ColumnValue? a, ExcelValue? b) => !Equals(a?.Value, b?.RawValue);
     public static bool operator >(ColumnValue a, ExcelValue b) => a.ToDouble() > Convert.ToDouble(b.RawValue);
     public static bool operator <(ColumnValue a, ExcelValue b) => a.ToDouble() < Convert.ToDouble(b.RawValue);
     public static bool operator >=(ColumnValue a, ExcelValue b) => a.ToDouble() >= Convert.ToDouble(b.RawValue);
     public static bool operator <=(ColumnValue a, ExcelValue b) => a.ToDouble() <= Convert.ToDouble(b.RawValue);
 
+    public static bool operator ==(ExcelValue? a, ColumnValue? b) => Equals(a?.RawValue, b?.Value);
+    public static bool operator !=(ExcelValue? a, ColumnValue? b) => !Equals(a?.RawValue, b?.Value);
     public static bool operator >(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) > b.ToDouble();
     public static bool operator <(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) < b.ToDouble();
     public static bool operator >=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) >= b.ToDouble();

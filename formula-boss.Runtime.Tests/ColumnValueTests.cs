@@ -124,4 +124,26 @@ public class ColumnValueTests
         Assert.True(scalar > cv);
         Assert.False(scalar < cv);
     }
+
+    [Fact]
+    public void CrossTypeEquality_ColumnValueEqualsExcelValue()
+    {
+        var cv = new ColumnValue("hello");
+        var scalar = new ExcelScalar("hello");
+
+        Assert.True(cv == scalar);
+        Assert.False(cv != scalar);
+        Assert.False(cv == new ExcelScalar("other"));
+    }
+
+    [Fact]
+    public void CrossTypeEquality_ExcelValueEqualsColumnValue()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var cv = new ColumnValue(42.0);
+
+        Assert.True(scalar == cv);
+        Assert.False(scalar != cv);
+        Assert.False(new ExcelScalar(99.0) == cv);
+    }
 }
