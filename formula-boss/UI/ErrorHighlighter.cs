@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
+using FormulaBoss.Analysis;
+using FormulaBoss.Interception;
 using FormulaBoss.UI.Completion;
 
 using ICSharpCode.AvalonEdit;
@@ -14,7 +17,8 @@ namespace FormulaBoss.UI;
 
 /// <summary>
 ///     Highlights Roslyn compile errors in backtick expressions with red squiggly underlines.
-///     Shows tooltip messages on mouse hover over error regions.
+///     Shows error tooltip messages on hover over error regions and type tooltips on hover
+///     over identifiers, var keywords, and lambda parameters.
 /// </summary>
 internal sealed class ErrorHighlighter : IBackgroundRenderer
 {
@@ -24,9 +28,11 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
     private readonly ToolTip _tooltip;
     private readonly Func<RoslynWorkspaceManager?> _getWorkspace;
     private readonly Func<WorkbookMetadata?> _getMetadata;
+    private readonly SemanticAnalysisService _semanticService = new();
 
     private CancellationTokenSource? _diagnosticCts;
     private List<ErrorMarker> _markers = [];
+    private HoverContext? _hoverContext;
 
     public ErrorHighlighter(
         TextEditor editor,
@@ -185,17 +191,82 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         }
 
         _markers = newMarkers;
+
+        // Build semantic model for hover type display
+        _hoverContext = BuildHoverContext(text, metadata);
+
         _editor.TextArea.TextView.InvalidateLayer(Layer);
+    }
+
+    private HoverContext? BuildHoverContext(string formulaText, WorkbookMetadata? metadata)
+    {
+        try
+        {
+            var expressions = BacktickExtractor.Extract(formulaText);
+            if (expressions.Count == 0)
+            {
+                return null;
+            }
+
+            var lastExpr = expressions[^1];
+            var expression = lastExpr.Expression;
+            var isStatementBlock = expression.TrimStart().StartsWith('{');
+            // +1 to skip the opening backtick character
+            var expressionStartInEditor = lastExpr.StartIndex + 1;
+
+            // Extract LET bindings
+            var letBindings = ExtractLetBindings(formulaText);
+
+            var analysisResult = _semanticService.BuildSemanticModel(
+                expression, isStatementBlock, metadata, letBindings);
+
+            if (analysisResult == null)
+            {
+                return null;
+            }
+
+            return new HoverContext(analysisResult, metadata, expressionStartInEditor, expression.Length);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"BuildHoverContext error: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<(string Name, string Value)>? ExtractLetBindings(string formulaText)
+    {
+        if (LetFormulaParser.TryParse(formulaText, out var structure) && structure != null)
+        {
+            return structure.Bindings
+                .Select(b => (b.VariableName, b.Value))
+                .ToList();
+        }
+
+        // Tolerant fallback for incomplete LET formulas
+        var letIdx = formulaText.IndexOf("LET(", StringComparison.OrdinalIgnoreCase);
+        if (letIdx < 0)
+        {
+            return null;
+        }
+
+        var args = LetArgumentSplitter.SplitTolerant(formulaText, letIdx + 4);
+        var bindings = new List<(string, string)>();
+        for (var i = 0; i + 1 < args.Count; i += 2)
+        {
+            if (args.Count % 2 == 1 && i == args.Count - 1)
+            {
+                break;
+            }
+
+            bindings.Add((args[i], args[i + 1]));
+        }
+
+        return bindings.Count > 0 ? bindings : null;
     }
 
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
-        if (_markers.Count == 0)
-        {
-            _tooltip.IsOpen = false;
-            return;
-        }
-
         var pos = _editor.TextArea.TextView.GetPosition(e.GetPosition(_editor.TextArea.TextView));
         if (pos == null)
         {
@@ -204,18 +275,65 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         }
 
         var offset = _editor.Document.GetOffset(pos.Value.Location);
-        var hit = _markers.Find(m => offset >= m.StartOffset && offset < m.StartOffset + m.Length);
 
+        // Error tooltips take priority
+        var hit = _markers.Find(m => offset >= m.StartOffset && offset < m.StartOffset + m.Length);
         if (hit != null)
         {
             _tooltip.Content = hit.Message;
             _tooltip.IsOpen = true;
+            return;
         }
-        else
+
+        // Type tooltip on hover over identifiers
+        var typeDisplay = GetTypeAtEditorOffset(offset);
+        if (typeDisplay != null)
         {
-            _tooltip.IsOpen = false;
+            _tooltip.Content = typeDisplay;
+            _tooltip.IsOpen = true;
+            return;
+        }
+
+        _tooltip.IsOpen = false;
+    }
+
+    private string? GetTypeAtEditorOffset(int editorOffset)
+    {
+        var ctx = _hoverContext;
+        if (ctx == null)
+        {
+            return null;
+        }
+
+        // Map editor offset to expression offset
+        var expressionOffset = editorOffset - ctx.ExpressionStartInEditor;
+        if (expressionOffset < 0 || expressionOffset >= ctx.ExpressionLength)
+        {
+            return null;
+        }
+
+        try
+        {
+            var type = _semanticService.GetTypeAtOffset(ctx.AnalysisResult, expressionOffset);
+            if (type == null || type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Error)
+            {
+                return null;
+            }
+
+            return _semanticService.FormatTypeForDisplay(type, ctx.Metadata);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"GetTypeAtEditorOffset error: {ex.Message}");
+            return null;
         }
     }
 
     private sealed record ErrorMarker(int StartOffset, int Length, string Message);
+
+    private sealed record HoverContext(
+        SemanticAnalysisResult AnalysisResult,
+        WorkbookMetadata? Metadata,
+        int ExpressionStartInEditor,
+        int ExpressionLength);
 }
