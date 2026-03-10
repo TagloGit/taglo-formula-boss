@@ -80,6 +80,33 @@ public class InputDetectorTests
         Assert.Equal(["a", "m", "z"], result.Parameters);
     }
 
+    [Fact]
+    public void Detect_ForEachVariable_NotParameter()
+    {
+        var result = _detector.Detect("{ foreach (var country in countries) { } return countries; }");
+
+        Assert.Equal(["countries"], result.Parameters);
+        Assert.DoesNotContain("country", result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_PatternVariable_NotParameter()
+    {
+        var result = _detector.Detect("{ if (value is double d) return d; return 0; }");
+
+        Assert.Equal(["value"], result.Parameters);
+        Assert.DoesNotContain("d", result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_CatchVariable_NotParameter()
+    {
+        var result = _detector.Detect("{ try { return tbl.Sum(); } catch (System.Exception ex) { return 0; } }");
+
+        Assert.Contains("tbl", result.Parameters);
+        Assert.DoesNotContain("ex", result.Parameters);
+    }
+
     #endregion
 
     #region Range Reference Detection

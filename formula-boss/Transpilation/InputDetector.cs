@@ -251,6 +251,21 @@ public class InputDetector
             declaredLocals.Add(varDecl.Identifier.Text);
         }
 
+        foreach (var forEach in root.DescendantNodes().OfType<ForEachStatementSyntax>())
+        {
+            declaredLocals.Add(forEach.Identifier.Text);
+        }
+
+        foreach (var designation in root.DescendantNodes().OfType<SingleVariableDesignationSyntax>())
+        {
+            declaredLocals.Add(designation.Identifier.Text);
+        }
+
+        foreach (var catchDecl in root.DescendantNodes().OfType<CatchDeclarationSyntax>())
+        {
+            declaredLocals.Add(catchDecl.Identifier.Text);
+        }
+
         foreach (var identifier in root.DescendantNodes().OfType<IdentifierNameSyntax>())
         {
             var name = identifier.Identifier.Text;
