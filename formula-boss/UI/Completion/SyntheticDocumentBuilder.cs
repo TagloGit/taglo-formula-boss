@@ -1,5 +1,6 @@
 using System.Text;
 
+using FormulaBoss.Analysis;
 using FormulaBoss.Interception;
 using FormulaBoss.Transpilation;
 
@@ -26,31 +27,8 @@ internal static class SyntheticDocumentBuilder
     {
         var sb = new StringBuilder(1024);
 
-        // Usings
-        AppendUsings(sb);
-
-        // Generate typed row classes and typed table classes per table
-        var tableTypeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (metadata != null)
-        {
-            foreach (var (tableName, columns) in metadata.TableColumns)
-            {
-                var safeTableName = SanitiseIdentifier(tableName);
-                if (string.IsNullOrEmpty(safeTableName))
-                {
-                    continue;
-                }
-
-                var rowTypeName = $"__{safeTableName}Row";
-                var rowCollTypeName = $"__{safeTableName}RowCollection";
-                var tableTypeName = $"__{safeTableName}Table";
-                tableTypeNames[tableName] = tableTypeName;
-
-                EmitTypedRow(sb, rowTypeName, columns);
-                EmitTypedRowCollection(sb, rowCollTypeName, rowTypeName);
-                EmitTypedTable(sb, tableTypeName, rowCollTypeName);
-            }
-        }
+        TypedDocumentBuilder.AppendUsings(sb);
+        var tableTypeNames = TypedDocumentBuilder.EmitTableTypes(sb, metadata);
 
         // Extract DSL expression from the formula
         var dslExpression = ExtractDslExpression(textUpToCaret);
@@ -135,31 +113,8 @@ internal static class SyntheticDocumentBuilder
 
         var sb = new StringBuilder(1024);
 
-        // Usings
-        AppendUsings(sb);
-
-        // Generate typed row classes and typed table classes per table
-        var tableTypeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (metadata != null)
-        {
-            foreach (var (tableName, columns) in metadata.TableColumns)
-            {
-                var safeTableName = SanitiseIdentifier(tableName);
-                if (string.IsNullOrEmpty(safeTableName))
-                {
-                    continue;
-                }
-
-                var rowTypeName = $"__{safeTableName}Row";
-                var rowCollTypeName = $"__{safeTableName}RowCollection";
-                var tableTypeName = $"__{safeTableName}Table";
-                tableTypeNames[tableName] = tableTypeName;
-
-                EmitTypedRow(sb, rowTypeName, columns);
-                EmitTypedRowCollection(sb, rowCollTypeName, rowTypeName);
-                EmitTypedTable(sb, tableTypeName, rowCollTypeName);
-            }
-        }
+        TypedDocumentBuilder.AppendUsings(sb);
+        var tableTypeNames = TypedDocumentBuilder.EmitTableTypes(sb, metadata);
 
         sb.AppendLine("class __Ctx {");
         sb.AppendLine("void __M() {");
@@ -221,73 +176,6 @@ internal static class SyntheticDocumentBuilder
             expressionStartInSynthetic,
             expressionStartInEditor,
             expressionText.Length);
-    }
-
-    private static void AppendUsings(StringBuilder sb)
-    {
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Collections;");
-        sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using System.Text;");
-        sb.AppendLine("using System.Text.RegularExpressions;");
-        sb.AppendLine("using FormulaBoss.Runtime;");
-        sb.AppendLine();
-    }
-
-    private static void EmitTypedRow(StringBuilder sb, string rowTypeName, IReadOnlyList<string> columns)
-    {
-        sb.AppendLine($"class {rowTypeName} {{");
-
-        // Indexer for bracket access
-        sb.AppendLine($"public ColumnValue this[string columnName] => default!;");
-        sb.AppendLine($"public ColumnValue this[int index] => default!;");
-        sb.AppendLine($"public int ColumnCount => 0;");
-
-        var mapping = ColumnMapper.BuildMapping(columns.ToArray());
-        foreach (var (sanitised, _) in mapping)
-        {
-            sb.AppendLine($"public ColumnValue {sanitised} => default!;");
-        }
-
-        sb.AppendLine("}");
-        sb.AppendLine();
-    }
-
-    private static void EmitTypedRowCollection(
-        StringBuilder sb, string rowCollTypeName, string rowTypeName)
-    {
-        sb.AppendLine($"class {rowCollTypeName} : IEnumerable<{rowTypeName}> {{");
-        sb.AppendLine($"public {rowCollTypeName} Where(Func<{rowTypeName}, bool> predicate) => this;");
-        sb.AppendLine($"public IExcelRange Select(Func<{rowTypeName}, object> selector) => default!;");
-        sb.AppendLine($"public bool Any(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public bool All(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public {rowTypeName} First(Func<{rowTypeName}, bool> predicate) => default!;");
-        sb.AppendLine($"public {rowTypeName}? FirstOrDefault(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public {rowCollTypeName} OrderBy(Func<{rowTypeName}, object> keySelector) => this;");
-        sb.AppendLine($"public {rowCollTypeName} OrderByDescending(Func<{rowTypeName}, object> keySelector) => this;");
-        sb.AppendLine($"public int Count() => 0;");
-        sb.AppendLine($"public {rowCollTypeName} Take(int count) => this;");
-        sb.AppendLine($"public {rowCollTypeName} Skip(int count) => this;");
-        sb.AppendLine($"public {rowCollTypeName} Distinct() => this;");
-        sb.AppendLine($"public IExcelRange ToRange() => default!;");
-        sb.AppendLine($"public dynamic Aggregate(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public IExcelRange Scan(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public GroupedRowCollection GroupBy(Func<{rowTypeName}, object> keySelector) => default!;");
-        sb.AppendLine($"public IEnumerator<{rowTypeName}> GetEnumerator() => default!;");
-        sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
-        sb.AppendLine("}");
-        sb.AppendLine();
-    }
-
-    private static void EmitTypedTable(
-        StringBuilder sb, string tableTypeName, string rowCollTypeName)
-    {
-        sb.AppendLine($"class {tableTypeName} : ExcelTable {{");
-        sb.AppendLine($"public new {rowCollTypeName} Rows => default!;");
-        sb.AppendLine($"{tableTypeName}() : base(new object[0,0], System.Array.Empty<string>()) {{}}");
-        sb.AppendLine("}");
-        sb.AppendLine();
     }
 
     /// <summary>
@@ -418,11 +306,6 @@ internal static class SyntheticDocumentBuilder
         }
 
         return "ExcelValue";
-    }
-
-    private static string SanitiseIdentifier(string name)
-    {
-        return ColumnMapper.Sanitise(name);
     }
 
     /// <summary>
