@@ -387,6 +387,53 @@ internal sealed class RoslynWorkspaceManager : IDisposable
     }
 
     /// <summary>
+    ///     Returns the display name of the type of the expression before the dot at the given
+    ///     caret offset. Must be called after <see cref="GetCompletionsAsync" /> which loads
+    ///     the document into the workspace.
+    /// </summary>
+    public async Task<string?> GetTypeBeforeDotAsync(int caretOffset, CancellationToken cancellationToken)
+    {
+        var document = _workspace.CurrentSolution.GetDocument(_documentId);
+        if (document == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+            var root = await document.GetSyntaxRootAsync(cancellationToken);
+            if (semanticModel == null || root == null)
+            {
+                return null;
+            }
+
+            var token = root.FindToken(Math.Max(0, caretOffset - 1));
+
+            var memberAccess = token.Parent?.AncestorsAndSelf()
+                .OfType<MemberAccessExpressionSyntax>()
+                .FirstOrDefault();
+
+            if (memberAccess == null)
+            {
+                return null;
+            }
+
+            var typeInfo = semanticModel.GetTypeInfo(memberAccess.Expression, cancellationToken);
+            return typeInfo.Type?.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Type lookup error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
     ///     Pre-warms the workspace by requesting completions on a trivial document.
     /// </summary>
     public async Task WarmUpAsync()

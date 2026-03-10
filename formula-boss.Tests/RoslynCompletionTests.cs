@@ -190,4 +190,55 @@ public class RoslynCompletionTests : IDisposable
         Assert.Contains("input", texts);
         Assert.Contains("myFormula", texts);
     }
+
+    [Fact]
+    public async Task RowAfterFirst_ShowsColumnCompletionsAsBracket()
+    {
+        var formula = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).`)";
+        var textUp = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Date", texts);
+        Assert.Contains("Amount", texts);
+        Assert.Contains("Region", texts);
+
+        // Items should be ColumnCompletionData (bracket-inserting), not plain CompletionData
+        Assert.All(items, item => Assert.IsType<ColumnCompletionData>(item));
+    }
+
+    [Fact]
+    public async Task RowAfterFirstOrDefault_ShowsColumnCompletions()
+    {
+        var formula = "=LET(t, Sales, `t.Rows.FirstOrDefault(r => r[\"Region\"] == \"West\").`)";
+        var textUp = "=LET(t, Sales, `t.Rows.FirstOrDefault(r => r[\"Region\"] == \"West\").";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Date", texts);
+        Assert.Contains("Amount", texts);
+        Assert.Contains("Region", texts);
+        Assert.All(items, item => Assert.IsType<ColumnCompletionData>(item));
+    }
+
+    [Fact]
+    public async Task NonRowType_NotAffected()
+    {
+        // String.Length is not a Row — should still return normal Roslyn completions
+        var formula = "=`\"hello\".`";
+        var textUp = "=`\"hello\".";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Length", texts);
+
+        // These should be regular CompletionData, not ColumnCompletionData
+        Assert.All(items, item => Assert.IsNotType<ColumnCompletionData>(item));
+    }
 }

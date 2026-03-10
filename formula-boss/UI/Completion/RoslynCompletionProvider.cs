@@ -1,4 +1,8 @@
-﻿using Microsoft.CodeAnalysis.Completion;
+﻿using System.Text.RegularExpressions;
+
+using FormulaBoss.Transpilation;
+
+using Microsoft.CodeAnalysis.Completion;
 
 namespace FormulaBoss.UI.Completion;
 
@@ -64,8 +68,64 @@ internal sealed class RoslynCompletionProvider
             return (Array.Empty<CompletionData>(), false);
         }
 
+        // Check if the expression before the dot is a Row type — if so,
+        // replace Roslyn's property completions with bracket-inserting column completions
+        var tableName = await ResolveRowTableNameAsync(caretOffset, metadata, cancellationToken);
+        if (tableName != null)
+        {
+            var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, tableName);
+            return (columnItems, false);
+        }
+
         var result = MapCompletionItems(roslynItems);
         return (result, false);
+    }
+
+    /// <summary>
+    ///     If the expression before the dot is a synthetic Row type, resolves the original
+    ///     table name. Returns null if not a Row type.
+    /// </summary>
+    private async Task<string?> ResolveRowTableNameAsync(
+        int caretOffset, WorkbookMetadata? metadata, CancellationToken cancellationToken)
+    {
+        if (metadata == null)
+        {
+            return null;
+        }
+
+        var typeName = await _workspace.GetTypeBeforeDotAsync(caretOffset, cancellationToken);
+        if (typeName == null)
+        {
+            return null;
+        }
+
+        // Strip nullable suffix
+        var coreName = typeName.EndsWith("?") ? typeName[..^1] : typeName;
+
+        var match = Regex.Match(coreName, @"^__(.+)Row$");
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var sanitisedName = match.Groups[1].Value;
+
+        // Exclude RowCollection matches
+        if (sanitisedName.EndsWith("RowCollection"))
+        {
+            return null;
+        }
+
+        // Resolve sanitised name back to original table name
+        foreach (var (originalName, _) in metadata.TableColumns)
+        {
+            if (ColumnMapper.Sanitise(originalName) == sanitisedName)
+            {
+                return originalName;
+            }
+        }
+
+        return null;
     }
 
     private static List<CompletionData> MapCompletionItems(IReadOnlyList<CompletionItem> items)
