@@ -79,6 +79,21 @@ public class FormulaPipeline
             return new PipelineResult(false, null, $"Detection error: {ex.Message}");
         }
 
+        // Augment header variables with metadata: a parameter needs [#All] if its name
+        // matches a known table OR if the existing AST pattern matching detected it.
+        // This must happen before code emission so the generated code extracts headers.
+        var metadata = context?.Metadata;
+        var headerVariables = detection.Parameters
+            .Where(p => detection.HeaderVariables.Contains(p) ||
+                        (metadata?.IsTable(p) == true && !detection.RangeRefMap.ContainsKey(p)))
+            .ToHashSet();
+
+        // If metadata added new header variables beyond what AST detected, update the
+        // detection result so CodeEmitter generates header extraction code for them
+        var emitDetection = headerVariables.SetEquals(detection.HeaderVariables)
+            ? detection
+            : detection with { HeaderVariables = headerVariables };
+
         // Step 2: Emit code
         var emitter = new CodeEmitter();
         TranspileResult transpileResult;
@@ -92,7 +107,7 @@ public class FormulaPipeline
                 preferredName = GetUniqueUdfName(preferredName, expression);
             }
 
-            transpileResult = emitter.Emit(detection, expression, preferredName);
+            transpileResult = emitter.Emit(emitDetection, expression, preferredName);
         }
         catch (Exception ex)
         {
@@ -121,14 +136,6 @@ public class FormulaPipeline
 
         // Track which expression this UDF name was created from
         _registeredUdfExpressions[transpileResult.MethodName] = expression;
-
-        // Augment header variables with metadata: a parameter needs [#All] if its name
-        // matches a known table OR if the existing AST pattern matching detected it
-        var metadata = context?.Metadata;
-        var headerVariables = detection.Parameters
-            .Where(p => detection.HeaderVariables.Contains(p) ||
-                        (metadata?.IsTable(p) == true && !detection.RangeRefMap.ContainsKey(p)))
-            .ToHashSet();
 
         // Build flat parameter list, mapping range ref placeholders back to originals
         var parameters = detection.Parameters
