@@ -231,6 +231,55 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
+    public override ExcelScalar this[int row, int col]
+    {
+        get
+        {
+            if (row < 0 || row >= _data.GetLength(0) || col < 0 || col >= _data.GetLength(1))
+            {
+                throw new IndexOutOfRangeException(
+                    $"Index [{row}, {col}] is out of range for array with dimensions [{_data.GetLength(0)}, {_data.GetLength(1)}].");
+            }
+
+            return new ExcelScalar(_data[row, col]);
+        }
+    }
+
+    public override ExcelScalar this[int index]
+    {
+        get
+        {
+            var cols = _data.GetLength(1);
+            var total = _data.GetLength(0) * cols;
+            if (index < 0 || index >= total)
+            {
+                throw new IndexOutOfRangeException(
+                    $"Index [{index}] is out of range for array with {total} elements.");
+            }
+
+            return new ExcelScalar(_data[index / cols, index % cols]);
+        }
+    }
+
+    public override int IndexOf(ExcelValue value)
+    {
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        var i = 0;
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                if (Equals(_data[r, c], value.RawValue))
+                {
+                    return i;
+                }
+
+                i++;
+            }
+
+        return -1;
+    }
+
     /// <inheritdoc />
     public override IEnumerator<ExcelValue> GetEnumerator() => ElementWise().GetEnumerator();
 

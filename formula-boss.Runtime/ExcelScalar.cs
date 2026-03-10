@@ -104,6 +104,34 @@ public class ExcelScalar : ExcelValue, IExcelRange
         return new ExcelScalar(result is ExcelValue ev ? ev.RawValue : result);
     }
 
+    public override ExcelScalar this[int row, int col]
+    {
+        get
+        {
+            if (row != 0 || col != 0)
+            {
+                throw new IndexOutOfRangeException($"ExcelScalar only supports index [0, 0], got [{row}, {col}].");
+            }
+
+            return this;
+        }
+    }
+
+    public override ExcelScalar this[int index]
+    {
+        get
+        {
+            if (index != 0)
+            {
+                throw new IndexOutOfRangeException($"ExcelScalar only supports index [0], got [{index}].");
+            }
+
+            return this;
+        }
+    }
+
+    public override int IndexOf(ExcelValue value) => Equals(RawValue, value.RawValue) ? 0 : -1;
+
     /// <inheritdoc />
     public override IEnumerator<ExcelValue> GetEnumerator()
     {

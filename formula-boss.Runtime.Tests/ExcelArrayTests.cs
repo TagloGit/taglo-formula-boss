@@ -470,6 +470,76 @@ public class ExcelArrayTests
 
     // --- ExcelArray.Map ---
 
+    // --- Indexers ---
+
+    [Fact]
+    public void Indexer2D_ReturnsCorrectElement()
+    {
+        var arr = MakeArray();
+        Assert.Equal(1.0, (double)arr[0, 0]);
+        Assert.Equal("Alice", (string?)arr[0, 1]);
+        Assert.Equal(3.0, (double)arr[2, 0]);
+        Assert.Equal("Charlie", (string?)arr[2, 1]);
+    }
+
+    [Fact]
+    public void Indexer2D_ThrowsOnOutOfRange()
+    {
+        var arr = MakeArray();
+        Assert.Throws<IndexOutOfRangeException>(() => arr[3, 0]);
+        Assert.Throws<IndexOutOfRangeException>(() => arr[0, 2]);
+        Assert.Throws<IndexOutOfRangeException>(() => arr[-1, 0]);
+    }
+
+    [Fact]
+    public void IndexerLinear_ReturnsRowMajorOrder()
+    {
+        var arr = MakeArray(); // 3x2: {1,"Alice"},{2,"Bob"},{3,"Charlie"}
+        Assert.Equal(1.0, (double)arr[0]);
+        Assert.Equal("Alice", (string?)arr[1]);
+        Assert.Equal(2.0, (double)arr[2]);
+        Assert.Equal("Bob", (string?)arr[3]);
+        Assert.Equal(3.0, (double)arr[4]);
+        Assert.Equal("Charlie", (string?)arr[5]);
+    }
+
+    [Fact]
+    public void IndexerLinear_ThrowsOnOutOfRange()
+    {
+        var arr = MakeArray();
+        Assert.Throws<IndexOutOfRangeException>(() => arr[6]);
+        Assert.Throws<IndexOutOfRangeException>(() => arr[-1]);
+    }
+
+    // --- IndexOf ---
+
+    [Fact]
+    public void IndexOf_FindsElementRowMajor()
+    {
+        var arr = MakeArray(); // 3x2: {1,"Alice"},{2,"Bob"},{3,"Charlie"}
+        Assert.Equal(0, arr.IndexOf(new ExcelScalar(1.0)));
+        Assert.Equal(1, arr.IndexOf(new ExcelScalar("Alice")));
+        Assert.Equal(3, arr.IndexOf(new ExcelScalar("Bob")));
+        Assert.Equal(5, arr.IndexOf(new ExcelScalar("Charlie")));
+    }
+
+    [Fact]
+    public void IndexOf_ReturnsMinusOneWhenNotFound()
+    {
+        var arr = MakeArray();
+        Assert.Equal(-1, arr.IndexOf(new ExcelScalar("Nobody")));
+    }
+
+    [Fact]
+    public void IndexOf_WithIndexer_Roundtrips()
+    {
+        var arr = MakeArray();
+        var idx = arr.IndexOf(new ExcelScalar("Bob"));
+        Assert.Equal("Bob", (string?)arr[idx]);
+    }
+
+    // --- Map ---
+
     [Fact]
     public void Map_Preserves2DShape()
     {

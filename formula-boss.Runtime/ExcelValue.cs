@@ -119,6 +119,15 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     /// <inheritdoc />
     public abstract IExcelRange Scan(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 
+    /// <inheritdoc />
+    public abstract ExcelScalar this[int row, int col] { get; }
+
+    /// <inheritdoc />
+    public abstract ExcelScalar this[int index] { get; }
+
+    /// <inheritdoc />
+    public abstract int IndexOf(ExcelValue value);
+
     /// <summary>Wraps a raw Excel value into the appropriate ExcelValue subtype.</summary>
     /// <param name="value">The raw value from Excel (scalar, object[,], or existing ExcelValue).</param>
     /// <param name="headers">Column headers — if provided, creates an ExcelTable instead of ExcelArray.</param>
