@@ -2,7 +2,7 @@
 name: Bug report
 about: Report something that isn't working correctly
 title: ''
-labels: bug, status: backlog
+labels: ['bug', 'status: backlog']
 assignees: ''
 ---
 
