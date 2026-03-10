@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 
 using FormulaBoss.Compilation;
@@ -32,7 +32,7 @@ internal sealed class SemanticAnalysisService
     ///     A <see cref="SemanticAnalysisResult" /> containing the semantic model and the offset
     ///     where the expression starts in the synthetic document, or null on failure.
     /// </returns>
-    public SemanticAnalysisResult? BuildSemanticModel(
+    public SemanticAnalysisResult BuildSemanticModel(
         string expression,
         bool isStatementBlock,
         WorkbookMetadata? metadata,
@@ -142,7 +142,7 @@ internal sealed class SemanticAnalysisService
         if (node is ParameterSyntax parameterSyntax)
         {
             var declaredSymbol = result.SemanticModel.GetDeclaredSymbol(parameterSyntax);
-            return (declaredSymbol as IParameterSymbol)?.Type;
+            return declaredSymbol?.Type;
         }
 
         // Identifier name (variable reference, var keyword, etc.)

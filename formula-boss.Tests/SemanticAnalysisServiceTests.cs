@@ -1,4 +1,4 @@
-using FormulaBoss.Analysis;
+﻿using FormulaBoss.Analysis;
 using FormulaBoss.UI;
 
 using Microsoft.CodeAnalysis;
@@ -71,7 +71,7 @@ public class SemanticAnalysisServiceTests
         // Offset 0 is the start of "Sales"
         var type = _service.GetTypeAtOffset(result, 0);
         Assert.NotNull(type);
-        Assert.Contains("Sales", type!.Name);
+        Assert.Contains("Sales", type.Name);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class SemanticAnalysisServiceTests
         // Find "var" in the expression - offset 2 (after "{ ")
         var type = _service.GetTypeAtOffset(result, 2);
         Assert.NotNull(type);
-        Assert.Equal("Int32", type!.Name);
+        Assert.Equal("Int32", type.Name);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class SemanticAnalysisServiceTests
         var rOffset = expr.IndexOf("r =>", StringComparison.Ordinal);
         var type = _service.GetTypeAtOffset(result, rOffset);
         Assert.NotNull(type);
-        Assert.Contains("Row", type!.Name);
+        Assert.Contains("Row", type.Name);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class SemanticAnalysisServiceTests
 
         var type = _service.GetTypeAtOffset(result, 0);
         Assert.NotNull(type);
-        Assert.Equal("ExcelArray", type!.Name);
+        Assert.Equal("ExcelArray", type.Name);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class SemanticAnalysisServiceTests
         var type = _service.GetTypeAtOffset(result, 0);
         Assert.NotNull(type);
 
-        var display = _service.FormatTypeForDisplay(type!, TwoTableMetadata);
+        var display = _service.FormatTypeForDisplay(type, TwoTableMetadata);
         Assert.Equal("ExcelTable (Sales)", display);
     }
 
@@ -136,8 +136,7 @@ public class SemanticAnalysisServiceTests
         Assert.NotNull(result);
 
         // Get the type of the whole expression (should be the row type)
-        var expr = "Sales.Rows.First(r => true)";
-        var type = _service.GetTypeAtOffset(result, 0);
+        _service.GetTypeAtOffset(result, 0);
         // The expression starts with "Sales" which is the table, get the result type
         // by looking at the full expression result — use a simpler approach
         var resultForExpr = _service.BuildSemanticModel(
@@ -152,7 +151,7 @@ public class SemanticAnalysisServiceTests
         var rType = _service.GetTypeAtOffset(rResult, rOffset);
         Assert.NotNull(rType);
 
-        var rDisplay = _service.FormatTypeForDisplay(rType!, TwoTableMetadata);
+        var rDisplay = _service.FormatTypeForDisplay(rType, TwoTableMetadata);
         Assert.Equal("Row {Date, Amount, Region}", rDisplay);
     }
 
@@ -186,7 +185,7 @@ public class SemanticAnalysisServiceTests
         var rowsType = _service.GetTypeAtOffset(rowsResult, 6);
         Assert.NotNull(rowsType);
 
-        var display = _service.FormatTypeForDisplay(rowsType!, TwoTableMetadata);
+        var display = _service.FormatTypeForDisplay(rowsType, TwoTableMetadata);
         Assert.Equal("RowCollection (Sales)", display);
     }
 
@@ -214,20 +213,17 @@ public class SemanticAnalysisServiceTests
         var metadata = new WorkbookMetadata(
             new[] { "BigTable" },
             Array.Empty<string>(),
-            new Dictionary<string, IReadOnlyList<string>>
-            {
-                ["BigTable"] = new[] { "A", "B", "C", "D", "E", "F" }
-            });
+            new Dictionary<string, IReadOnlyList<string>> { ["BigTable"] = new[] { "A", "B", "C", "D", "E", "F" } });
 
         var result = _service.BuildSemanticModel(
             "BigTable.Rows.Where(r => true)", false, metadata, null);
         Assert.NotNull(result);
 
         var rOffset = "BigTable.Rows.Where(".Length;
-        var rType = _service.GetTypeAtOffset(result!, rOffset);
+        var rType = _service.GetTypeAtOffset(result, rOffset);
         Assert.NotNull(rType);
 
-        var display = _service.FormatTypeForDisplay(rType!, metadata);
+        var display = _service.FormatTypeForDisplay(rType, metadata);
         Assert.Equal("Row {A, B, C, D, ...}", display);
     }
 
@@ -239,9 +235,9 @@ public class SemanticAnalysisServiceTests
             "r", false, TwoTableMetadata, bindings);
         Assert.NotNull(result);
 
-        var type = _service.GetTypeAtOffset(result!, 0);
+        var type = _service.GetTypeAtOffset(result, 0);
         Assert.NotNull(type);
-        Assert.Equal("ExcelArray", type!.Name);
+        Assert.Equal("ExcelArray", type.Name);
     }
 
     private ITypeSymbol GetTypeForExpression(string expression)
@@ -251,14 +247,14 @@ public class SemanticAnalysisServiceTests
 
         // Get type at the end of the expression (the full expression's result type)
         // We need the type of the entire expression — find __result's type
-        var root = result!.SemanticModel.SyntaxTree.GetRoot();
+        var root = result.SemanticModel.SyntaxTree.GetRoot();
         var varDecl = root.DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
             .FirstOrDefault(v => v.Identifier.Text == "__result");
         Assert.NotNull(varDecl);
 
-        var symbol = result.SemanticModel.GetDeclaredSymbol(varDecl!);
+        var symbol = result.SemanticModel.GetDeclaredSymbol(varDecl);
         Assert.NotNull(symbol);
-        return ((ILocalSymbol)symbol!).Type;
+        return ((ILocalSymbol)symbol).Type;
     }
 }
