@@ -132,7 +132,7 @@ internal static class CompletionHelpers
         return tableName;
     }
 
-    private static IReadOnlyList<CompletionData> BuildRowCompletions(
+    internal static IReadOnlyList<CompletionData> BuildRowCompletions(
         WorkbookMetadata? metadata, bool isBracketContext, string? tableName)
     {
         var items = new List<CompletionData>();
