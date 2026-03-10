@@ -1,4 +1,5 @@
-﻿using Xunit;
+﻿using System.Collections;
+using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
@@ -181,6 +182,30 @@ public class ResultConverterTests
         IEnumerable<Cell> cells = Array.Empty<Cell>();
         var result = ResultConverter.Convert(cells);
         Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Convert_ListOfExcelValue_UnwrapsToRawValues()
+    {
+        var list = new List<ExcelValue> { new ExcelScalar(1.0), new ExcelScalar("hello"), new ExcelScalar(true) };
+        var result = ResultConverter.Convert(list);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(1, arr.GetLength(1));
+        Assert.Equal(1.0, arr[0, 0]);
+        Assert.Equal("hello", arr[1, 0]);
+        Assert.Equal(true, arr[2, 0]);
+    }
+
+    [Fact]
+    public void Convert_GenericEnumerable_UnwrapsCellValues()
+    {
+        IEnumerable items = new object[] { new Cell { Value = 42.0 }, new Cell { Value = "test" } };
+        var result = ResultConverter.Convert(items);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(42.0, arr[0, 0]);
+        Assert.Equal("test", arr[1, 0]);
     }
 
     [Fact]
