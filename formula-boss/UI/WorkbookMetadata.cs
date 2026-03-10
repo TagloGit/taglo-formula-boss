@@ -18,6 +18,13 @@ public record WorkbookMetadata(
         new Dictionary<string, IReadOnlyList<string>>());
 
     /// <summary>
+    ///     Returns true if the given name matches a known Excel table in the workbook.
+    ///     Comparison is case-insensitive (Excel table names are case-insensitive).
+    /// </summary>
+    public bool IsTable(string name) =>
+        TableNames.Any(t => string.Equals(t, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     ///     Captures table names, named ranges, and column headers from the active workbook.
     ///     Must be called on the Excel thread. All COM objects are released.
     /// </summary>

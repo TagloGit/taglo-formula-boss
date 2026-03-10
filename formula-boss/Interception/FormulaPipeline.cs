@@ -2,6 +2,7 @@
 
 using FormulaBoss.Compilation;
 using FormulaBoss.Transpilation;
+using FormulaBoss.UI;
 
 namespace FormulaBoss.Interception;
 
@@ -22,8 +23,10 @@ public record PipelineResult(
 ///     Context for processing a DSL expression, used for LET integration.
 /// </summary>
 /// <param name="PreferredUdfName">Optional preferred name for the UDF (e.g., from a LET variable).</param>
+/// <param name="Metadata">Optional workbook metadata for metadata-aware header detection.</param>
 public record ExpressionContext(
-    string? PreferredUdfName);
+    string? PreferredUdfName,
+    WorkbookMetadata? Metadata = null);
 
 /// <summary>
 ///     Orchestrates the complete pipeline: parse → transpile → compile → register.
@@ -119,6 +122,14 @@ public class FormulaPipeline
         // Track which expression this UDF name was created from
         _registeredUdfExpressions[transpileResult.MethodName] = expression;
 
+        // Augment header variables with metadata: a parameter needs [#All] if its name
+        // matches a known table OR if the existing AST pattern matching detected it
+        var metadata = context?.Metadata;
+        var headerVariables = detection.Parameters
+            .Where(p => detection.HeaderVariables.Contains(p) ||
+                        (metadata?.IsTable(p) == true && !detection.RangeRefMap.ContainsKey(p)))
+            .ToHashSet();
+
         // Build flat parameter list, mapping range ref placeholders back to originals
         var parameters = detection.Parameters
             .Select(p =>
@@ -128,7 +139,7 @@ public class FormulaPipeline
                     return orig;
                 }
 
-                if (detection.HeaderVariables.Contains(p))
+                if (headerVariables.Contains(p))
                 {
                     return p + "[#All]";
                 }

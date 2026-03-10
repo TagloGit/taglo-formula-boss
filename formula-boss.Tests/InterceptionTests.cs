@@ -1,6 +1,7 @@
 ﻿using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 using FormulaBoss.Transpilation;
+using FormulaBoss.UI;
 
 using Xunit;
 
@@ -308,6 +309,106 @@ public class InterceptionTests
         // threshold is not a header variable — no [#All]
         Assert.Contains("threshold", result.Parameters);
         Assert.DoesNotContain("threshold[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_MetadataDetectsTableParameter_WhenAstMisses()
+    {
+        // Scenario: bracket access outside a lambda (AST pattern matching misses this)
+        // e.g. tblCastDist.Rows.First(r => (double)r["Distance"] < 100)["Castle"]
+        // The outer ["Castle"] is on the result, not inside a lambda tracing back to the param.
+        // But metadata knows tblCastDist is a table, so it should get [#All].
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+        var metadata = new WorkbookMetadata(
+            new[] { "tblCastDist" },
+            Array.Empty<string>(),
+            new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["tblCastDist"] = new[] { "Castle", "Distance" }
+            });
+        var context = new ExpressionContext(null, metadata);
+
+        var result = pipeline.Process(
+            "tblCastDist.Rows.Count()", context);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("tblCastDist[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_MetadataDoesNotAffectNonTableParameters()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+        var metadata = new WorkbookMetadata(
+            new[] { "tblSales" },
+            Array.Empty<string>(),
+            new Dictionary<string, IReadOnlyList<string>>());
+        var context = new ExpressionContext(null, metadata);
+
+        var result = pipeline.Process("threshold.ToString()", context);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("threshold", result.Parameters);
+        Assert.DoesNotContain("threshold[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_MetadataTableDetection_IsCaseInsensitive()
+    {
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+        var metadata = new WorkbookMetadata(
+            new[] { "tblCastles" },
+            Array.Empty<string>(),
+            new Dictionary<string, IReadOnlyList<string>>());
+        var context = new ExpressionContext(null, metadata);
+
+        // Parameter name uses different casing than metadata
+        var result = pipeline.Process("tblcastles.Rows.Count()", context);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("tblcastles[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_MetadataDoesNotOverrideRangeRefMapping()
+    {
+        // If a parameter is a range ref (e.g. A1:B10), it should stay as-is
+        // even if its placeholder name somehow matches a table name
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+        var metadata = new WorkbookMetadata(
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            new Dictionary<string, IReadOnlyList<string>>());
+        var context = new ExpressionContext(null, metadata);
+
+        var result = pipeline.Process("A1:B10.Rows.Where(r => (double)r[\"Price\"] > 5).Count()", context);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("A1:B10", result.Parameters);
+        Assert.DoesNotContain("A1:B10[#All]", result.Parameters);
+    }
+
+    [Fact]
+    public void Pipeline_NullMetadata_FallsBackToAstDetection()
+    {
+        // Without metadata, the existing AST-based detection should still work
+        var compiler = new MockDynamicCompiler();
+        var pipeline = new FormulaPipeline(compiler);
+
+        var result = pipeline.Process(
+            "tbl.Rows.Where(r => (double)r[\"Amount\"] > 150).Count()");
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Parameters);
+        Assert.Contains("tbl[#All]", result.Parameters);
     }
 
     #endregion

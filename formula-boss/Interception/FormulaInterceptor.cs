@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 
 using ExcelDna.Integration;
 
+using FormulaBoss.UI;
+
 namespace FormulaBoss.Interception;
 
 /// <summary>
@@ -151,17 +153,20 @@ public class FormulaInterceptor : IDisposable
                 return;
             }
 
+            // Capture workbook metadata for metadata-aware header detection
+            var metadata = _app != null ? WorkbookMetadata.CaptureFromExcel(_app) : null;
+
             // Check if this is a LET formula - handle specially for named UDFs
             if (LetFormulaParser.TryParse(originalFormula, out var letStructure) &&
                 (letStructure!.Bindings.Any(b => b.HasBacktick) ||
                  letStructure.ResultExpression.Contains('`')))
             {
-                ProcessLetFormula(cell, letStructure);
+                ProcessLetFormula(cell, letStructure, metadata);
                 return;
             }
 
             // Non-LET formula - use existing backtick processing
-            ProcessBacktickFormula(cell, originalFormula);
+            ProcessBacktickFormula(cell, originalFormula, metadata);
         }
         catch (Exception ex)
         {
@@ -170,7 +175,7 @@ public class FormulaInterceptor : IDisposable
         }
     }
 
-    private void ProcessLetFormula(dynamic cell, LetStructure letStructure)
+    private void ProcessLetFormula(dynamic cell, LetStructure letStructure, WorkbookMetadata? metadata)
     {
         Debug.WriteLine("Processing LET formula with backtick expressions");
 
@@ -192,7 +197,7 @@ public class FormulaInterceptor : IDisposable
 
                 Debug.WriteLine($"Processing LET binding: {variableName} = `{dslExpression}`");
 
-                var context = new ExpressionContext(variableName);
+                var context = new ExpressionContext(variableName, metadata);
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
@@ -227,7 +232,7 @@ public class FormulaInterceptor : IDisposable
 
                 Debug.WriteLine($"Processing LET result expression: `{dslExpression}`");
 
-                var context = new ExpressionContext(varName);
+                var context = new ExpressionContext(varName, metadata);
                 var result = _pipeline.Process(dslExpression, context);
 
                 if (result.Success && result.UdfName != null)
@@ -320,7 +325,7 @@ public class FormulaInterceptor : IDisposable
         WriteFormula(cell, newFormula);
     }
 
-    private void ProcessBacktickFormula(dynamic cell, string originalFormula)
+    private void ProcessBacktickFormula(dynamic cell, string originalFormula, WorkbookMetadata? metadata)
     {
         var expressions = BacktickExtractor.Extract(originalFormula);
         if (expressions.Count == 0)
@@ -334,7 +339,8 @@ public class FormulaInterceptor : IDisposable
         foreach (var expr in expressions)
         {
             Debug.WriteLine($"Processing expression: {expr.Expression}");
-            var result = _pipeline.Process(expr.Expression);
+            var context = metadata != null ? new ExpressionContext(null, metadata) : null;
+            var result = _pipeline.Process(expr.Expression, context);
 
             if (result.Success && result.UdfName != null)
             {
