@@ -128,6 +128,9 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     /// <inheritdoc />
     public abstract int IndexOf(ExcelValue value);
 
+    /// <inheritdoc />
+    public abstract int IndexOf(object? value);
+
     /// <summary>Wraps a raw Excel value into the appropriate ExcelValue subtype.</summary>
     /// <param name="value">The raw value from Excel (scalar, object[,], or existing ExcelValue).</param>
     /// <param name="headers">Column headers — if provided, creates an ExcelTable instead of ExcelArray.</param>

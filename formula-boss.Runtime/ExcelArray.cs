@@ -280,6 +280,25 @@ public class ExcelArray : ExcelValue, IExcelRange
         return -1;
     }
 
+    public override int IndexOf(object? value)
+    {
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        var i = 0;
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                if (Equals(_data[r, c], value))
+                {
+                    return i;
+                }
+
+                i++;
+            }
+
+        return -1;
+    }
+
     /// <inheritdoc />
     public override IEnumerator<ExcelValue> GetEnumerator() => ElementWise().GetEnumerator();
 

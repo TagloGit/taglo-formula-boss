@@ -132,6 +132,8 @@ public class ExcelScalar : ExcelValue, IExcelRange
 
     public override int IndexOf(ExcelValue value) => Equals(RawValue, value.RawValue) ? 0 : -1;
 
+    public override int IndexOf(object? value) => Equals(RawValue, value) ? 0 : -1;
+
     /// <inheritdoc />
     public override IEnumerator<ExcelValue> GetEnumerator()
     {

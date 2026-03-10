@@ -538,6 +538,32 @@ public class ExcelArrayTests
         Assert.Equal("Bob", arr[idx]);
     }
 
+    [Fact]
+    public void IndexOf_RawValue_FindsString()
+    {
+        var arr = MakeArray();
+        Assert.Equal(1, arr.IndexOf("Alice"));
+        Assert.Equal(3, arr.IndexOf("Bob"));
+        Assert.Equal(-1, arr.IndexOf("Nobody"));
+    }
+
+    [Fact]
+    public void IndexOf_RawValue_FindsDouble()
+    {
+        var arr = MakeArray();
+        Assert.Equal(0, arr.IndexOf(1.0));
+        Assert.Equal(2, arr.IndexOf(2.0));
+        Assert.Equal(-1, arr.IndexOf(99.0));
+    }
+
+    [Fact]
+    public void IndexOf_RawValue_WithIndexer_Roundtrips()
+    {
+        var arr = MakeArray();
+        var idx = arr.IndexOf("Bob");
+        Assert.Equal("Bob", arr[idx]);
+    }
+
     // --- Map ---
 
     [Fact]

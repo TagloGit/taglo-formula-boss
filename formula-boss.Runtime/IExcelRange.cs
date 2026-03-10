@@ -112,4 +112,8 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <summary>Returns the linear (row-major) index of the first element matching the given value, or -1 if not found.</summary>
     /// <param name="value">The value to search for.</param>
     int IndexOf(ExcelValue value);
+
+    /// <summary>Returns the linear (row-major) index of the first element matching the given raw value, or -1 if not found.</summary>
+    /// <param name="value">The raw value to search for (string, double, etc.).</param>
+    int IndexOf(object? value);
 }

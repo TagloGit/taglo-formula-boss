@@ -300,6 +300,20 @@ public class ExcelScalarTests
     }
 
     [Fact]
+    public void IndexOf_RawValue_MatchingReturnsZero()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(0, scalar.IndexOf(42.0));
+    }
+
+    [Fact]
+    public void IndexOf_RawValue_NonMatchingReturnsMinusOne()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(-1, scalar.IndexOf(99.0));
+    }
+
+    [Fact]
     public void ArithmeticOperators_Work()
     {
         var a = new ExcelScalar(10.0);
