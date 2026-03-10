@@ -151,7 +151,10 @@ public static class ResultConverter
             var arr = new object?[list.Count, 1];
             for (var r = 0; r < list.Count; r++)
             {
-                arr[r, 0] = list[r] is ColumnValue cv ? cv.Value : list[r];
+                arr[r, 0] = list[r] is ExcelValue ev2 ? ev2.RawValue
+                    : list[r] is ColumnValue cv ? cv.Value
+                    : list[r] is Cell c ? c.Value
+                    : list[r];
             }
 
             return arr;

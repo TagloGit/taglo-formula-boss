@@ -1231,6 +1231,35 @@ public class PipelineTests
     }
 
     [Fact]
+    public void ValuePath_ToList_UnwrapsExcelValues()
+    {
+        // Regression: List<ExcelValue> hit the generic IEnumerable handler which
+        // didn't unwrap ExcelValue → Excel got wrapper objects → #VALUE!
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.ToList()`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(10.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
+            Assert.Equal(20.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B2")));
+            Assert.Equal(30.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B3")));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void CrossSheetRangeRef_SumsCorrectly()
     {
         // Create a second worksheet with data, then reference it from the first
