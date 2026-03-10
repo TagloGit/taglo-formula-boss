@@ -64,6 +64,15 @@
                             BorderThickness="0"
                             Click="CancelButton_Click"
                             IsCancel="True" />
+                    <Button x:Name="WordWrapButton"
+                            Style="{StaticResource EditorButton}"
+                            Background="#3a3a50"
+                            Foreground="#cccccc"
+                            BorderThickness="0"
+                            Margin="6,0,0,0"
+                            Padding="8,6"
+                            ToolTip="Toggle word wrap (Alt+W)"
+                            Click="WordWrapButton_Click" />
                 </StackPanel>
                 <!-- Branding on the left -->
                 <StackPanel Orientation="Horizontal"

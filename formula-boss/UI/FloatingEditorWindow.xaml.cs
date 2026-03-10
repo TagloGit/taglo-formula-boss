@@ -50,6 +50,8 @@ public partial class FloatingEditorWindow
         Width = _settings.Width;
         Height = _settings.Height;
         FormulaEditor.FontSize = _settings.FontSize;
+        FormulaEditor.WordWrap = _settings.WordWrap;
+        UpdateWordWrapButton();
 
         // Ctrl+MouseWheel zoom
         FormulaEditor.PreviewMouseWheel += OnEditorPreviewMouseWheel;
@@ -100,6 +102,11 @@ public partial class FloatingEditorWindow
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _saveTimer.Tick += SaveTimer_Tick;
         SizeChanged += OnSizeChanged;
+
+        // Alt+W toggles word wrap
+        var toggleWordWrapCommand = new RoutedCommand();
+        CommandBindings.Add(new CommandBinding(toggleWordWrapCommand, (_, _) => ToggleWordWrap()));
+        InputBindings.Add(new InputBinding(toggleWordWrapCommand, new KeyGesture(Key.W, ModifierKeys.Alt)));
 
         // Focus the editor when window opens
         Activated += (_, _) =>
@@ -381,6 +388,21 @@ public partial class FloatingEditorWindow
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Hide();
+
+    private void WordWrapButton_Click(object sender, RoutedEventArgs e) => ToggleWordWrap();
+
+    private void ToggleWordWrap()
+    {
+        FormulaEditor.WordWrap = !FormulaEditor.WordWrap;
+        _settings.WordWrap = FormulaEditor.WordWrap;
+        _settings.Save();
+        UpdateWordWrapButton();
+    }
+
+    private void UpdateWordWrapButton()
+    {
+        WordWrapButton.Content = FormulaEditor.WordWrap ? "Wrap: On" : "Wrap: Off";
+    }
 
     protected override void OnClosing(CancelEventArgs e)
     {
