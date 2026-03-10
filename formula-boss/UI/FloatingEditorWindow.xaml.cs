@@ -50,6 +50,7 @@ public partial class FloatingEditorWindow
         Width = _settings.Width;
         Height = _settings.Height;
         FormulaEditor.FontSize = _settings.FontSize;
+        FormulaEditor.WordWrap = _settings.WordWrap;
 
         // Ctrl+MouseWheel zoom
         FormulaEditor.PreviewMouseWheel += OnEditorPreviewMouseWheel;
@@ -100,6 +101,11 @@ public partial class FloatingEditorWindow
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _saveTimer.Tick += SaveTimer_Tick;
         SizeChanged += OnSizeChanged;
+
+        // Alt+W toggles word wrap
+        var toggleWordWrapCommand = new RoutedCommand();
+        CommandBindings.Add(new CommandBinding(toggleWordWrapCommand, (_, _) => ToggleWordWrap()));
+        InputBindings.Add(new InputBinding(toggleWordWrapCommand, new KeyGesture(Key.W, ModifierKeys.Alt)));
 
         // Focus the editor when window opens
         Activated += (_, _) =>
@@ -382,12 +388,24 @@ public partial class FloatingEditorWindow
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Hide();
 
+    private void ToggleWordWrap()
+    {
+        FormulaEditor.WordWrap = !FormulaEditor.WordWrap;
+        _settings.WordWrap = FormulaEditor.WordWrap;
+        _settings.Save();
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         // Don't actually close, just hide - we reuse the window
         e.Cancel = true;
         DismissSignatureHelp();
         Hide();
+    }
+
+    internal void ApplyWordWrap(bool wordWrap)
+    {
+        FormulaEditor.WordWrap = wordWrap;
     }
 
     internal void ApplyIndentSize(int indentSize)
