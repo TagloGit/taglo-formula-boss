@@ -1,6 +1,7 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -13,6 +14,8 @@ using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Rendering;
 
+using Microsoft.CodeAnalysis;
+
 namespace FormulaBoss.UI;
 
 /// <summary>
@@ -22,17 +25,17 @@ namespace FormulaBoss.UI;
 /// </summary>
 internal sealed class ErrorHighlighter : IBackgroundRenderer
 {
-    private readonly TextEditor _editor;
     private readonly DispatcherTimer _debounceTimer;
+    private readonly TextEditor _editor;
+    private readonly Func<WorkbookMetadata?> _getMetadata;
+    private readonly Func<RoslynWorkspaceManager?> _getWorkspace;
+    private readonly SemanticAnalysisService _semanticService = new();
     private readonly Pen _squigglePen;
     private readonly ToolTip _tooltip;
-    private readonly Func<RoslynWorkspaceManager?> _getWorkspace;
-    private readonly Func<WorkbookMetadata?> _getMetadata;
-    private readonly SemanticAnalysisService _semanticService = new();
 
     private CancellationTokenSource? _diagnosticCts;
-    private List<ErrorMarker> _markers = [];
     private HoverContext? _hoverContext;
+    private List<ErrorMarker> _markers = [];
 
     public ErrorHighlighter(
         TextEditor editor,
@@ -47,7 +50,7 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         _squigglePen = new Pen(new SolidColorBrush(red), 1.2) { DashStyle = DashStyles.Dot };
         _squigglePen.Freeze();
 
-        _tooltip = new ToolTip { Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse };
+        _tooltip = new ToolTip { Placement = PlacementMode.Mouse };
 
         _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _debounceTimer.Tick += OnDebounceTimerTick;
@@ -180,7 +183,7 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
                 continue;
             }
 
-            var editorOffset = (span.Start - exprStart) + buildResult.ExpressionStartInEditor;
+            var editorOffset = span.Start - exprStart + buildResult.ExpressionStartInEditor;
             var length = Math.Min(span.Length, buildResult.ExpressionLength - (span.Start - exprStart));
             if (length <= 0)
             {
@@ -219,11 +222,6 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
 
             var analysisResult = _semanticService.BuildSemanticModel(
                 expression, isStatementBlock, metadata, letBindings);
-
-            if (analysisResult == null)
-            {
-                return null;
-            }
 
             return new HoverContext(analysisResult, metadata, expressionStartInEditor, expression.Length);
         }
@@ -315,7 +313,7 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         try
         {
             var type = _semanticService.GetTypeAtOffset(ctx.AnalysisResult, expressionOffset);
-            if (type == null || type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Error)
+            if (type == null || type.TypeKind == TypeKind.Error)
             {
                 return null;
             }
