@@ -14,6 +14,13 @@ Thanks for your interest in contributing! This guide covers what you need to get
 dotnet build formula-boss/formula-boss.slnx
 ```
 
+## Loading in Excel
+
+After building, load the add-in manually:
+
+1. Open Excel → File → Options → Add-ins → Manage: Excel Add-ins → Go
+2. Browse to `formula-boss/bin/Debug/net6.0-windows/formula-boss64.xll` (or `formula-boss.xll` for 32-bit)
+
 ## Running Tests
 
 ```bash
