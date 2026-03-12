@@ -28,14 +28,22 @@ Type a formula with backtick-delimited C# expressions:
 '=SUM(`data.Cells.Where(c => c.Color == 6).Select(c => c.Value)`)
 ```
 
-Formula Boss detects the expression, compiles it to a UDF via Roslyn, and rewrites the cell formula automatically.
+Formula Boss detects the expression, turns it into a User Defined Function (UDF), and rewrites the cell formula automatically.
 
-**But don't do it like that**:
+**But don't do it like that**.
+
+Instead:
 - Use the visual editor by pressing _Ctrl+Shift+`_.
 - Better yet, make your expression a LET argument, so that Formula Boss will give it a nice name.
 - Outside of a LET, your function won't be editable - inside a LET, you can use the visual editor to edit your function as much as you like.
 
 🚨 Warning: The Formula Boss is forgetful. It won't remember your functions next time you open Excel. If you used a LET function, you can recreate them, otherwise they're gone for good!
+
+🫣 **"But I don't know C#!"**
+
+- Well fair point, who does these days?
+- Still, basic expressions only use a small subset of C# syntax, and actually, C# syntax is pretty straightforward to learn and read
+- Plus, there's intellisense in the visual editor to show you what methods and functions are available
 
 ## Quick Examples
 
