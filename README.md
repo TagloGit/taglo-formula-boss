@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-256.png" alt="Formula Boss logo" width="128" />
+  <img src="assets/formula-boss.gif" alt="Formula Boss" width="128" />
 </p>
 
 <h1 align="center">Formula Boss</h1>
