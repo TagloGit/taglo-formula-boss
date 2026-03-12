@@ -1,3 +1,5 @@
+<a id="top"></a>
+
 <p align="center">
   <img src="assets/formula-boss.gif" alt="Formula Boss" width="128" />
 </p>
