@@ -101,21 +101,6 @@ A statement expression with a `foreach` loop, `List<double>`, and visited-step t
 
 Requires **64-bit Excel** (Microsoft 365 or Excel 2019+) on Windows 10/11. The installer bundles the .NET 6 runtime.
 
-## Building
-
-Requires [.NET 6 SDK](https://dotnet.microsoft.com/download/dotnet/6.0).
-
-```bash
-dotnet build formula-boss/formula-boss.slnx
-dotnet test formula-boss/formula-boss.slnx
-```
-
-## Loading in Excel
-
-1. Build the project
-2. Open Excel → File → Options → Add-ins → Manage: Excel Add-ins → Go
-3. Browse to `formula-boss/bin/Debug/net6.0-windows/formula-boss64.xll` (or `formula-boss.xll` for 32-bit)
-
 ## Documentation
 
 - [User Specification](specs/0005-formula-boss-user-spec.md) — full expression language, type system, and operation reference
