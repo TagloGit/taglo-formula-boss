@@ -88,15 +88,15 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void ExcelTable_ColumnValue_Cell_WithDynamicAccess()
+    public void ExcelTable_ColumnValue_Cell_WithNamedAccess()
     {
         var origin = new RangeOrigin("Sheet1", 1, 1);
         var data = new object?[,] { { "Alice", 100.0 }, { "Bob", 200.0 } };
         var headers = new[] { "Name", "Score" };
         var table = new ExcelTable(data, headers, origin);
 
-        dynamic row = table.Rows.First();
-        ColumnValue score = row.Score;
+        var row = table.Rows.First();
+        var score = row["Score"];
         var cell = score.Cell;
 
         Assert.Equal(1, cell.Row);

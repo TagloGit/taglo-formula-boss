@@ -6,8 +6,7 @@ namespace FormulaBoss.Runtime;
 ///     Collection of <see cref="Row" /> objects with instance methods accepting <c>Func&lt;dynamic, ...&gt;</c>.
 ///     Instance methods bypass the CS1977 limitation that prevents passing lambdas with dynamic
 ///     parameters to extension methods. The lambda parameter <c>r</c> is typed as <c>dynamic</c>,
-///     enabling <c>r.ColumnName</c> and <c>r["Column Name"]</c> syntax via <see cref="Row" />'s
-///     <see cref="System.Dynamic.DynamicObject" /> implementation.
+///     enabling <c>r["Column Name"]</c> syntax via <see cref="Row" />'s indexer.
 /// </summary>
 [SyntheticCollection(ElementType = typeof(Row))]
 public class RowCollection : IEnumerable<Row>
@@ -170,7 +169,7 @@ public class RowCollection : IEnumerable<Row>
         var arr = new object?[results.Count, 1];
         for (var i = 0; i < results.Count; i++)
         {
-            arr[i, 0] = results[i] is ColumnValue cv ? cv.Value : results[i];
+            arr[i, 0] = results[i] is ExcelValue ev ? ev.RawValue : results[i];
         }
 
         return new ExcelArray(arr);
@@ -221,8 +220,6 @@ public class RowCollection : IEnumerable<Row>
         return value switch
         {
             ExcelValue ev => ev,
-            ColumnValue cv => new ExcelScalar(cv.Value),
-            Row row => row, // Row has implicit conversion to ExcelValue
             _ => new ExcelScalar(value)
         };
     }

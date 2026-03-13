@@ -107,8 +107,6 @@ public class GroupedRowCollection : IEnumerable<RowGroup>
         return value switch
         {
             ExcelValue ev => ev,
-            ColumnValue cv => new ExcelScalar(cv.Value),
-            Row row => row,
             object?[] arr => ToSingleRowArray(arr),
             _ => new ExcelScalar(value)
         };
@@ -119,7 +117,7 @@ public class GroupedRowCollection : IEnumerable<RowGroup>
         var result = new object?[1, values.Length];
         for (var i = 0; i < values.Length; i++)
         {
-            result[0, i] = values[i] is ColumnValue cv ? cv.Value : values[i];
+            result[0, i] = values[i] is ExcelValue ev ? ev.RawValue : values[i];
         }
 
         return new ExcelArray(result);

@@ -3,7 +3,6 @@
 /// <summary>A 2D array of Excel values supporting element-wise operations.</summary>
 public class ExcelArray : ExcelValue, IExcelRange
 {
-    private readonly Dictionary<string, int>? _columnMap;
     private readonly object?[,] _data;
     private readonly RangeOrigin? _origin;
 
@@ -11,9 +10,11 @@ public class ExcelArray : ExcelValue, IExcelRange
         RangeOrigin? origin = null)
     {
         _data = data;
-        _columnMap = columnMap;
+        ColumnMap = columnMap;
         _origin = origin;
     }
+
+    protected Dictionary<string, int>? ColumnMap { get; }
 
     /// <inheritdoc />
     public override object RawValue => _data;
@@ -44,10 +45,10 @@ public class ExcelArray : ExcelValue, IExcelRange
                     ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
                         _origin.TopRow + rowIdx, _origin.LeftCol + colIdx)
                     : null;
-                rows.Add(new Row(values, _columnMap, cellResolver));
+                rows.Add(new Row(values, ColumnMap, cellResolver));
             }
 
-            return new RowCollection(rows, _columnMap);
+            return new RowCollection(rows, ColumnMap);
         }
     }
 
@@ -156,7 +157,7 @@ public class ExcelArray : ExcelValue, IExcelRange
                 result[r, c] = mapped.RawValue is object?[,] arr ? arr[0, 0] : mapped.RawValue;
             }
 
-        return new ExcelArray(result, _columnMap);
+        return new ExcelArray(result, ColumnMap);
     }
 
     public override IExcelRange OrderBy(Func<ExcelValue, object> keySelector)

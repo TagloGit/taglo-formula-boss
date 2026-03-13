@@ -28,14 +28,6 @@ public class ExcelTableTests
     }
 
     [Fact]
-    public void Rows_HaveDynamicColumnAccess()
-    {
-        var table = MakeTable();
-        dynamic row = table.Rows.First(_ => true);
-        Assert.Equal("Alice", (ColumnValue)row.Name);
-    }
-
-    [Fact]
     public void Rows_Where_FiltersWithNamedAccess()
     {
         var table = MakeTable();
