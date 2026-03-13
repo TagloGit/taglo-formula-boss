@@ -8,6 +8,7 @@ namespace FormulaBoss.Runtime;
 ///     The lambda parameter is typed as <c>dynamic</c> and receives a <see cref="RowGroup" />,
 ///     enabling <c>g.Key</c>, <c>g.Count()</c>, <c>g.Where(...)</c>, etc.
 /// </summary>
+[SyntheticCollection(ElementType = typeof(RowGroup))]
 public class GroupedRowCollection : IEnumerable<RowGroup>
 {
     private readonly List<RowGroup> _groups;
@@ -17,12 +18,16 @@ public class GroupedRowCollection : IEnumerable<RowGroup>
         _groups = groups;
     }
 
+    [SyntheticExclude]
     public IEnumerator<RowGroup> GetEnumerator() => _groups.GetEnumerator();
+
+    [SyntheticExclude]
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     /// <summary>Projects each group into a new value. The lambda receives a <see cref="RowGroup" /> (dynamic) with Key, Count(), Where(), etc.</summary>
     /// <param name="selector">A function that transforms each group.</param>
     /// <returns>A range containing the projected values.</returns>
+    [SyntheticMember]
     public IExcelRange Select(Func<dynamic, object> selector)
     {
         var rawResults = _groups.Select(g => selector(g)).ToList();
@@ -67,27 +72,33 @@ public class GroupedRowCollection : IEnumerable<RowGroup>
 
     /// <summary>Filters groups to those matching the predicate.</summary>
     /// <param name="predicate">A function that receives a group (dynamic) and returns true to keep it.</param>
+    [SyntheticMember]
     public GroupedRowCollection Where(Func<dynamic, bool> predicate) =>
         new(_groups.Where(g => predicate(g)).ToList());
 
     /// <summary>Sorts groups in ascending order by the selected key.</summary>
     /// <param name="keySelector">A function that extracts a sort key from each group.</param>
+    [SyntheticMember]
     public GroupedRowCollection OrderBy(Func<dynamic, object> keySelector) =>
         new(_groups.OrderBy(g => keySelector(g)).ToList());
 
     /// <summary>Sorts groups in descending order by the selected key.</summary>
     /// <param name="keySelector">A function that extracts a sort key from each group.</param>
+    [SyntheticMember]
     public GroupedRowCollection OrderByDescending(Func<dynamic, object> keySelector) =>
         new(_groups.OrderByDescending(g => keySelector(g)).ToList());
 
     /// <summary>Returns the number of groups.</summary>
+    [SyntheticMember]
     public int Count() => _groups.Count;
 
     /// <summary>Returns the first group, or throws if empty.</summary>
+    [SyntheticMember]
     public RowGroup First() => _groups.First();
 
     /// <summary>Returns the first group matching the predicate, or throws if none found.</summary>
     /// <param name="predicate">A function to test each group.</param>
+    [SyntheticMember]
     public RowGroup First(Func<dynamic, bool> predicate) =>
         _groups.First(g => predicate(g));
 
