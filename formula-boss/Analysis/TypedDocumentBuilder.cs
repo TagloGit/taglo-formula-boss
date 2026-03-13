@@ -1,5 +1,4 @@
-using System.Reflection;
-using System.Runtime.CompilerServices;
+﻿using System.Reflection;
 using System.Text;
 
 using FormulaBoss.Runtime;
@@ -101,9 +100,9 @@ internal static class TypedDocumentBuilder
         sb.AppendLine($"class {rowTypeName} {{");
 
         // Indexer for bracket access
-        sb.AppendLine($"public ColumnValue this[string columnName] => default!;");
-        sb.AppendLine($"public ColumnValue this[int index] => default!;");
-        sb.AppendLine($"public int ColumnCount => 0;");
+        sb.AppendLine("public ColumnValue this[string columnName] => default!;");
+        sb.AppendLine("public ColumnValue this[int index] => default!;");
+        sb.AppendLine("public int ColumnCount => 0;");
 
         var mapping = ColumnMapper.BuildMapping(columns.ToArray());
         foreach (var (sanitised, _) in mapping)
@@ -128,8 +127,6 @@ internal static class TypedDocumentBuilder
         {
             return;
         }
-
-        var elementType = collAttr.ElementType;
 
         // Find IEnumerable<T> to determine the enumerable element type
         var enumerableElementName = syntheticElementName;
@@ -157,24 +154,24 @@ internal static class TypedDocumentBuilder
             switch (member)
             {
                 case PropertyInfo prop:
-                    EmitProperty(sb, prop, typeMap, elementType);
+                    EmitProperty(sb, prop, typeMap);
                     break;
                 case MethodInfo method:
-                    EmitMethod(sb, method, typeMap, elementType, syntheticElementName);
+                    EmitMethod(sb, method, typeMap, syntheticElementName);
                     break;
             }
         }
 
         // IEnumerable boilerplate
         sb.AppendLine($"public IEnumerator<{enumerableElementName}> GetEnumerator() => default!;");
-        sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
+        sb.AppendLine("IEnumerator IEnumerable.GetEnumerator() => default!;");
 
         sb.AppendLine("}");
         sb.AppendLine();
     }
 
     private static void EmitProperty(
-        StringBuilder sb, PropertyInfo prop, Dictionary<Type, string> typeMap, Type elementType)
+        StringBuilder sb, PropertyInfo prop, Dictionary<Type, string> typeMap)
     {
         var nullable = IsNullableProperty(prop);
         var typeName = FormatReturnType(prop.PropertyType, typeMap, nullable);
@@ -183,14 +180,13 @@ internal static class TypedDocumentBuilder
     }
 
     private static void EmitMethod(
-        StringBuilder sb, MethodInfo method, Dictionary<Type, string> typeMap,
-        Type elementType, string syntheticElementName)
+        StringBuilder sb, MethodInfo method, Dictionary<Type, string> typeMap, string syntheticElementName)
     {
         var nullable = IsNullableReturn(method);
         var returnTypeName = FormatReturnType(method.ReturnType, typeMap, nullable);
         var parameters = method.GetParameters();
         var paramStrings = parameters
-            .Select(p => FormatParameter(p, typeMap, elementType, syntheticElementName))
+            .Select(p => FormatParameter(p, typeMap, syntheticElementName))
             .ToList();
 
         var paramList = string.Join(", ", paramStrings);
@@ -199,15 +195,14 @@ internal static class TypedDocumentBuilder
     }
 
     private static string FormatParameter(
-        ParameterInfo param, Dictionary<Type, string> typeMap,
-        Type elementType, string syntheticElementName)
+        ParameterInfo param, Dictionary<Type, string> typeMap, string syntheticElementName)
     {
         var type = param.ParameterType;
         string typeName;
 
         if (type.IsGenericType && IsFuncType(type))
         {
-            typeName = FormatFuncType(param, typeMap, elementType, syntheticElementName);
+            typeName = FormatFuncType(param, typeMap, syntheticElementName);
         }
         else if (IsDynamicParameter(param))
         {
@@ -226,8 +221,7 @@ internal static class TypedDocumentBuilder
     }
 
     private static string FormatFuncType(
-        ParameterInfo param, Dictionary<Type, string> typeMap,
-        Type elementType, string syntheticElementName)
+        ParameterInfo param, Dictionary<Type, string> typeMap, string syntheticElementName)
     {
         var funcType = param.ParameterType;
         var typeArgs = funcType.GetGenericArguments();
@@ -289,10 +283,8 @@ internal static class TypedDocumentBuilder
         return nullable ? $"{name}?" : name;
     }
 
-    private static string FormatSimpleType(Type type)
-    {
-        return CSharpKeywords.TryGetValue(type, out var keyword) ? keyword : type.Name;
-    }
+    private static string FormatSimpleType(Type type) =>
+        CSharpKeywords.TryGetValue(type, out var keyword) ? keyword : type.Name;
 
     private static bool IsFuncType(Type type)
     {
