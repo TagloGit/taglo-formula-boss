@@ -54,11 +54,15 @@ internal static class TypedDocumentBuilder
 
             var rowTypeName = $"__{safeTableName}Row";
             var rowCollTypeName = $"__{safeTableName}RowCollection";
+            var rowGroupTypeName = $"__{safeTableName}RowGroup";
+            var groupedCollTypeName = $"__{safeTableName}GroupedRowCollection";
             var tableTypeName = $"__{safeTableName}Table";
             tableTypeNames[tableName] = tableTypeName;
 
             EmitTypedRow(sb, rowTypeName, columns);
-            EmitTypedRowCollection(sb, rowCollTypeName, rowTypeName);
+            EmitTypedRowCollection(sb, rowCollTypeName, rowTypeName, groupedCollTypeName);
+            EmitTypedRowGroup(sb, rowGroupTypeName, rowTypeName, rowCollTypeName);
+            EmitTypedGroupedRowCollection(sb, groupedCollTypeName, rowGroupTypeName);
             EmitTypedTable(sb, tableTypeName, rowCollTypeName);
         }
 
@@ -85,7 +89,7 @@ internal static class TypedDocumentBuilder
     }
 
     private static void EmitTypedRowCollection(
-        StringBuilder sb, string rowCollTypeName, string rowTypeName)
+        StringBuilder sb, string rowCollTypeName, string rowTypeName, string groupedCollTypeName)
     {
         sb.AppendLine($"class {rowCollTypeName} : IEnumerable<{rowTypeName}> {{");
         sb.AppendLine($"public {rowCollTypeName} Where(Func<{rowTypeName}, bool> predicate) => this;");
@@ -103,8 +107,51 @@ internal static class TypedDocumentBuilder
         sb.AppendLine($"public IExcelRange ToRange() => default!;");
         sb.AppendLine($"public dynamic Aggregate(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
         sb.AppendLine($"public IExcelRange Scan(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public GroupedRowCollection GroupBy(Func<{rowTypeName}, object> keySelector) => default!;");
+        sb.AppendLine($"public {groupedCollTypeName} GroupBy(Func<{rowTypeName}, object> keySelector) => default!;");
         sb.AppendLine($"public IEnumerator<{rowTypeName}> GetEnumerator() => default!;");
+        sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
+    private static void EmitTypedRowGroup(
+        StringBuilder sb, string rowGroupTypeName, string rowTypeName, string rowCollTypeName)
+    {
+        sb.AppendLine($"class {rowGroupTypeName} : IEnumerable<{rowTypeName}> {{");
+        sb.AppendLine($"public object? Key => default;");
+        sb.AppendLine($"public {rowCollTypeName} Where(Func<{rowTypeName}, bool> predicate) => default!;");
+        sb.AppendLine($"public IExcelRange Select(Func<{rowTypeName}, object> selector) => default!;");
+        sb.AppendLine($"public bool Any(Func<{rowTypeName}, bool> predicate) => default;");
+        sb.AppendLine($"public bool All(Func<{rowTypeName}, bool> predicate) => default;");
+        sb.AppendLine($"public {rowTypeName} First(Func<{rowTypeName}, bool> predicate) => default!;");
+        sb.AppendLine($"public {rowTypeName}? FirstOrDefault(Func<{rowTypeName}, bool> predicate) => default;");
+        sb.AppendLine($"public {rowCollTypeName} OrderBy(Func<{rowTypeName}, object> keySelector) => default!;");
+        sb.AppendLine($"public {rowCollTypeName} OrderByDescending(Func<{rowTypeName}, object> keySelector) => default!;");
+        sb.AppendLine($"public int Count() => 0;");
+        sb.AppendLine($"public {rowCollTypeName} Take(int count) => default!;");
+        sb.AppendLine($"public {rowCollTypeName} Skip(int count) => default!;");
+        sb.AppendLine($"public {rowCollTypeName} Distinct() => default!;");
+        sb.AppendLine($"public IExcelRange ToRange() => default!;");
+        sb.AppendLine($"public dynamic Aggregate(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
+        sb.AppendLine($"public IExcelRange Scan(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
+        sb.AppendLine($"public IEnumerator<{rowTypeName}> GetEnumerator() => default!;");
+        sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
+
+    private static void EmitTypedGroupedRowCollection(
+        StringBuilder sb, string groupedCollTypeName, string rowGroupTypeName)
+    {
+        sb.AppendLine($"class {groupedCollTypeName} : IEnumerable<{rowGroupTypeName}> {{");
+        sb.AppendLine($"public IExcelRange Select(Func<{rowGroupTypeName}, object> selector) => default!;");
+        sb.AppendLine($"public {groupedCollTypeName} Where(Func<{rowGroupTypeName}, bool> predicate) => default!;");
+        sb.AppendLine($"public {groupedCollTypeName} OrderBy(Func<{rowGroupTypeName}, object> keySelector) => default!;");
+        sb.AppendLine($"public {groupedCollTypeName} OrderByDescending(Func<{rowGroupTypeName}, object> keySelector) => default!;");
+        sb.AppendLine($"public int Count() => 0;");
+        sb.AppendLine($"public {rowGroupTypeName} First() => default!;");
+        sb.AppendLine($"public {rowGroupTypeName} First(Func<{rowGroupTypeName}, bool> predicate) => default!;");
+        sb.AppendLine($"public IEnumerator<{rowGroupTypeName}> GetEnumerator() => default!;");
         sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
         sb.AppendLine("}");
         sb.AppendLine();

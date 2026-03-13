@@ -365,6 +365,13 @@ public static class ContextResolver
                         return (true, FindChainRootTable(tokens, pos));
                     }
 
+                    // GroupBy transforms RowCollection → GroupedRowCollection;
+                    // lambda parameters after GroupBy are RowGroups, not Rows.
+                    if (tokens[pos].Lexeme.Equals("GroupBy", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return (false, null);
+                    }
+
                     pos--;
                 }
                 else
@@ -377,6 +384,13 @@ public static class ContextResolver
                 if (tokens[pos].Lexeme.Equals("Rows", StringComparison.OrdinalIgnoreCase))
                 {
                     return (true, FindChainRootTable(tokens, pos));
+                }
+
+                // GroupBy transforms RowCollection → GroupedRowCollection;
+                // lambda parameters after GroupBy are RowGroups, not Rows.
+                if (tokens[pos].Lexeme.Equals("GroupBy", StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, null);
                 }
 
                 pos--;
