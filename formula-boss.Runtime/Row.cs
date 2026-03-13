@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 
 namespace FormulaBoss.Runtime;
 
@@ -26,7 +26,7 @@ public class Row : ExcelArray, IEnumerable<ColumnValue>
     {
         get
         {
-            if (_columnMap == null || !_columnMap.TryGetValue(columnName, out var index))
+            if (ColumnMap == null || !ColumnMap.TryGetValue(columnName, out var index))
             {
                 throw new KeyNotFoundException($"Column '{columnName}' not found.");
             }
@@ -50,16 +50,7 @@ public class Row : ExcelArray, IEnumerable<ColumnValue>
     public int ColumnCount => _values.Length;
 
     /// <summary>Returns the row itself wrapped in a RowCollection, preserving cell resolver context.</summary>
-    public override RowCollection Rows => new(new[] { this }, _columnMap);
-
-    /// <summary>Returns an enumerator that iterates over the column values in this row as ExcelValues.</summary>
-    public override IEnumerator<ExcelValue> GetEnumerator()
-    {
-        for (var i = 0; i < _values.Length; i++)
-        {
-            yield return MakeColumnValue(i);
-        }
-    }
+    public override RowCollection Rows => new(new[] { this }, ColumnMap);
 
     /// <summary>Returns an enumerator that iterates over the column values in this row.</summary>
     IEnumerator<ColumnValue> IEnumerable<ColumnValue>.GetEnumerator()
@@ -71,6 +62,15 @@ public class Row : ExcelArray, IEnumerable<ColumnValue>
     }
 
     IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<ExcelValue>)this).GetEnumerator();
+
+    /// <summary>Returns an enumerator that iterates over the column values in this row as ExcelValues.</summary>
+    public override IEnumerator<ExcelValue> GetEnumerator()
+    {
+        for (var i = 0; i < _values.Length; i++)
+        {
+            yield return MakeColumnValue(i);
+        }
+    }
 
     private ColumnValue MakeColumnValue(int colIndex)
     {
