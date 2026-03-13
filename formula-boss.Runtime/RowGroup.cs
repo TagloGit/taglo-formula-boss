@@ -5,6 +5,7 @@ namespace FormulaBoss.Runtime;
 ///     Extends <see cref="RowCollection" /> so all row-wise operations
 ///     (Where, Select, OrderBy, Count, ToRange, etc.) work within each group.
 /// </summary>
+[SyntheticCollection(ElementType = typeof(Row))]
 public class RowGroup : RowCollection
 {
     public RowGroup(object? key, IEnumerable<Row> rows, Dictionary<string, int>? columnMap = null)
@@ -14,5 +15,6 @@ public class RowGroup : RowCollection
     }
 
     /// <summary>Gets the grouping key shared by all rows in this group.</summary>
+    [SyntheticMember]
     public object? Key { get; }
 }

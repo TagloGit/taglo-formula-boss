@@ -1,5 +1,8 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 
+using FormulaBoss.Runtime;
 using FormulaBoss.Transpilation;
 using FormulaBoss.UI;
 
@@ -12,6 +15,21 @@ namespace FormulaBoss.Analysis;
 /// </summary>
 internal static class TypedDocumentBuilder
 {
+    private static readonly NullabilityInfoContext NullabilityCtx = new();
+
+    private static readonly Dictionary<Type, string> CSharpKeywords = new()
+    {
+        [typeof(object)] = "object",
+        [typeof(int)] = "int",
+        [typeof(bool)] = "bool",
+        [typeof(string)] = "string",
+        [typeof(void)] = "void",
+        [typeof(double)] = "double",
+        [typeof(float)] = "float",
+        [typeof(long)] = "long",
+        [typeof(decimal)] = "decimal"
+    };
+
     /// <summary>
     ///     Appends standard usings for the synthetic compilation context.
     /// </summary>
@@ -59,10 +77,19 @@ internal static class TypedDocumentBuilder
             var tableTypeName = $"__{safeTableName}Table";
             tableTypeNames[tableName] = tableTypeName;
 
+            var typeMap = new Dictionary<Type, string>
+            {
+                [typeof(RowCollection)] = rowCollTypeName,
+                [typeof(GroupedRowCollection)] = groupedCollTypeName,
+                [typeof(Row)] = rowTypeName,
+                [typeof(RowGroup)] = rowGroupTypeName
+            };
+
             EmitTypedRow(sb, rowTypeName, columns);
-            EmitTypedRowCollection(sb, rowCollTypeName, rowTypeName, groupedCollTypeName);
-            EmitTypedRowGroup(sb, rowGroupTypeName, rowTypeName, rowCollTypeName);
-            EmitTypedGroupedRowCollection(sb, groupedCollTypeName, rowGroupTypeName);
+            EmitSyntheticCollection(sb, typeof(RowCollection), rowCollTypeName, typeMap, rowTypeName);
+            EmitSyntheticCollection(sb, typeof(RowGroup), rowGroupTypeName, typeMap, rowTypeName);
+            EmitSyntheticCollection(sb, typeof(GroupedRowCollection), groupedCollTypeName, typeMap,
+                rowGroupTypeName);
             EmitTypedTable(sb, tableTypeName, rowCollTypeName);
         }
 
@@ -88,73 +115,270 @@ internal static class TypedDocumentBuilder
         sb.AppendLine();
     }
 
-    private static void EmitTypedRowCollection(
-        StringBuilder sb, string rowCollTypeName, string rowTypeName, string groupedCollTypeName)
+    /// <summary>
+    ///     Reflects over a runtime collection type annotated with <see cref="SyntheticCollectionAttribute" />
+    ///     and emits a synthetic stub class with type-substituted method signatures.
+    /// </summary>
+    private static void EmitSyntheticCollection(
+        StringBuilder sb, Type runtimeType, string syntheticTypeName,
+        Dictionary<Type, string> typeMap, string syntheticElementName)
     {
-        sb.AppendLine($"class {rowCollTypeName} : IEnumerable<{rowTypeName}> {{");
-        sb.AppendLine($"public {rowCollTypeName} Where(Func<{rowTypeName}, bool> predicate) => this;");
-        sb.AppendLine($"public IExcelRange Select(Func<{rowTypeName}, object> selector) => default!;");
-        sb.AppendLine($"public bool Any(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public bool All(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public {rowTypeName} First(Func<{rowTypeName}, bool> predicate) => default!;");
-        sb.AppendLine($"public {rowTypeName}? FirstOrDefault(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public {rowCollTypeName} OrderBy(Func<{rowTypeName}, object> keySelector) => this;");
-        sb.AppendLine($"public {rowCollTypeName} OrderByDescending(Func<{rowTypeName}, object> keySelector) => this;");
-        sb.AppendLine($"public int Count() => 0;");
-        sb.AppendLine($"public {rowCollTypeName} Take(int count) => this;");
-        sb.AppendLine($"public {rowCollTypeName} Skip(int count) => this;");
-        sb.AppendLine($"public {rowCollTypeName} Distinct() => this;");
-        sb.AppendLine($"public IExcelRange ToRange() => default!;");
-        sb.AppendLine($"public dynamic Aggregate(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public IExcelRange Scan(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public {groupedCollTypeName} GroupBy(Func<{rowTypeName}, object> keySelector) => default!;");
-        sb.AppendLine($"public IEnumerator<{rowTypeName}> GetEnumerator() => default!;");
+        var collAttr = runtimeType.GetCustomAttribute<SyntheticCollectionAttribute>();
+        if (collAttr == null)
+        {
+            return;
+        }
+
+        var elementType = collAttr.ElementType;
+
+        // Find IEnumerable<T> to determine the enumerable element type
+        var enumerableElementName = syntheticElementName;
+        var enumerableInterface = runtimeType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+        if (enumerableInterface != null)
+        {
+            var enumerableArg = enumerableInterface.GetGenericArguments()[0];
+            if (typeMap.TryGetValue(enumerableArg, out var mappedName))
+            {
+                enumerableElementName = mappedName;
+            }
+        }
+
+        sb.AppendLine($"class {syntheticTypeName} : IEnumerable<{enumerableElementName}> {{");
+
+        // Collect [SyntheticMember] members (includes inherited)
+        var members = runtimeType
+            .GetMembers(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.GetCustomAttribute<SyntheticMemberAttribute>() != null)
+            .ToList();
+
+        foreach (var member in members)
+        {
+            switch (member)
+            {
+                case PropertyInfo prop:
+                    EmitProperty(sb, prop, typeMap, elementType);
+                    break;
+                case MethodInfo method:
+                    EmitMethod(sb, method, typeMap, elementType, syntheticElementName);
+                    break;
+            }
+        }
+
+        // IEnumerable boilerplate
+        sb.AppendLine($"public IEnumerator<{enumerableElementName}> GetEnumerator() => default!;");
         sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
+
         sb.AppendLine("}");
         sb.AppendLine();
     }
 
-    private static void EmitTypedRowGroup(
-        StringBuilder sb, string rowGroupTypeName, string rowTypeName, string rowCollTypeName)
+    private static void EmitProperty(
+        StringBuilder sb, PropertyInfo prop, Dictionary<Type, string> typeMap, Type elementType)
     {
-        sb.AppendLine($"class {rowGroupTypeName} : IEnumerable<{rowTypeName}> {{");
-        sb.AppendLine($"public object? Key => default;");
-        sb.AppendLine($"public {rowCollTypeName} Where(Func<{rowTypeName}, bool> predicate) => default!;");
-        sb.AppendLine($"public IExcelRange Select(Func<{rowTypeName}, object> selector) => default!;");
-        sb.AppendLine($"public bool Any(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public bool All(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public {rowTypeName} First(Func<{rowTypeName}, bool> predicate) => default!;");
-        sb.AppendLine($"public {rowTypeName}? FirstOrDefault(Func<{rowTypeName}, bool> predicate) => default;");
-        sb.AppendLine($"public {rowCollTypeName} OrderBy(Func<{rowTypeName}, object> keySelector) => default!;");
-        sb.AppendLine($"public {rowCollTypeName} OrderByDescending(Func<{rowTypeName}, object> keySelector) => default!;");
-        sb.AppendLine($"public int Count() => 0;");
-        sb.AppendLine($"public {rowCollTypeName} Take(int count) => default!;");
-        sb.AppendLine($"public {rowCollTypeName} Skip(int count) => default!;");
-        sb.AppendLine($"public {rowCollTypeName} Distinct() => default!;");
-        sb.AppendLine($"public IExcelRange ToRange() => default!;");
-        sb.AppendLine($"public dynamic Aggregate(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public IExcelRange Scan(dynamic seed, Func<dynamic, {rowTypeName}, dynamic> func) => default!;");
-        sb.AppendLine($"public IEnumerator<{rowTypeName}> GetEnumerator() => default!;");
-        sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
-        sb.AppendLine("}");
-        sb.AppendLine();
+        var nullable = IsNullableProperty(prop);
+        var typeName = FormatReturnType(prop.PropertyType, typeMap, nullable);
+        var defaultExpr = GetDefaultExpression(prop.PropertyType, nullable);
+        sb.AppendLine($"public {typeName} {prop.Name} => {defaultExpr};");
     }
 
-    private static void EmitTypedGroupedRowCollection(
-        StringBuilder sb, string groupedCollTypeName, string rowGroupTypeName)
+    private static void EmitMethod(
+        StringBuilder sb, MethodInfo method, Dictionary<Type, string> typeMap,
+        Type elementType, string syntheticElementName)
     {
-        sb.AppendLine($"class {groupedCollTypeName} : IEnumerable<{rowGroupTypeName}> {{");
-        sb.AppendLine($"public IExcelRange Select(Func<{rowGroupTypeName}, object> selector) => default!;");
-        sb.AppendLine($"public {groupedCollTypeName} Where(Func<{rowGroupTypeName}, bool> predicate) => default!;");
-        sb.AppendLine($"public {groupedCollTypeName} OrderBy(Func<{rowGroupTypeName}, object> keySelector) => default!;");
-        sb.AppendLine($"public {groupedCollTypeName} OrderByDescending(Func<{rowGroupTypeName}, object> keySelector) => default!;");
-        sb.AppendLine($"public int Count() => 0;");
-        sb.AppendLine($"public {rowGroupTypeName} First() => default!;");
-        sb.AppendLine($"public {rowGroupTypeName} First(Func<{rowGroupTypeName}, bool> predicate) => default!;");
-        sb.AppendLine($"public IEnumerator<{rowGroupTypeName}> GetEnumerator() => default!;");
-        sb.AppendLine($"IEnumerator IEnumerable.GetEnumerator() => default!;");
-        sb.AppendLine("}");
-        sb.AppendLine();
+        var nullable = IsNullableReturn(method);
+        var returnTypeName = FormatReturnType(method.ReturnType, typeMap, nullable);
+        var parameters = method.GetParameters();
+        var paramStrings = parameters
+            .Select(p => FormatParameter(p, typeMap, elementType, syntheticElementName))
+            .ToList();
+
+        var paramList = string.Join(", ", paramStrings);
+        var defaultExpr = GetDefaultExpression(method.ReturnType, nullable);
+        sb.AppendLine($"public {returnTypeName} {method.Name}({paramList}) => {defaultExpr};");
+    }
+
+    private static string FormatParameter(
+        ParameterInfo param, Dictionary<Type, string> typeMap,
+        Type elementType, string syntheticElementName)
+    {
+        var type = param.ParameterType;
+        string typeName;
+
+        if (type.IsGenericType && IsFuncType(type))
+        {
+            typeName = FormatFuncType(param, typeMap, elementType, syntheticElementName);
+        }
+        else if (IsDynamicParameter(param))
+        {
+            typeName = "dynamic";
+        }
+        else if (typeMap.TryGetValue(type, out var mapped))
+        {
+            typeName = mapped;
+        }
+        else
+        {
+            typeName = FormatSimpleType(type);
+        }
+
+        return $"{typeName} {param.Name}";
+    }
+
+    private static string FormatFuncType(
+        ParameterInfo param, Dictionary<Type, string> typeMap,
+        Type elementType, string syntheticElementName)
+    {
+        var funcType = param.ParameterType;
+        var typeArgs = funcType.GetGenericArguments();
+        var dynamicFlags = GetDynamicFlags(param);
+        var elementArgIndex = typeArgs.Length - 2; // Convention: element is at argCount - 2
+
+        var formattedArgs = new string[typeArgs.Length];
+        for (var i = 0; i < typeArgs.Length; i++)
+        {
+            var argType = typeArgs[i];
+            // DynamicAttribute flag index: +1 because index 0 is for the Func type itself
+            var isDynamic = dynamicFlags != null && i + 1 < dynamicFlags.Length && dynamicFlags[i + 1];
+
+            if (isDynamic && i == elementArgIndex)
+            {
+                // This is the element type position — substitute
+                formattedArgs[i] = syntheticElementName;
+            }
+            else if (isDynamic)
+            {
+                // Non-element dynamic position
+                formattedArgs[i] = "dynamic";
+            }
+            else if (typeMap.TryGetValue(argType, out var mapped))
+            {
+                formattedArgs[i] = mapped;
+            }
+            else
+            {
+                formattedArgs[i] = FormatSimpleType(argType);
+            }
+        }
+
+        return $"Func<{string.Join(", ", formattedArgs)}>";
+    }
+
+    private static string FormatReturnType(Type type, Dictionary<Type, string> typeMap, bool nullable)
+    {
+        if (typeMap.TryGetValue(type, out var mapped))
+        {
+            return nullable ? $"{mapped}?" : mapped;
+        }
+
+        if (type == typeof(object))
+        {
+            return nullable ? "object?" : "dynamic";
+        }
+
+        if (type.IsGenericType)
+        {
+            var def = type.GetGenericTypeDefinition();
+            var args = type.GetGenericArguments();
+            var baseName = def.Name[..def.Name.IndexOf('`')];
+            var formattedArgs = args.Select(a => FormatReturnType(a, typeMap, false));
+            return $"{baseName}<{string.Join(", ", formattedArgs)}>";
+        }
+
+        var name = FormatSimpleType(type);
+        return nullable ? $"{name}?" : name;
+    }
+
+    private static string FormatSimpleType(Type type)
+    {
+        return CSharpKeywords.TryGetValue(type, out var keyword) ? keyword : type.Name;
+    }
+
+    private static bool IsFuncType(Type type)
+    {
+        if (!type.IsGenericType)
+        {
+            return false;
+        }
+
+        var def = type.GetGenericTypeDefinition();
+        return def.FullName?.StartsWith("System.Func`") == true;
+    }
+
+    private static bool[] GetDynamicFlags(ParameterInfo param)
+    {
+        var attr = param.GetCustomAttributesData()
+            .FirstOrDefault(a => a.AttributeType.FullName ==
+                                 "System.Runtime.CompilerServices.DynamicAttribute");
+        if (attr == null)
+        {
+            return Array.Empty<bool>();
+        }
+
+        if (attr.ConstructorArguments.Count == 0)
+        {
+            // Bare [Dynamic] — single true flag
+            return new[] { true };
+        }
+
+        // [Dynamic(new[] { false, true, ... })]
+        var flags = attr.ConstructorArguments[0].Value;
+        if (flags is IReadOnlyCollection<CustomAttributeTypedArgument> args)
+        {
+            return args.Select(a => (bool)a.Value!).ToArray();
+        }
+
+        return Array.Empty<bool>();
+    }
+
+    private static bool IsDynamicParameter(ParameterInfo param)
+    {
+        var flags = GetDynamicFlags(param);
+        return flags.Length > 0 && flags[0];
+    }
+
+    private static bool IsNullableReturn(MethodInfo method)
+    {
+        try
+        {
+            var info = NullabilityCtx.Create(method.ReturnParameter);
+            return info.ReadState == NullabilityState.Nullable;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsNullableProperty(PropertyInfo prop)
+    {
+        try
+        {
+            var info = NullabilityCtx.Create(prop);
+            return info.ReadState == NullabilityState.Nullable;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string GetDefaultExpression(Type returnType, bool nullable)
+    {
+        // Value types use 'default', reference types use 'default!'
+        if (returnType.IsValueType && !nullable)
+        {
+            return "default";
+        }
+
+        // Nullable value type or reference type — for stubs, always default! for non-null ref,
+        // default for nullable and value types
+        if (nullable || (returnType.IsValueType && Nullable.GetUnderlyingType(returnType) != null))
+        {
+            return "default";
+        }
+
+        return "default!";
     }
 
     private static void EmitTypedTable(
