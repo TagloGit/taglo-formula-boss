@@ -113,6 +113,12 @@ public static class ContextResolver
                 return new CompletionContext(DslType.Row, null, insideDsl, true, tableName);
             }
 
+            // Check if it's a table variable bracket context (e.g. "Sales[")
+            if (IsTableName(paramName, metadata))
+            {
+                return new CompletionContext(DslType.Row, null, insideDsl, true, paramName);
+            }
+
             return new CompletionContext(DslType.TopLevel, null, insideDsl);
         }
         else if (last.Type == TokenType.Identifier &&
@@ -125,6 +131,12 @@ public static class ContextResolver
             if (isRow)
             {
                 return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, true, tableName);
+            }
+
+            // Check if it's a table variable bracket context (e.g. "Sales[partialWo")
+            if (IsTableName(paramName, metadata))
+            {
+                return new CompletionContext(DslType.Row, last.Lexeme, insideDsl, true, paramName);
             }
 
             return new CompletionContext(DslType.TopLevel, GetTrailingWord(tokens), insideDsl);
@@ -520,6 +532,24 @@ public static class ContextResolver
     {
         var stripped = text.Replace("$", "");
         return CellRefPattern.IsMatch(stripped);
+    }
+
+    private static bool IsTableName(string name, WorkbookMetadata? metadata)
+    {
+        if (metadata == null)
+        {
+            return false;
+        }
+
+        foreach (var t in metadata.TableNames)
+        {
+            if (t.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? GetTrailingWord(List<Token> tokens)

@@ -65,8 +65,14 @@ public class DotNotationRewriter : CSharpSyntaxRewriter
         var tree = CSharpSyntaxTree.ParseText(wrappedSource);
         var root = tree.GetRoot();
 
-        // Detect row parameter names from lambdas if not provided
-        var rowParams = rowParameterNames ?? DetectRowParameters(root);
+        // Merge provided names with auto-detected lambda parameter names
+        var autoDetected = DetectRowParameters(root);
+        if (rowParameterNames != null)
+        {
+            autoDetected.UnionWith(rowParameterNames);
+        }
+
+        var rowParams = autoDetected;
 
         if (rowParams.Count == 0)
         {

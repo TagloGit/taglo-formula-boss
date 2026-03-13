@@ -91,6 +91,7 @@ public class InputDetector
         "ExcelTable",
         "ExcelScalar",
         "Row",
+        "Column",
         "ColumnValue",
         "Cell",
         "Interior",

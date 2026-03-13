@@ -16,6 +16,9 @@ public class ExcelArray : ExcelValue, IExcelRange
 
     protected Dictionary<string, int>? ColumnMap { get; }
 
+    /// <summary>Gets the range origin for this array, if available.</summary>
+    protected RangeOrigin? Origin => _origin;
+
     /// <inheritdoc />
     public override object RawValue => _data;
 

@@ -378,6 +378,7 @@ internal static class TypedDocumentBuilder
     {
         sb.AppendLine($"class {tableTypeName} : ExcelTable {{");
         sb.AppendLine($"public new {rowCollTypeName} Rows => default!;");
+        sb.AppendLine("public new Column this[string columnName] => default!;");
         sb.AppendLine($"{tableTypeName}() : base(new object[0,0], System.Array.Empty<string>()) {{}}");
         sb.AppendLine("}");
         sb.AppendLine();

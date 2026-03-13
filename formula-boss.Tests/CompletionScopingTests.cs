@@ -75,4 +75,23 @@ public class CompletionScopingTests
         Assert.Equal(DslType.Row, ctx.Type);
         Assert.Equal("Products", ctx.TableName);
     }
+
+    [Fact]
+    public void Resolve_TableBracket_ShowsColumnCompletions()
+    {
+        // Sales[ — table bracket context should show column completions
+        var ctx = ContextResolver.Resolve("Sales[", TwoTableMetadata);
+        Assert.True(ctx.IsBracketContext);
+        Assert.Equal("Sales", ctx.TableName);
+    }
+
+    [Fact]
+    public void Resolve_TableBracket_WithPartialWord()
+    {
+        // Sales[Da — table bracket context with partial column name
+        var ctx = ContextResolver.Resolve("Sales[Da", TwoTableMetadata);
+        Assert.True(ctx.IsBracketContext);
+        Assert.Equal("Sales", ctx.TableName);
+        Assert.Equal("Da", ctx.PartialWord);
+    }
 }

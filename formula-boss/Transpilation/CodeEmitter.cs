@@ -152,7 +152,9 @@ public class CodeEmitter
             return detection;
         }
 
-        var rewritten = DotNotationRewriter.Rewrite(detection.NormalizedExpression, combinedMapping);
+        var headerVarNames = new HashSet<string>(headersByParameter.Keys);
+        var rewritten = DotNotationRewriter.Rewrite(
+            detection.NormalizedExpression, combinedMapping, headerVarNames);
 
         return detection with { NormalizedExpression = rewritten };
     }
