@@ -1,4 +1,4 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 /// <summary>An Excel table (named range with column headers) supporting row-wise and element-wise operations.</summary>
 public class ExcelTable : ExcelArray
@@ -61,15 +61,12 @@ public class ExcelTable : ExcelArray
     {
         var data = (object?[,])RawValue;
         var rowCount = data.GetLength(0);
-        var singleColMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            [name] = 0
-        };
+        var singleColMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [name] = 0 };
         var rows = new List<Row>(rowCount);
 
         for (var r = 0; r < rowCount; r++)
         {
-            var values = new object?[] { data[r, colIndex] };
+            var values = new[] { data[r, colIndex] };
             rows.Add(new Row(values, singleColMap));
         }
 
