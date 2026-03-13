@@ -1293,4 +1293,112 @@ public class PipelineTests
             TestUtilities.CleanupWorksheet(dataWs);
         }
     }
+
+    [Fact]
+    public void Table_ColumnAccess_ReturnsColumnValues()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Name");
+            TestUtilities.SetCellValue(ws, "A2", "Alice");
+            TestUtilities.SetCellValue(ws, "A3", "Bob");
+            TestUtilities.SetCellValue(ws, "A4", "Charlie");
+            TestUtilities.SetCellValue(ws, "B1", "Age");
+            TestUtilities.SetCellValue(ws, "B2", 30.0);
+            TestUtilities.SetCellValue(ws, "B3", 25.0);
+            TestUtilities.SetCellValue(ws, "B4", 35.0);
+
+            var range = ws.Range["A1:B4"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    // Test column access: tbl["Name"] returns a Column, Count() gives row count
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}[\"Name\"].Count()`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1 value: {result}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(3.0, Convert.ToDouble(result));
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void Table_Lookup_FindsMatchingValue()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", "Name");
+            TestUtilities.SetCellValue(ws, "A2", "Alice");
+            TestUtilities.SetCellValue(ws, "A3", "Bob");
+            TestUtilities.SetCellValue(ws, "A4", "Charlie");
+            TestUtilities.SetCellValue(ws, "B1", "Age");
+            TestUtilities.SetCellValue(ws, "B2", 30.0);
+            TestUtilities.SetCellValue(ws, "B3", 25.0);
+            TestUtilities.SetCellValue(ws, "B4", 35.0);
+
+            var range = ws.Range["A1:B4"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    // Test Lookup: find Bob's age
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}.Lookup(\"Bob\", {tableName}[\"Name\"], {tableName}[\"Age\"])`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1 value: {result}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(25.0, Convert.ToDouble(result));
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
 }
