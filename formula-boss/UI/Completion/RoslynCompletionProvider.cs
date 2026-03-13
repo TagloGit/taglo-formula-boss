@@ -68,13 +68,29 @@ internal sealed class RoslynCompletionProvider
             return (Array.Empty<CompletionData>(), false);
         }
 
+        // Get the type before the dot once for both Row and Table detection
+        var typeName = metadata != null
+            ? await _workspace.GetTypeBeforeDotAsync(caretOffset, cancellationToken)
+            : null;
+
         // Check if the expression before the dot is a Row type — if so,
         // replace Roslyn's property completions with bracket-inserting column completions
-        var tableName = await ResolveRowTableNameAsync(caretOffset, metadata, cancellationToken);
-        if (tableName != null)
+        var rowTableName = ResolveTableNameFromType(typeName, metadata, @"^__(.+)Row$");
+        if (rowTableName != null)
         {
-            var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, tableName);
+            var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, rowTableName);
             return (columnItems, false);
+        }
+
+        // Check if the expression before the dot is a Table type — if so,
+        // augment Roslyn's completions with bracket-inserting column completions
+        var tableTableName = ResolveTableNameFromType(typeName, metadata, @"^__(.+)Table$");
+        if (tableTableName != null)
+        {
+            var roslynResult = MapCompletionItems(roslynItems);
+            var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, tableTableName);
+            roslynResult.AddRange(columnItems);
+            return (roslynResult, false);
         }
 
         var result = MapCompletionItems(roslynItems);
@@ -82,27 +98,19 @@ internal sealed class RoslynCompletionProvider
     }
 
     /// <summary>
-    ///     If the expression before the dot is a synthetic Row type, resolves the original
-    ///     table name. Returns null if not a Row type.
+    ///     Resolves a synthetic type name back to the original table name using the given regex pattern.
+    ///     Returns null if the type doesn't match or the table name can't be resolved.
     /// </summary>
-    private async Task<string?> ResolveRowTableNameAsync(
-        int caretOffset, WorkbookMetadata? metadata, CancellationToken cancellationToken)
+    private static string? ResolveTableNameFromType(
+        string? typeName, WorkbookMetadata? metadata, string pattern)
     {
-        if (metadata == null)
+        if (typeName == null || metadata == null)
         {
             return null;
         }
 
-        var typeName = await _workspace.GetTypeBeforeDotAsync(caretOffset, cancellationToken);
-        if (typeName == null)
-        {
-            return null;
-        }
-
-        // Strip nullable suffix
         var coreName = typeName.EndsWith("?") ? typeName[..^1] : typeName;
-
-        var match = Regex.Match(coreName, @"^__(.+)Row$");
+        var match = Regex.Match(coreName, pattern);
         if (!match.Success)
         {
             return null;
@@ -110,7 +118,7 @@ internal sealed class RoslynCompletionProvider
 
         var sanitisedName = match.Groups[1].Value;
 
-        // Exclude RowCollection matches
+        // Exclude RowCollection matches when looking for Row types
         if (sanitisedName.EndsWith("RowCollection"))
         {
             return null;

@@ -1293,4 +1293,58 @@ public class PipelineTests
             TestUtilities.CleanupWorksheet(dataWs);
         }
     }
+
+    [Fact]
+    public void Table_ColumnAccess_Sum()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            // Set up a table with headers
+            TestUtilities.SetCellValue(ws, "A1", "Name");
+            TestUtilities.SetCellValue(ws, "A2", "Alice");
+            TestUtilities.SetCellValue(ws, "A3", "Bob");
+            TestUtilities.SetCellValue(ws, "B1", "Amount");
+            TestUtilities.SetCellValue(ws, "B2", 100.0);
+            TestUtilities.SetCellValue(ws, "B3", 200.0);
+
+            // Create an Excel ListObject (table) from the range
+            var range = ws.Range["A1:B3"];
+            var tables = ws.ListObjects;
+            try
+            {
+                var table = tables.Add(1, range, Type.Missing, 1);
+                try
+                {
+                    var tableName = (string)table.Name;
+
+                    // Use table column bracket access with Sum
+                    TestUtilities.EnterBacktickFormula(ws, "D1",
+                        $"=`{tableName}[\"Amount\"].Sum()`");
+
+                    var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+                    _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+                    _output.WriteLine($"D1 value: {result}");
+                    _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+                    Assert.NotNull(result);
+                    Assert.Equal(300.0, Convert.ToDouble(result)); // 100 + 200
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+            }
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
 }

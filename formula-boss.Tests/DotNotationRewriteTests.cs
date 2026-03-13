@@ -155,6 +155,35 @@ public class DotNotationRewriterTests
     }
 
     [Fact]
+    public void Rewrite_TableParameter_DotNotation_ConvertsToBracket()
+    {
+        var mapping = ColumnMapper.BuildMapping(new[] { "Price", "Quantity" });
+        var tableParamNames = new HashSet<string> { "tbl" };
+        var result = DotNotationRewriter.Rewrite(
+            "tbl.Price",
+            mapping,
+            tableParamNames);
+
+        Assert.Contains("tbl[\"Price\"]", result);
+        Assert.DoesNotContain("tbl.Price", result);
+    }
+
+    [Fact]
+    public void Rewrite_TableParameter_MergesWithLambdaParams()
+    {
+        var mapping = ColumnMapper.BuildMapping(new[] { "Age", "Name" });
+        var tableParamNames = new HashSet<string> { "tbl" };
+        var result = DotNotationRewriter.Rewrite(
+            "tbl.Rows.Where(r => r.Age > tbl.Name)",
+            mapping,
+            tableParamNames);
+
+        // Both lambda param and table param should be rewritten
+        Assert.Contains("r[\"Age\"]", result);
+        Assert.Contains("tbl[\"Name\"]", result);
+    }
+
+    [Fact]
     public void Rewrite_ConflictingColumns_NotRewritten()
     {
         // "Foo Bar" and "FooBar" both → "FooBar", so conflict → excluded

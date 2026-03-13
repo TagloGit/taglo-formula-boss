@@ -182,6 +182,7 @@ public static class ResultConverter
     public static object ToResult(this ExcelScalar value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this ExcelArray value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this ExcelTable value) => ((ExcelValue)value).ToResult();
+    public static object ToResult(this Column value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this ColumnValue value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this Row value) => ((ExcelValue)value).ToResult();
 

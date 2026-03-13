@@ -46,6 +46,24 @@ public class RoslynCompletionTests : IDisposable
     }
 
     [Fact]
+    public async Task TableDot_ShowsColumnNames_AlongsideMembers()
+    {
+        var formula = "=`Sales.`";
+        var textUp = "=`Sales.";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        // Should show regular ExcelTable members
+        Assert.Contains("Rows", texts);
+        // Should also show column names
+        Assert.Contains("Date", texts);
+        Assert.Contains("Amount", texts);
+        Assert.Contains("Region", texts);
+    }
+
+    [Fact]
     public async Task RowDot_ShowsColumnProperties()
     {
         var formula = "=LET(t, Sales, `t.Rows.Where(r => r.`)";

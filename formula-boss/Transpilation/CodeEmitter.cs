@@ -152,7 +152,9 @@ public class CodeEmitter
             return detection;
         }
 
-        var rewritten = DotNotationRewriter.Rewrite(detection.NormalizedExpression, combinedMapping);
+        var headerVarNames = new HashSet<string>(headersByParameter.Keys);
+        var rewritten = DotNotationRewriter.Rewrite(
+            detection.NormalizedExpression, combinedMapping, headerVarNames);
 
         return detection with { NormalizedExpression = rewritten };
     }
@@ -312,12 +314,15 @@ public class CodeEmitter
                     $"            {param}__origin = {param}__origin with {{ TopRow = {param}__origin.TopRow + 1 }};");
             }
 
-            sb.AppendLine(
-                $"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);");
+            sb.AppendLine(extractHeaders
+                ? $"        var {param} = (ExcelTable)ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);"
+                : $"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers, {param}__origin);");
         }
         else
         {
-            sb.AppendLine($"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers);");
+            sb.AppendLine(extractHeaders
+                ? $"        var {param} = (ExcelTable)ExcelValue.Wrap({param}__values, {param}__headers);"
+                : $"        var {param} = ExcelValue.Wrap({param}__values, {param}__headers);");
         }
     }
 }

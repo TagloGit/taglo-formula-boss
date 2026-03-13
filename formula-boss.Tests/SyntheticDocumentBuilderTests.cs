@@ -54,6 +54,13 @@ public class SyntheticDocumentBuilderTests
     }
 
     [Fact]
+    public void Build_GeneratesTypedTableClass_WithColumnIndexer()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("new Column this[string columnName]", source);
+    }
+
+    [Fact]
     public void Build_GeneratesMultipleTables()
     {
         var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
