@@ -241,4 +241,63 @@ public class RoslynCompletionTests : IDisposable
         // These should be regular CompletionData, not ColumnCompletionData
         Assert.All(items, item => Assert.IsNotType<ColumnCompletionData>(item));
     }
+
+    [Fact]
+    public async Task GroupBySelect_ShowsRowGroupMembers_NotColumnNames()
+    {
+        var formula = "=LET(t, Sales, `t.Rows.GroupBy(r => r[\"Region\"]).Select(g => g.`)";
+        var textUp = "=LET(t, Sales, `t.Rows.GroupBy(r => r[\"Region\"]).Select(g => g.";
+
+        var (items, isBracket) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        Assert.False(isBracket);
+        var texts = items.Select(i => i.Text).ToList();
+
+        // Should show RowGroup members
+        Assert.Contains("Key", texts);
+        Assert.Contains("Count", texts);
+        Assert.Contains("Where", texts);
+        Assert.Contains("Select", texts);
+        Assert.Contains("ToRange", texts);
+
+        // Should NOT show column names (those belong to Row, not RowGroup)
+        Assert.DoesNotContain("Date", texts);
+        Assert.DoesNotContain("Amount", texts);
+        Assert.DoesNotContain("Region", texts);
+
+        // Should be regular CompletionData, not ColumnCompletionData
+        Assert.All(items, item => Assert.IsNotType<ColumnCompletionData>(item));
+    }
+
+    [Fact]
+    public async Task GroupByWhere_ShowsRowGroupMembers()
+    {
+        var formula = "=LET(t, Sales, `t.Rows.GroupBy(r => r[\"Region\"]).Where(g => g.`)";
+        var textUp = "=LET(t, Sales, `t.Rows.GroupBy(r => r[\"Region\"]).Where(g => g.";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Key", texts);
+        Assert.Contains("Count", texts);
+        Assert.DoesNotContain("Date", texts);
+    }
+
+    [Fact]
+    public async Task GroupByLambdaParam_InGroupBy_StillShowsColumns()
+    {
+        // The lambda parameter inside GroupBy itself is a Row — should show column completions
+        var formula = "=LET(t, Sales, `t.Rows.GroupBy(r => r.`)";
+        var textUp = "=LET(t, Sales, `t.Rows.GroupBy(r => r.";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Date", texts);
+        Assert.Contains("Amount", texts);
+        Assert.Contains("Region", texts);
+    }
 }
