@@ -25,26 +25,9 @@ public static class ResultConverter
             return range.ToResult();
         }
 
-        if (result is ColumnValue colVal)
-        {
-            return colVal.Value ?? string.Empty;
-        }
-
         if (result is Cell cell)
         {
             return cell.Value ?? string.Empty;
-        }
-
-        if (result is Row singleRow)
-        {
-            var cols = singleRow.ColumnCount;
-            var arr = new object?[1, cols];
-            for (var c = 0; c < cols; c++)
-            {
-                arr[0, c] = singleRow[c].Value;
-            }
-
-            return arr;
         }
 
         if (result is bool or int or double or string)
@@ -152,7 +135,6 @@ public static class ResultConverter
             for (var r = 0; r < list.Count; r++)
             {
                 arr[r, 0] = list[r] is ExcelValue ev2 ? ev2.RawValue
-                    : list[r] is ColumnValue cv ? cv.Value
                     : list[r] is Cell c ? c.Value
                     : list[r];
             }
@@ -200,6 +182,8 @@ public static class ResultConverter
     public static object ToResult(this ExcelScalar value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this ExcelArray value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this ExcelTable value) => ((ExcelValue)value).ToResult();
+    public static object ToResult(this ColumnValue value) => ((ExcelValue)value).ToResult();
+    public static object ToResult(this Row value) => ((ExcelValue)value).ToResult();
 
     public static object ToResult(this bool value) => value;
     public static object ToResult(this int value) => value;

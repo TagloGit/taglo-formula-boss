@@ -1,15 +1,14 @@
-﻿namespace FormulaBoss.Runtime;
+namespace FormulaBoss.Runtime;
 
 /// <summary>Represents a single cell value from a row, with implicit conversions and formatting access via Cell.</summary>
-public class ColumnValue : IComparable<ColumnValue>, IComparable
+public class ColumnValue : ExcelScalar, IComparable<ColumnValue>
 {
-    public ColumnValue(object? value)
+    public ColumnValue(object? value) : base(value)
     {
-        Value = value;
     }
 
     /// <summary>Gets the underlying raw value of this cell.</summary>
-    public object? Value { get; }
+    public object? Value => RawValue;
 
     /// <summary>
     ///     Lazy cell accessor, set by <see cref="Row" /> when positional context is available.
@@ -24,28 +23,6 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
     public Cell Cell => CellAccessor?.Invoke()
                         ?? throw new InvalidOperationException(
                             "Cell access requires a macro-type UDF with range position context.");
-
-    public int CompareTo(object? obj)
-    {
-        if (obj is ColumnValue cv)
-        {
-            return CompareTo(cv);
-        }
-
-        if (Value is double or int or long or float or decimal)
-        {
-            try
-            {
-                return Convert.ToDouble(Value).CompareTo(Convert.ToDouble(obj));
-            }
-            catch
-            {
-                /* fall through to string */
-            }
-        }
-
-        return string.Compare(Value?.ToString(), obj?.ToString(), StringComparison.Ordinal);
-    }
 
     public int CompareTo(ColumnValue? other)
     {
@@ -66,31 +43,13 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
 
     private double ToDouble() => Convert.ToDouble(Value);
 
-    // Implicit conversions
-    public static implicit operator double(ColumnValue v) => v.ToDouble();
-    public static implicit operator string?(ColumnValue v) => v.Value?.ToString();
-    public static implicit operator bool(ColumnValue v) => Convert.ToBoolean(v.Value);
-
-    // Comparison operators
-    public static bool operator ==(ColumnValue? a, ColumnValue? b) => Equals(a?.Value, b?.Value);
-    public static bool operator !=(ColumnValue? a, ColumnValue? b) => !Equals(a?.Value, b?.Value);
-
-    public static bool operator ==(ColumnValue? a, object? b)
-    {
-        var aVal = a?.Value;
-        var bVal = b is ColumnValue cv ? cv.Value : b;
-        return Equals(aVal, bVal);
-    }
-
-    public static bool operator !=(ColumnValue? a, object? b) => !(a == b);
-    public static bool operator ==(object? a, ColumnValue? b) => b == a;
-    public static bool operator !=(object? a, ColumnValue? b) => !(b == a);
-
+    // Comparison operators (ColumnValue vs ColumnValue)
     public static bool operator >(ColumnValue a, ColumnValue b) => a.ToDouble() > b.ToDouble();
     public static bool operator <(ColumnValue a, ColumnValue b) => a.ToDouble() < b.ToDouble();
     public static bool operator >=(ColumnValue a, ColumnValue b) => a.ToDouble() >= b.ToDouble();
     public static bool operator <=(ColumnValue a, ColumnValue b) => a.ToDouble() <= b.ToDouble();
 
+    // Double comparison operators
     public static bool operator >(ColumnValue a, double b) => a.ToDouble() > b;
     public static bool operator <(ColumnValue a, double b) => a.ToDouble() < b;
     public static bool operator >=(ColumnValue a, double b) => a.ToDouble() >= b;
@@ -112,22 +71,18 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
     public static bool operator >=(int a, ColumnValue b) => a >= b.ToDouble();
     public static bool operator <=(int a, ColumnValue b) => a <= b.ToDouble();
 
-    // ExcelValue comparison operators (so r[0] > maxVal works when maxVal is ExcelValue)
-    public static bool operator ==(ColumnValue? a, ExcelValue? b) => Equals(a?.Value, b?.RawValue);
-    public static bool operator !=(ColumnValue? a, ExcelValue? b) => !Equals(a?.Value, b?.RawValue);
-    public static bool operator >(ColumnValue a, ExcelValue b) => a.ToDouble() > Convert.ToDouble(b.RawValue);
-    public static bool operator <(ColumnValue a, ExcelValue b) => a.ToDouble() < Convert.ToDouble(b.RawValue);
-    public static bool operator >=(ColumnValue a, ExcelValue b) => a.ToDouble() >= Convert.ToDouble(b.RawValue);
-    public static bool operator <=(ColumnValue a, ExcelValue b) => a.ToDouble() <= Convert.ToDouble(b.RawValue);
+    // ExcelValue comparison operators (resolves ambiguity between ColumnValue-double and ExcelValue-ExcelValue overloads)
+    public static bool operator >(ColumnValue a, ExcelValue b) => Convert.ToDouble(a.RawValue) > Convert.ToDouble(b.RawValue);
+    public static bool operator <(ColumnValue a, ExcelValue b) => Convert.ToDouble(a.RawValue) < Convert.ToDouble(b.RawValue);
+    public static bool operator >=(ColumnValue a, ExcelValue b) => Convert.ToDouble(a.RawValue) >= Convert.ToDouble(b.RawValue);
+    public static bool operator <=(ColumnValue a, ExcelValue b) => Convert.ToDouble(a.RawValue) <= Convert.ToDouble(b.RawValue);
 
-    public static bool operator ==(ExcelValue? a, ColumnValue? b) => Equals(a?.RawValue, b?.Value);
-    public static bool operator !=(ExcelValue? a, ColumnValue? b) => !Equals(a?.RawValue, b?.Value);
-    public static bool operator >(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) > b.ToDouble();
-    public static bool operator <(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) < b.ToDouble();
-    public static bool operator >=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) >= b.ToDouble();
-    public static bool operator <=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) <= b.ToDouble();
+    public static bool operator >(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) > Convert.ToDouble(b.RawValue);
+    public static bool operator <(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) < Convert.ToDouble(b.RawValue);
+    public static bool operator >=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) >= Convert.ToDouble(b.RawValue);
+    public static bool operator <=(ExcelValue a, ColumnValue b) => Convert.ToDouble(a.RawValue) <= Convert.ToDouble(b.RawValue);
 
-    // Arithmetic operators
+    // Arithmetic operators (return ColumnValue to preserve type in row expressions)
     public static ColumnValue operator +(ColumnValue a, ColumnValue b) =>
         new(a.ToDouble() + b.ToDouble());
 
@@ -162,9 +117,7 @@ public class ColumnValue : IComparable<ColumnValue>, IComparable
     public static ColumnValue operator /(int a, ColumnValue b) => new(a / b.ToDouble());
 
     public override bool Equals(object? obj) =>
-        obj is ColumnValue other ? Equals(Value, other.Value) : Equals(Value, obj);
+        obj is ExcelValue other ? Equals(RawValue, other.RawValue) : Equals(RawValue, obj);
 
-    public override int GetHashCode() => Value?.GetHashCode() ?? 0;
-
-    public override string ToString() => Value?.ToString() ?? "";
+    public override int GetHashCode() => RawValue?.GetHashCode() ?? 0;
 }

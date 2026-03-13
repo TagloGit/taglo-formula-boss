@@ -63,7 +63,7 @@ public class RowCollectionTests
         var values = new List<object?>();
         foreach (var col in row)
         {
-            values.Add(col.Value);
+            values.Add(col.RawValue);
         }
 
         Assert.Equal(3, values.Count);
@@ -76,7 +76,7 @@ public class RowCollectionTests
     public void Row_LinqToList_Works()
     {
         var row = new Row(new object?[] { 1.0, 2.0, 3.0 }, null);
-        var list = row.ToList();
+        var list = ((IEnumerable<ColumnValue>)row).ToList();
         Assert.Equal(3, list.Count);
         Assert.Equal(2.0, (double)list[1]);
     }

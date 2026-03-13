@@ -3,7 +3,7 @@
 /// <summary>A 2D array of Excel values supporting element-wise operations.</summary>
 public class ExcelArray : ExcelValue, IExcelRange
 {
-    private readonly Dictionary<string, int>? _columnMap;
+    protected readonly Dictionary<string, int>? _columnMap;
     private readonly object?[,] _data;
     private readonly RangeOrigin? _origin;
 

@@ -111,8 +111,7 @@ public class ResultConverterTests
     public void Convert_RowResult_SpillsAsSingleRow()
     {
         var row = new Row(["Alice", 30.0], null);
-        ExcelValue rowAsExcel = row; // implicit conversion to ExcelArray 1×2
-        var result = ResultConverter.Convert(rowAsExcel);
+        var result = ResultConverter.Convert(row); // Row IS ExcelValue (via ExcelArray)
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(1, arr.GetLength(0));
         Assert.Equal(2, arr.GetLength(1));
