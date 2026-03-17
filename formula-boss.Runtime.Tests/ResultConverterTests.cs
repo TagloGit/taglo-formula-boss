@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+
 using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
@@ -161,9 +162,7 @@ public class ResultConverterTests
     {
         IEnumerable<Cell> cells = new[]
         {
-            new Cell { Value = 10.0 },
-            new Cell { Value = 20.0 },
-            new Cell { Value = 30.0 }
+            new Cell { Value = 10.0 }, new Cell { Value = 20.0 }, new Cell { Value = 30.0 }
         };
 
         var result = ResultConverter.Convert(cells);
@@ -210,7 +209,7 @@ public class ResultConverterTests
     [Fact]
     public void Convert_Typed2DDoubleArray_ReturnsObjectArray()
     {
-        var typed = new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 } };
+        var typed = new[,] { { 1.0, 2.0 }, { 3.0, 4.0 } };
         var result = ResultConverter.Convert(typed);
         var arr = Assert.IsType<object[,]>(result);
         Assert.Equal(2, arr.GetLength(0));
@@ -224,7 +223,7 @@ public class ResultConverterTests
     [Fact]
     public void Convert_Typed2DIntArray_ReturnsObjectArray()
     {
-        var typed = new int[,] { { 1, 2 }, { 3, 4 } };
+        var typed = new[,] { { 1, 2 }, { 3, 4 } };
         var result = ResultConverter.Convert(typed);
         var arr = Assert.IsType<object[,]>(result);
         Assert.Equal(2, arr.GetLength(0));

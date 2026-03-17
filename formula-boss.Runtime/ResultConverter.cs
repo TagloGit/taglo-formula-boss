@@ -113,7 +113,10 @@ public static class ResultConverter
             var obj = new object[rowCount, colCount];
             for (var r = 0; r < rowCount; r++)
                 for (var c = 0; c < colCount; c++)
+                {
                     obj[r, c] = array2d.GetValue(r, c)!;
+                }
+
             return obj;
         }
 
