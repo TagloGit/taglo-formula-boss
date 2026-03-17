@@ -76,7 +76,7 @@ public class RowCollectionTests
     public void Row_LinqToList_Works()
     {
         var row = new Row(new object?[] { 1.0, 2.0, 3.0 }, null);
-        var list = ((IEnumerable<ExcelValue>)row).ToList();
+        var list = row.ToList();
         Assert.Equal(3, list.Count);
         Assert.Equal(2.0, (double)list[1]);
     }
