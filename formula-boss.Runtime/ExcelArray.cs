@@ -48,10 +48,50 @@ public class ExcelArray : ExcelValue, IExcelRange
                     ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
                         _origin.TopRow + rowIdx, _origin.LeftCol + colIdx)
                     : null;
-                rows.Add(new Row(values, ColumnMap, cellResolver));
+                rows.Add(new Row(values, ColumnMap, cellResolver, rowIdx));
             }
 
             return new RowCollection(rows, ColumnMap);
+        }
+    }
+
+    public override ColumnCollection Cols
+    {
+        get
+        {
+            var data = _data;
+            var rowCount = data.GetLength(0);
+            var colCount = data.GetLength(1);
+            var columns = new List<Column>(colCount);
+            for (var c = 0; c < colCount; c++)
+            {
+                var colData = new object?[rowCount, 1];
+                for (var r = 0; r < rowCount; r++)
+                {
+                    colData[r, 0] = data[r, c];
+                }
+
+                var colOrigin = _origin != null
+                    ? _origin with { LeftCol = _origin.LeftCol + c }
+                    : null;
+
+                string? name = null;
+                if (ColumnMap != null)
+                {
+                    foreach (var kvp in ColumnMap)
+                    {
+                        if (kvp.Value == c)
+                        {
+                            name = kvp.Key;
+                            break;
+                        }
+                    }
+                }
+
+                columns.Add(new Column(colData, name, c, colOrigin));
+            }
+
+            return new ColumnCollection(columns);
         }
     }
 

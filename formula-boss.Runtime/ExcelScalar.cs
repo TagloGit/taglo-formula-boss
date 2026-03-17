@@ -58,6 +58,9 @@ public class ExcelScalar : ExcelValue, IExcelRange
 
     public override RowCollection Rows => new(new[] { SingleRow });
 
+    public override ColumnCollection Cols =>
+        new(new[] { new Column(new object?[,] { { _value } }, null, 0, _origin) });
+
     public override IEnumerable<Cell> Cells
     {
         get

@@ -16,10 +16,10 @@ public class ColumnTests
     }
 
     [Fact]
-    public void ColumnIndex_ReturnsIndex()
+    public void Index_ReturnsIndex()
     {
         var col = MakeColumn();
-        Assert.Equal(2, col.ColumnIndex);
+        Assert.Equal(2, col.Index);
     }
 
     [Fact]

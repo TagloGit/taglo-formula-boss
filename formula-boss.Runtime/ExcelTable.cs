@@ -39,6 +39,33 @@ public class ExcelTable : ExcelArray
         }
     }
 
+    /// <summary>Gets columns with names from the table headers.</summary>
+    public override ColumnCollection Cols
+    {
+        get
+        {
+            var data = (object?[,])RawValue;
+            var rowCount = data.GetLength(0);
+            var columns = new List<Column>(Headers.Length);
+            for (var c = 0; c < Headers.Length; c++)
+            {
+                var colData = new object?[rowCount, 1];
+                for (var r = 0; r < rowCount; r++)
+                {
+                    colData[r, 0] = data[r, c];
+                }
+
+                var colOrigin = Origin != null
+                    ? Origin with { LeftCol = Origin.LeftCol + c }
+                    : null;
+
+                columns.Add(new Column(colData, Headers[c], c, colOrigin));
+            }
+
+            return new ColumnCollection(columns);
+        }
+    }
+
     /// <summary>
     ///     Looks up a value in one column and returns the corresponding value from another column.
     ///     Matches the first occurrence, similar to XLOOKUP.
