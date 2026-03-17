@@ -17,6 +17,7 @@ public class SyntheticMemberSyncTests
     [InlineData(typeof(RowCollection))]
     [InlineData(typeof(RowGroup))]
     [InlineData(typeof(GroupedRowCollection))]
+    [InlineData(typeof(ColumnCollection))]
     public void AllPublicMembers_HaveSyntheticAttribute(Type collectionType)
     {
         var members = collectionType
@@ -39,6 +40,7 @@ public class SyntheticMemberSyncTests
     [InlineData(typeof(RowCollection))]
     [InlineData(typeof(RowGroup))]
     [InlineData(typeof(GroupedRowCollection))]
+    [InlineData(typeof(ColumnCollection))]
     public void CollectionClass_HasSyntheticCollectionAttribute(Type collectionType)
     {
         var attr = collectionType.GetCustomAttribute<SyntheticCollectionAttribute>();

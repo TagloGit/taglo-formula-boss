@@ -82,7 +82,7 @@ public class ExcelTableTests
         var col = table["Name"];
         Assert.IsType<Column>(col);
         Assert.Equal("Name", col.Name);
-        Assert.Equal(0, col.ColumnIndex);
+        Assert.Equal(0, col.Index);
     }
 
     [Fact]

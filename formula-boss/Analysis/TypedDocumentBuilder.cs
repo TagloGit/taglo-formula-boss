@@ -76,12 +76,16 @@ internal static class TypedDocumentBuilder
             var tableTypeName = $"__{safeTableName}Table";
             tableTypeNames[tableName] = tableTypeName;
 
+            var colCollTypeName = $"__{safeTableName}ColumnCollection";
+
             var typeMap = new Dictionary<Type, string>
             {
                 [typeof(RowCollection)] = rowCollTypeName,
                 [typeof(GroupedRowCollection)] = groupedCollTypeName,
                 [typeof(Row)] = rowTypeName,
-                [typeof(RowGroup)] = rowGroupTypeName
+                [typeof(RowGroup)] = rowGroupTypeName,
+                [typeof(ColumnCollection)] = colCollTypeName,
+                [typeof(Column)] = nameof(Column)
             };
 
             EmitTypedRow(sb, rowTypeName, columns);
@@ -89,7 +93,9 @@ internal static class TypedDocumentBuilder
             EmitSyntheticCollection(sb, typeof(RowGroup), rowGroupTypeName, typeMap, rowTypeName);
             EmitSyntheticCollection(sb, typeof(GroupedRowCollection), groupedCollTypeName, typeMap,
                 rowGroupTypeName);
-            EmitTypedTable(sb, tableTypeName, rowCollTypeName);
+            EmitSyntheticCollection(sb, typeof(ColumnCollection), colCollTypeName, typeMap,
+                nameof(Column));
+            EmitTypedTable(sb, tableTypeName, rowCollTypeName, colCollTypeName);
         }
 
         return tableTypeNames;
@@ -376,10 +382,11 @@ internal static class TypedDocumentBuilder
     }
 
     private static void EmitTypedTable(
-        StringBuilder sb, string tableTypeName, string rowCollTypeName)
+        StringBuilder sb, string tableTypeName, string rowCollTypeName, string colCollTypeName)
     {
         sb.AppendLine($"class {tableTypeName} : ExcelTable {{");
         sb.AppendLine($"public new {rowCollTypeName} Rows => default!;");
+        sb.AppendLine($"public new {colCollTypeName} Cols => default!;");
         sb.AppendLine("public new Column this[string columnName] => default!;");
         sb.AppendLine($"{tableTypeName}() : base(new object[0,0], System.Array.Empty<string>()) {{}}");
         sb.AppendLine("}");

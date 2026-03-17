@@ -53,6 +53,9 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     /// <inheritdoc />
     public abstract RowCollection Rows { get; }
 
+    /// <summary>Gets a collection of columns from this value.</summary>
+    public abstract ColumnCollection Cols { get; }
+
     /// <inheritdoc />
     public abstract IEnumerable<Cell> Cells { get; }
 

@@ -5,12 +5,17 @@ public class Row : ExcelArray
 {
     private readonly object?[] _values;
 
-    public Row(object?[] values, Dictionary<string, int>? columnMap, Func<int, Cell>? cellResolver = null)
+    public Row(object?[] values, Dictionary<string, int>? columnMap, Func<int, Cell>? cellResolver = null,
+        int index = 0)
         : base(To2D(values), columnMap)
     {
         _values = values;
         CellResolver = cellResolver;
+        Index = index;
     }
+
+    /// <summary>Gets the zero-based row index within the parent range.</summary>
+    public int Index { get; }
 
     /// <summary>
     ///     Optional cell resolver: (columnIndex) → Cell.
