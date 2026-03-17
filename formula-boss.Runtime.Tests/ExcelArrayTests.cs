@@ -10,6 +10,30 @@ public class ExcelArrayTests
     private static ExcelArray MakeSingleColumn() =>
         new(new object?[,] { { 1.0 }, { 2.0 }, { 3.0 } });
 
+    // --- RowCount / ColCount ---
+
+    [Fact]
+    public void RowCount_ReturnsNumberOfRows()
+    {
+        var arr = MakeArray();
+        Assert.Equal(3, arr.RowCount);
+    }
+
+    [Fact]
+    public void ColCount_ReturnsNumberOfColumns()
+    {
+        var arr = MakeArray();
+        Assert.Equal(2, arr.ColCount);
+    }
+
+    [Fact]
+    public void RowCount_ColCount_AccessibleViaBaseType()
+    {
+        ExcelValue value = MakeArray();
+        Assert.Equal(3, value.RowCount);
+        Assert.Equal(2, value.ColCount);
+    }
+
     // --- Rows (RowCollection) ---
 
     [Fact]

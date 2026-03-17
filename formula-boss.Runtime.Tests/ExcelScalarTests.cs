@@ -313,6 +313,22 @@ public class ExcelScalarTests
         Assert.Equal(-1, scalar.IndexOf(99.0));
     }
 
+    // --- RowCount / ColCount ---
+
+    [Fact]
+    public void RowCount_ReturnsOne()
+    {
+        var scalar = new ExcelScalar(42.0);
+        Assert.Equal(1, scalar.RowCount);
+    }
+
+    [Fact]
+    public void ColCount_ReturnsOne()
+    {
+        var scalar = new ExcelScalar("hello");
+        Assert.Equal(1, scalar.ColCount);
+    }
+
     [Fact]
     public void ArithmeticOperators_Work()
     {

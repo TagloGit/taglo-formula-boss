@@ -1295,6 +1295,32 @@ public class PipelineTests
     }
 
     [Fact]
+    public void ValuePath_RowCount_OnArrayParam()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.RowCount`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(3.0, Convert.ToDouble(result));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void Table_ColumnAccess_Sum()
     {
         var ws = _excel.AddWorksheet();

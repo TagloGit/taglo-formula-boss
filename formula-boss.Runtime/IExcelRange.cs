@@ -3,6 +3,12 @@
 /// <summary>Represents a range of Excel values supporting element-wise operations and aggregations.</summary>
 public interface IExcelRange : IEnumerable<ExcelValue>
 {
+    /// <summary>Gets the number of rows in this range (1 for scalars).</summary>
+    int RowCount { get; }
+
+    /// <summary>Gets the number of columns in this range (1 for scalars).</summary>
+    int ColCount { get; }
+
     /// <summary>Gets the rows of this range as a <see cref="RowCollection" />.</summary>
     RowCollection Rows { get; }
 

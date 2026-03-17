@@ -13,6 +13,8 @@ public class ExcelScalar : ExcelValue, IExcelRange
     }
 
     public override object? RawValue => _value;
+    public override int RowCount => 1;
+    public override int ColCount => 1;
 
     private Row SingleRow
     {
