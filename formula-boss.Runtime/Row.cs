@@ -1,9 +1,7 @@
-﻿using System.Collections;
-
 namespace FormulaBoss.Runtime;
 
 /// <summary>Represents a single row from an Excel range, with column access via indexer or named syntax.</summary>
-public class Row : ExcelArray, IEnumerable<ColumnValue>
+public class Row : ExcelArray
 {
     private readonly object?[] _values;
 
@@ -22,7 +20,7 @@ public class Row : ExcelArray, IEnumerable<ColumnValue>
 
     /// <summary>Gets a column value by header name.</summary>
     /// <param name="columnName">The column header name (case-insensitive).</param>
-    public ColumnValue this[string columnName]
+    public ExcelScalar this[string columnName]
     {
         get
         {
@@ -31,18 +29,18 @@ public class Row : ExcelArray, IEnumerable<ColumnValue>
                 throw new KeyNotFoundException($"Column '{columnName}' not found.");
             }
 
-            return MakeColumnValue(index);
+            return MakeScalar(index);
         }
     }
 
     /// <summary>Gets a column value by zero-based index. Negative indices count from the end.</summary>
     /// <param name="index">The column index.</param>
-    public new ColumnValue this[int index]
+    public new ExcelScalar this[int index]
     {
         get
         {
             var i = index < 0 ? _values.Length + index : index;
-            return MakeColumnValue(i);
+            return MakeScalar(i);
         }
     }
 
@@ -52,30 +50,19 @@ public class Row : ExcelArray, IEnumerable<ColumnValue>
     /// <summary>Returns the row itself wrapped in a RowCollection, preserving cell resolver context.</summary>
     public override RowCollection Rows => new(new[] { this }, ColumnMap);
 
-    /// <summary>Returns an enumerator that iterates over the column values in this row.</summary>
-    IEnumerator<ColumnValue> IEnumerable<ColumnValue>.GetEnumerator()
-    {
-        for (var i = 0; i < _values.Length; i++)
-        {
-            yield return MakeColumnValue(i);
-        }
-    }
-
-    IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<ExcelValue>)this).GetEnumerator();
-
     /// <summary>Returns an enumerator that iterates over the column values in this row as ExcelValues.</summary>
     public override IEnumerator<ExcelValue> GetEnumerator()
     {
         for (var i = 0; i < _values.Length; i++)
         {
-            yield return MakeColumnValue(i);
+            yield return MakeScalar(i);
         }
     }
 
-    private ColumnValue MakeColumnValue(int colIndex)
+    private ExcelScalar MakeScalar(int colIndex)
     {
         var resolver = CellResolver;
-        return new ColumnValue(_values[colIndex]) { CellAccessor = resolver != null ? () => resolver(colIndex) : null };
+        return new ExcelScalar(_values[colIndex]) { CellAccessor = resolver != null ? () => resolver(colIndex) : null };
     }
 
     private static object?[,] To2D(object?[] values)

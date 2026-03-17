@@ -59,7 +59,7 @@ public class ExcelTableTests
         var result = table.Rows.Select(r => new ExcelScalar((string)r["Name"]));
         var rows = result.Rows.ToList();
         Assert.Equal(3, rows.Count);
-        Assert.Equal("Alice", rows[0][0].Value);
+        Assert.Equal("Alice", rows[0][0].RawValue);
     }
 
     [Fact]
@@ -68,9 +68,9 @@ public class ExcelTableTests
         var table = MakeTable();
         var sorted = table.Rows.OrderBy(r => (double)r["Age"]);
         var rows = sorted.ToList();
-        Assert.Equal("Bob", rows[0]["Name"].Value);
-        Assert.Equal("Alice", rows[1]["Name"].Value);
-        Assert.Equal("Charlie", rows[2]["Name"].Value);
+        Assert.Equal("Bob", rows[0]["Name"].RawValue);
+        Assert.Equal("Alice", rows[1]["Name"].RawValue);
+        Assert.Equal("Charlie", rows[2]["Name"].RawValue);
     }
 
     // --- Column indexer tests ---

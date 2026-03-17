@@ -5,7 +5,7 @@ namespace FormulaBoss.Runtime.Tests;
 public class RowTests
 {
     [Fact]
-    public void IndexAccess_ReturnsColumnValue()
+    public void IndexAccess_ReturnsExcelScalar()
     {
         var row = new Row(["a", 2, true], null);
         Assert.Equal("a", row[0]);

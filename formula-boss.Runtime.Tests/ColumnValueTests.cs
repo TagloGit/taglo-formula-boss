@@ -1,58 +1,58 @@
-﻿using Xunit;
+using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
-public class ColumnValueTests
+public class ExcelScalarOperatorTests
 {
     [Fact]
     public void ImplicitDouble_ConvertsNumericValue()
     {
-        var cv = new ColumnValue(42.5);
-        double d = cv;
+        var sv = new ExcelScalar(42.5);
+        double d = sv;
         Assert.Equal(42.5, d);
     }
 
     [Fact]
     public void ImplicitString_ConvertsToString()
     {
-        var cv = new ColumnValue("hello");
-        string? s = cv;
+        var sv = new ExcelScalar("hello");
+        string? s = sv;
         Assert.Equal("hello", s);
     }
 
     [Fact]
     public void ImplicitBool_ConvertsBoolValue()
     {
-        var cv = new ColumnValue(true);
-        bool b = cv;
+        var sv = new ExcelScalar(true);
+        bool b = sv;
         Assert.True(b);
     }
 
     [Fact]
     public void ComparisonOperators_WorkWithDoubles()
     {
-        var cv = new ColumnValue(10.0);
-        Assert.True(cv > 5.0);
-        Assert.True(cv < 15.0);
-        Assert.True(cv >= 10.0);
-        Assert.True(cv <= 10.0);
+        var sv = new ExcelScalar(10.0);
+        Assert.True(sv > 5.0);
+        Assert.True(sv < 15.0);
+        Assert.True(sv >= 10.0);
+        Assert.True(sv <= 10.0);
     }
 
     [Fact]
-    public void ComparisonOperators_WorkBetweenColumnValues()
+    public void ComparisonOperators_WorkBetweenExcelScalars()
     {
-        var a = new ColumnValue(10.0);
-        var b = new ColumnValue(20.0);
+        var a = new ExcelScalar(10.0);
+        var b = new ExcelScalar(20.0);
         Assert.True(a < b);
         Assert.True(b > a);
         Assert.False(a > b);
     }
 
     [Fact]
-    public void ArithmeticOperators_WorkBetweenColumnValues()
+    public void ArithmeticOperators_WorkBetweenExcelScalars()
     {
-        var a = new ColumnValue(10.0);
-        var b = new ColumnValue(3.0);
+        var a = new ExcelScalar(10.0);
+        var b = new ExcelScalar(3.0);
 
         var sum = a + b;
         var diff = a - b;
@@ -68,19 +68,19 @@ public class ColumnValueTests
     [Fact]
     public void ArithmeticOperators_WorkWithDoubles()
     {
-        var cv = new ColumnValue(10.0);
+        var sv = new ExcelScalar(10.0);
 
-        Assert.Equal(15.0, (double)(cv + 5.0));
-        Assert.Equal(15.0, (double)(5.0 + cv));
-        Assert.Equal(50.0, (double)(cv * 5.0));
+        Assert.Equal(15.0, (double)(sv + 5.0));
+        Assert.Equal(15.0, (double)(5.0 + sv));
+        Assert.Equal(50.0, (double)(sv * 5.0));
     }
 
     [Fact]
     public void Equality_ComparesByValue()
     {
-        var a = new ColumnValue("test");
-        var b = new ColumnValue("test");
-        var c = new ColumnValue("other");
+        var a = new ExcelScalar("test");
+        var b = new ExcelScalar("test");
+        var c = new ExcelScalar("other");
 
         Assert.True(a == b);
         Assert.False(a == c);
@@ -90,60 +90,39 @@ public class ColumnValueTests
     [Fact]
     public void Equality_WorksWithRawObjects()
     {
-        var cv = new ColumnValue("hello");
-        Assert.True(cv == "hello");
-        Assert.False(cv == "world");
+        var sv = new ExcelScalar("hello");
+        Assert.True(sv == "hello");
+        Assert.False(sv == "world");
     }
 
     [Fact]
     public void ToString_ReturnsStringRepresentation()
     {
-        Assert.Equal("42", new ColumnValue(42).ToString());
-        Assert.Equal("hello", new ColumnValue("hello").ToString());
-        Assert.Equal("", new ColumnValue(null).ToString());
+        Assert.Equal("42", new ExcelScalar(42).ToString());
+        Assert.Equal("hello", new ExcelScalar("hello").ToString());
+        Assert.Equal("", new ExcelScalar(null).ToString());
     }
 
     [Fact]
-    public void CrossTypeComparison_ColumnValueGreaterThanExcelScalar()
+    public void CrossTypeComparison_ExcelScalarVsExcelScalar()
     {
-        var cv = new ColumnValue(20.0);
-        var scalar = new ExcelScalar(10.0);
+        var a = new ExcelScalar(20.0);
+        var b = new ExcelScalar(10.0);
 
-        Assert.True(cv > scalar);
-        Assert.False(cv < scalar);
-        Assert.True(cv >= scalar);
-        Assert.False(cv <= scalar);
+        Assert.True(a > b);
+        Assert.False(a < b);
+        Assert.True(a >= b);
+        Assert.False(a <= b);
     }
 
     [Fact]
-    public void CrossTypeComparison_ExcelScalarGreaterThanColumnValue()
+    public void CrossTypeEquality_ExcelScalarVsExcelValue()
     {
-        var scalar = new ExcelScalar(30.0);
-        var cv = new ColumnValue(10.0);
+        var a = new ExcelScalar("hello");
+        ExcelValue b = new ExcelScalar("hello");
 
-        Assert.True(scalar > cv);
-        Assert.False(scalar < cv);
-    }
-
-    [Fact]
-    public void CrossTypeEquality_ColumnValueEqualsExcelValue()
-    {
-        var cv = new ColumnValue("hello");
-        var scalar = new ExcelScalar("hello");
-
-        Assert.True(cv == scalar);
-        Assert.False(cv != scalar);
-        Assert.False(cv == new ExcelScalar("other"));
-    }
-
-    [Fact]
-    public void CrossTypeEquality_ExcelValueEqualsColumnValue()
-    {
-        var scalar = new ExcelScalar(42.0);
-        var cv = new ColumnValue(42.0);
-
-        Assert.True(scalar == cv);
-        Assert.False(scalar != cv);
-        Assert.False(new ExcelScalar(99.0) == cv);
+        Assert.True(a == b);
+        Assert.False(a != b);
+        Assert.False(a == new ExcelScalar("other"));
     }
 }

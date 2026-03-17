@@ -100,8 +100,8 @@ internal static class TypedDocumentBuilder
         sb.AppendLine($"class {rowTypeName} {{");
 
         // Indexer for bracket access
-        sb.AppendLine("public ColumnValue this[string columnName] => default!;");
-        sb.AppendLine("public ColumnValue this[int index] => default!;");
+        sb.AppendLine("public ExcelScalar this[string columnName] => default!;");
+        sb.AppendLine("public ExcelScalar this[int index] => default!;");
         sb.AppendLine("public int RowCount => 0;");
         sb.AppendLine("public int ColCount => 0;");
         sb.AppendLine("public int ColumnCount => 0;");
@@ -109,7 +109,7 @@ internal static class TypedDocumentBuilder
         var mapping = ColumnMapper.BuildMapping(columns.ToArray());
         foreach (var (sanitised, _) in mapping)
         {
-            sb.AppendLine($"public ColumnValue {sanitised} => default!;");
+            sb.AppendLine($"public ExcelScalar {sanitised} => default!;");
         }
 
         sb.AppendLine("}");

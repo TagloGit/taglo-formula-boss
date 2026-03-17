@@ -398,7 +398,7 @@ public class WrapperTypePipelineTests
     [Fact]
     public void MultipleParams_FilterWithThreshold_NoCast()
     {
-        // Test that r[0] > maxVal works without explicit casts (ColumnValue > ExcelValue operator)
+        // Test that r[0] > maxVal works without explicit casts (ExcelScalar > ExcelValue operator)
         var values = new object[,] { { 5.0 }, { 15.0 }, { 3.0 }, { 20.0 } };
         var maxVal = 10.0;
         var compilation = NewPipelineTestHelpers.CompileExpression(

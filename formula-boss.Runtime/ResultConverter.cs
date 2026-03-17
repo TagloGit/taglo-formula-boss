@@ -47,7 +47,7 @@ public static class ResultConverter
                     rowData[0] = group.Key;
                     for (var c = 0; c < cols; c++)
                     {
-                        rowData[c + 1] = row[c].Value;
+                        rowData[c + 1] = row[c].RawValue;
                     }
 
                     allRows.Add(rowData);
@@ -83,7 +83,7 @@ public static class ResultConverter
             for (var r = 0; r < rowList.Count; r++)
                 for (var c = 0; c < cols; c++)
                 {
-                    arr[r, c] = rowList[r][c].Value;
+                    arr[r, c] = rowList[r][c].RawValue;
                 }
 
             return arr;
@@ -92,23 +92,6 @@ public static class ResultConverter
         if (result is IEnumerable<Cell> cells)
         {
             var list = cells.ToList();
-            if (list.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            var arr = new object?[list.Count, 1];
-            for (var r = 0; r < list.Count; r++)
-            {
-                arr[r, 0] = list[r].Value;
-            }
-
-            return arr;
-        }
-
-        if (result is IEnumerable<ColumnValue> colValues)
-        {
-            var list = colValues.ToList();
             if (list.Count == 0)
             {
                 return string.Empty;
@@ -172,7 +155,7 @@ public static class ResultConverter
         for (var r = 0; r < rows.Count; r++)
             for (var c = 0; c < cols; c++)
             {
-                result[r, c] = rows[r][c].Value;
+                result[r, c] = rows[r][c].RawValue;
             }
 
         return result;
@@ -183,7 +166,6 @@ public static class ResultConverter
     public static object ToResult(this ExcelArray value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this ExcelTable value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this Column value) => ((ExcelValue)value).ToResult();
-    public static object ToResult(this ColumnValue value) => ((ExcelValue)value).ToResult();
     public static object ToResult(this Row value) => ((ExcelValue)value).ToResult();
 
     public static object ToResult(this bool value) => value;

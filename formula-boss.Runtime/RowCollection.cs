@@ -183,7 +183,7 @@ public class RowCollection : IEnumerable<Row>
         var distinct = new List<Row>();
         foreach (var row in _rows)
         {
-            var key = string.Join("|", Enumerable.Range(0, row.ColumnCount).Select(i => row[i].Value));
+            var key = string.Join("|", Enumerable.Range(0, row.ColumnCount).Select(i => row[i].RawValue));
             if (seen.Add(key))
             {
                 distinct.Add(row);
@@ -209,7 +209,7 @@ public class RowCollection : IEnumerable<Row>
         for (var r = 0; r < _rows.Count; r++)
             for (var c = 0; c < cols; c++)
             {
-                result[r, c] = _rows[r][c].Value;
+                result[r, c] = _rows[r][c].RawValue;
             }
 
         return new ExcelArray(result, _columnMap);

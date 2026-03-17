@@ -92,10 +92,10 @@ public class TypedDocumentBuilderTests
         var source = sb.ToString();
 
         Assert.Contains("class __SalesRow {", source);
-        Assert.Contains("public ColumnValue Date => default!;", source);
-        Assert.Contains("public ColumnValue Amount => default!;", source);
-        Assert.Contains("public ColumnValue Region => default!;", source);
-        Assert.Contains("public ColumnValue this[string columnName] => default!;", source);
+        Assert.Contains("public ExcelScalar Date => default!;", source);
+        Assert.Contains("public ExcelScalar Amount => default!;", source);
+        Assert.Contains("public ExcelScalar Region => default!;", source);
+        Assert.Contains("public ExcelScalar this[string columnName] => default!;", source);
         Assert.Contains("public int ColumnCount => 0;", source);
     }
 

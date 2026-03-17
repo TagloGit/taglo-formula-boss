@@ -92,7 +92,6 @@ public class InputDetector
         "ExcelScalar",
         "Row",
         "Column",
-        "ColumnValue",
         "Cell",
         "Interior",
         "CellFont",

@@ -126,11 +126,11 @@ public class GroupByTests
     }
 
     [Fact]
-    public void GroupBy_KeyUnwrapsColumnValue()
+    public void GroupBy_KeyUnwrapsExcelScalar()
     {
         var grouped = CreateTestCollection().GroupBy(r => r["Category"]);
         var first = grouped.First();
-        // Key should be unwrapped from ColumnValue to raw "A"
+        // Key should be unwrapped from ExcelScalar to raw "A"
         Assert.IsType<string>(first.Key);
         Assert.Equal("A", first.Key);
     }

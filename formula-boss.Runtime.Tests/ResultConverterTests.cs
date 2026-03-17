@@ -95,9 +95,9 @@ public class ResultConverterTests
     }
 
     [Fact]
-    public void Convert_EnumerableColumnValue_ReturnsVerticalArray()
+    public void Convert_EnumerableExcelScalar_ReturnsVerticalArray()
     {
-        IEnumerable<ColumnValue> values = new[] { new ColumnValue(10.0), new ColumnValue(20.0), new ColumnValue(30.0) };
+        var values = new List<ExcelScalar> { new(10.0), new(20.0), new(30.0) };
 
         var result = ResultConverter.Convert(values);
         var arr = Assert.IsType<object?[,]>(result);
@@ -120,23 +120,23 @@ public class ResultConverterTests
     }
 
     [Fact]
-    public void Convert_ColumnValue_UnwrapsToRawValue()
+    public void Convert_ExcelScalar_UnwrapsToRawValue()
     {
-        var result = ResultConverter.Convert(new ColumnValue(42.0));
+        var result = ResultConverter.Convert(new ExcelScalar(42.0));
         Assert.Equal(42.0, result);
     }
 
     [Fact]
-    public void Convert_ColumnValue_NullReturnsEmpty()
+    public void Convert_ExcelScalar_NullReturnsEmpty()
     {
-        var result = ResultConverter.Convert(new ColumnValue(null));
+        var result = ResultConverter.Convert(new ExcelScalar(null));
         Assert.Equal(string.Empty, result);
     }
 
     [Fact]
-    public void Convert_ColumnValueEnumerable_ReturnsSingleValue()
+    public void Convert_ExcelScalarEnumerable_ReturnsSingleValue()
     {
-        var result = ResultConverter.Convert(new[] { new ColumnValue(42.0) });
+        var result = ResultConverter.Convert(new[] { new ExcelScalar(42.0) });
         var arr = Assert.IsType<object?[,]>(result);
         Assert.Equal(1, arr.GetLength(0));
         Assert.Equal(42.0, arr[0, 0]);

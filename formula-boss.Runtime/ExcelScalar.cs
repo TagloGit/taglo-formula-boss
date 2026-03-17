@@ -16,6 +16,35 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override int RowCount => 1;
     public override int ColCount => 1;
 
+    /// <summary>
+    ///     Lazy cell accessor, set by <see cref="Row" /> when positional context is available.
+    ///     Invokes <see cref="RuntimeBridge.GetCell" /> to escalate to COM.
+    /// </summary>
+    internal Func<Cell>? CellAccessor { get; init; }
+
+    /// <summary>
+    ///     Escalates to a <see cref="Cell" /> object, providing access to formatting properties.
+    ///     Requires a macro-type UDF (the transpiler detects .Cell usage and sets IsMacroType).
+    /// </summary>
+    public Cell Cell
+    {
+        get
+        {
+            if (CellAccessor != null)
+            {
+                return CellAccessor.Invoke();
+            }
+
+            if (_origin != null && RuntimeBridge.GetCell != null)
+            {
+                return RuntimeBridge.GetCell(_origin.SheetName, _origin.TopRow, _origin.LeftCol);
+            }
+
+            throw new InvalidOperationException(
+                "Cell access requires a macro-type UDF with range position context.");
+        }
+    }
+
     private Row SingleRow
     {
         get

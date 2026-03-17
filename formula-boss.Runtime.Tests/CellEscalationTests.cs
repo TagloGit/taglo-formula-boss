@@ -23,7 +23,7 @@ public class CellEscalationTests : IDisposable
     public void Dispose() => RuntimeBridge.GetCell = null;
 
     [Fact]
-    public void ColumnValue_Cell_EscalatesToCom()
+    public void ExcelScalar_Cell_EscalatesToCom()
     {
         var origin = new RangeOrigin("Sheet1", 1, 1);
         var data = new object?[,] { { 100.0, 200.0 }, { 300.0, 400.0 } };
@@ -38,7 +38,7 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void ColumnValue_Cell_SecondColumn_CorrectPosition()
+    public void ExcelScalar_Cell_SecondColumn_CorrectPosition()
     {
         var origin = new RangeOrigin("Sheet1", 1, 1);
         var data = new object?[,] { { 100.0, 200.0 } };
@@ -52,7 +52,7 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void ColumnValue_Cell_SecondRow_CorrectPosition()
+    public void ExcelScalar_Cell_SecondRow_CorrectPosition()
     {
         var origin = new RangeOrigin("Sheet1", 5, 3);
         var data = new object?[,] { { 10.0 }, { 20.0 } };
@@ -66,7 +66,7 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void ColumnValue_Cell_WithoutOrigin_Throws()
+    public void ExcelScalar_Cell_WithoutOrigin_Throws()
     {
         var data = new object?[,] { { 42.0 } };
         var array = new ExcelArray(data);
@@ -76,7 +76,7 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void ColumnValue_Cell_WithoutBridge_Throws()
+    public void ExcelScalar_Cell_WithoutBridge_Throws()
     {
         RuntimeBridge.GetCell = null;
         var origin = new RangeOrigin("Sheet1", 1, 1);
@@ -88,7 +88,7 @@ public class CellEscalationTests : IDisposable
     }
 
     [Fact]
-    public void ExcelTable_ColumnValue_Cell_WithNamedAccess()
+    public void ExcelTable_Cell_WithNamedAccess()
     {
         var origin = new RangeOrigin("Sheet1", 1, 1);
         var data = new object?[,] { { "Alice", 100.0 }, { "Bob", 200.0 } };
@@ -180,7 +180,7 @@ public class CellEscalationTests : IDisposable
         var result = filtered.ToList();
 
         Assert.Single(result);
-        Assert.Equal(20.0, result[0][0].Value);
+        Assert.Equal(20.0, result[0][0].RawValue);
     }
 
     [Fact]

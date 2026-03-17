@@ -30,9 +30,9 @@ public class SyntheticDocumentBuilderTests
     {
         var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
         Assert.Contains("class __SalesRow", source);
-        Assert.Contains("public ColumnValue Date", source);
-        Assert.Contains("public ColumnValue Amount", source);
-        Assert.Contains("public ColumnValue Region", source);
+        Assert.Contains("public ExcelScalar Date", source);
+        Assert.Contains("public ExcelScalar Amount", source);
+        Assert.Contains("public ExcelScalar Region", source);
     }
 
     [Fact]
@@ -116,9 +116,9 @@ public class SyntheticDocumentBuilderTests
             });
 
         var (source, _) = SyntheticDocumentBuilder.Build("=`Data.`", "=`Data.", metadata);
-        Assert.Contains("public ColumnValue FirstName", source);
-        Assert.Contains("public ColumnValue LastName", source);
-        Assert.Contains("public ColumnValue Age", source);
+        Assert.Contains("public ExcelScalar FirstName", source);
+        Assert.Contains("public ExcelScalar LastName", source);
+        Assert.Contains("public ExcelScalar Age", source);
     }
 
     [Fact]
