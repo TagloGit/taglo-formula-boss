@@ -346,6 +346,18 @@ public class ExcelArray : ExcelValue, IExcelRange
     /// <inheritdoc />
     public override IEnumerator<ExcelValue> GetEnumerator() => ElementWise().GetEnumerator();
 
+    /// <inheritdoc />
+    public override void ForEach(Action<ExcelValue, int, int> action)
+    {
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                action(new ExcelScalar(_data[r, c]), r, c);
+            }
+    }
+
     // --- Element-wise operations (iterate cell-by-cell, row-major) ---
 
     private IEnumerable<ExcelScalar> ElementWise()

@@ -325,6 +325,22 @@ public class ExcelArrayTests
         Assert.Equal(6.0, sum);
     }
 
+    [Fact]
+    public void ForEach_Indexed_ProvidesCorrectRowAndColIndices()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 } });
+        var visited = new List<(double val, int row, int col)>();
+        arr.ForEach((val, row, col) => visited.Add(((double)val, row, col)));
+
+        Assert.Equal(6, visited.Count);
+        Assert.Equal((1.0, 0, 0), visited[0]);
+        Assert.Equal((2.0, 0, 1), visited[1]);
+        Assert.Equal((3.0, 1, 0), visited[2]);
+        Assert.Equal((4.0, 1, 1), visited[3]);
+        Assert.Equal((5.0, 2, 0), visited[4]);
+        Assert.Equal((6.0, 2, 1), visited[5]);
+    }
+
     // --- SelectMany ---
 
     [Fact]

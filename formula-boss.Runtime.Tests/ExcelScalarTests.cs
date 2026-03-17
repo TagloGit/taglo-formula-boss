@@ -343,4 +343,15 @@ public class ExcelScalarTests
         Assert.Equal(15.0, (double)(c * 3));
         Assert.Equal(7.0, (double)(c + 2));
     }
+
+    [Fact]
+    public void ForEach_Indexed_CallsWithZeroZero()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var visited = new List<(double val, int row, int col)>();
+        scalar.ForEach((val, row, col) => visited.Add(((double)val, row, col)));
+
+        Assert.Single(visited);
+        Assert.Equal((42.0, 0, 0), visited[0]);
+    }
 }

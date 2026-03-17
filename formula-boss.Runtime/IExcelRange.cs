@@ -96,6 +96,10 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <param name="action">The action to perform on each element.</param>
     void ForEach(Action<ExcelValue> action);
 
+    /// <summary>Executes an action for each element with its row and column indices.</summary>
+    /// <param name="action">The action to perform on each element, receiving (value, row, col).</param>
+    void ForEach(Action<ExcelValue, int, int> action);
+
     /// <summary>Applies an accumulator function over the elements, returning the final result.</summary>
     /// <param name="seed">The initial accumulator value.</param>
     /// <param name="func">A function that takes (accumulator, element) and returns the new accumulator.</param>

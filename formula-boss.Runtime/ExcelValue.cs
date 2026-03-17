@@ -123,6 +123,9 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     }
 
     /// <inheritdoc />
+    public abstract void ForEach(Action<ExcelValue, int, int> action);
+
+    /// <inheritdoc />
     public abstract dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func);
 
     /// <inheritdoc />
