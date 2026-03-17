@@ -57,7 +57,7 @@ public class RowCollectionTests
     }
 
     [Fact]
-    public void Row_Foreach_EnumeratesColumnValues()
+    public void Row_Foreach_EnumeratesExcelValues()
     {
         var row = new Row(new object?[] { "A", 10.0, true }, ColumnMap);
         var values = new List<object?>();
@@ -76,7 +76,7 @@ public class RowCollectionTests
     public void Row_LinqToList_Works()
     {
         var row = new Row(new object?[] { 1.0, 2.0, 3.0 }, null);
-        var list = ((IEnumerable<ColumnValue>)row).ToList();
+        var list = row.ToList();
         Assert.Equal(3, list.Count);
         Assert.Equal(2.0, (double)list[1]);
     }

@@ -190,12 +190,12 @@ public class SemanticAnalysisServiceTests
     }
 
     [Fact]
-    public void FormatTypeForDisplay_ColumnValue_UnchangedName()
+    public void FormatTypeForDisplay_ExcelScalar_UnchangedName()
     {
         var display = _service.FormatTypeForDisplay(
             GetTypeForExpression("Sales.Rows.First(r => true).Amount"),
             TwoTableMetadata);
-        Assert.Equal("ColumnValue", display);
+        Assert.Equal("ExcelScalar", display);
     }
 
     [Fact]

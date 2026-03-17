@@ -11,7 +11,7 @@ public class RowGroup : RowCollection
     public RowGroup(object? key, IEnumerable<Row> rows, Dictionary<string, int>? columnMap = null)
         : base(rows, columnMap)
     {
-        Key = key is ColumnValue cv ? cv.Value : key;
+        Key = key is ExcelValue ev ? ev.RawValue : key;
     }
 
     /// <summary>Gets the grouping key shared by all rows in this group.</summary>
