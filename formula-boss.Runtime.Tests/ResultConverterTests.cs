@@ -208,6 +208,42 @@ public class ResultConverterTests
     }
 
     [Fact]
+    public void Convert_Typed2DDoubleArray_ReturnsObjectArray()
+    {
+        var typed = new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 } };
+        var result = ResultConverter.Convert(typed);
+        var arr = Assert.IsType<object[,]>(result);
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal(1.0, arr[0, 0]);
+        Assert.Equal(2.0, arr[0, 1]);
+        Assert.Equal(3.0, arr[1, 0]);
+        Assert.Equal(4.0, arr[1, 1]);
+    }
+
+    [Fact]
+    public void Convert_Typed2DIntArray_ReturnsObjectArray()
+    {
+        var typed = new int[,] { { 1, 2 }, { 3, 4 } };
+        var result = ResultConverter.Convert(typed);
+        var arr = Assert.IsType<object[,]>(result);
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal(1, arr[0, 0]);
+        Assert.Equal(2, arr[0, 1]);
+        Assert.Equal(3, arr[1, 0]);
+        Assert.Equal(4, arr[1, 1]);
+    }
+
+    [Fact]
+    public void Convert_ObjectArray2D_PassesThrough()
+    {
+        var obj = new object[,] { { 1.0, "hello" } };
+        var result = ResultConverter.Convert(obj);
+        Assert.Same(obj, result);
+    }
+
+    [Fact]
     public void Convert_SingleRow_ReturnsHorizontalArray()
     {
         var row = new Row(["Alice", 30.0], null);

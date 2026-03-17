@@ -1321,6 +1321,34 @@ public class PipelineTests
     }
 
     [Fact]
+    public void Typed2DArray_SpillsCorrectly()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.EnterBacktickFormula(ws, "A1",
+                "=`new double[2,2] { {1.0, 2.0}, {3.0, 4.0} }`");
+
+            var result = TestUtilities.WaitForResult(ws, "A1", _output);
+
+            _output.WriteLine($"A1 formula: {TestUtilities.GetCellFormula(ws, "A1")}");
+            _output.WriteLine($"A1={TestUtilities.GetCellValue(ws, "A1")}, B1={TestUtilities.GetCellValue(ws, "B1")}");
+            _output.WriteLine($"A2={TestUtilities.GetCellValue(ws, "A2")}, B2={TestUtilities.GetCellValue(ws, "B2")}");
+            _output.WriteLine($"A1 comment: {TestUtilities.GetCellComment(ws, "A1")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(1.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "A1")));
+            Assert.Equal(2.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
+            Assert.Equal(3.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "A2")));
+            Assert.Equal(4.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B2")));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void Table_ColumnAccess_Sum()
     {
         var ws = _excel.AddWorksheet();

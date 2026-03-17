@@ -106,6 +106,17 @@ public static class ResultConverter
             return arr;
         }
 
+        if (result is Array { Rank: 2 } array2d && result is not object[,])
+        {
+            var rowCount = array2d.GetLength(0);
+            var colCount = array2d.GetLength(1);
+            var obj = new object[rowCount, colCount];
+            for (var r = 0; r < rowCount; r++)
+                for (var c = 0; c < colCount; c++)
+                    obj[r, c] = array2d.GetValue(r, c)!;
+            return obj;
+        }
+
         if (result is IEnumerable enumerable and not string and not object[,])
         {
             var list = enumerable.Cast<object>().ToList();
