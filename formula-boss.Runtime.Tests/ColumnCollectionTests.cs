@@ -1,24 +1,14 @@
-using Xunit;
+﻿using Xunit;
 
 namespace FormulaBoss.Runtime.Tests;
 
 public class ColumnCollectionTests
 {
     private static ExcelArray MakeArray() => new(
-        new object?[,]
-        {
-            { 1.0, "A", true },
-            { 2.0, "B", false },
-            { 3.0, "C", true }
-        });
+        new object?[,] { { 1.0, "A", true }, { 2.0, "B", false }, { 3.0, "C", true } });
 
     private static ExcelTable MakeTable() => new(
-        new object?[,]
-        {
-            { "Alice", 30.0, "NY" },
-            { "Bob", 25.0, "LA" },
-            { "Carol", 35.0, "NY" }
-        },
+        new object?[,] { { "Alice", 30.0, "NY" }, { "Bob", 25.0, "LA" }, { "Carol", 35.0, "NY" } },
         new[] { "Name", "Age", "City" });
 
     // --- ExcelArray.Cols ---
@@ -120,7 +110,7 @@ public class ColumnCollectionTests
     public void Scalar_Cols_HasNullName()
     {
         var scalar = new ExcelScalar(42.0);
-        var col = scalar.Cols.First(c => true);
+        var col = scalar.Cols.First(_ => true);
         Assert.Null(col.Name);
     }
 
@@ -128,7 +118,7 @@ public class ColumnCollectionTests
     public void Scalar_Cols_HasCorrectValue()
     {
         var scalar = new ExcelScalar(42.0);
-        var col = scalar.Cols.First(c => true);
+        var col = scalar.Cols.First(_ => true);
         Assert.Equal(42.0, col[0, 0].RawValue);
     }
 

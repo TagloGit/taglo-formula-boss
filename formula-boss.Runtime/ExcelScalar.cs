@@ -13,8 +13,6 @@ public class ExcelScalar : ExcelValue, IExcelRange
     }
 
     public override object? RawValue => _value;
-    public override int RowCount => 1;
-    public override int ColCount => 1;
 
     /// <summary>
     ///     Lazy cell accessor, set by <see cref="Row" /> when positional context is available.
@@ -56,10 +54,13 @@ public class ExcelScalar : ExcelValue, IExcelRange
         }
     }
 
-    public override RowCollection Rows => new(new[] { SingleRow });
-
     public override ColumnCollection Cols =>
-        new(new[] { new Column(new object?[,] { { _value } }, null, 0, _origin) });
+        new(new[] { new Column(new[,] { { _value } }, null, 0, _origin) });
+
+    public override int RowCount => 1;
+    public override int ColCount => 1;
+
+    public override RowCollection Rows => new(new[] { SingleRow });
 
     public override IEnumerable<Cell> Cells
     {
