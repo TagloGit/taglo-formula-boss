@@ -23,10 +23,10 @@ public class ExcelArray : ExcelValue, IExcelRange
     public override object RawValue => _data;
 
     /// <summary>Gets the number of rows in this array.</summary>
-    public int RowCount => _data.GetLength(0);
+    public override int RowCount => _data.GetLength(0);
 
     /// <summary>Gets the number of columns in this array.</summary>
-    public int ColCount => _data.GetLength(1);
+    public override int ColCount => _data.GetLength(1);
 
     public override RowCollection Rows
     {

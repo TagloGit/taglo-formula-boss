@@ -8,6 +8,12 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     /// <summary>Gets the underlying raw value (a single object for scalars, object[,] for arrays).</summary>
     public abstract object? RawValue { get; }
 
+    /// <summary>Gets the number of rows in this value (1 for scalars).</summary>
+    public abstract int RowCount { get; }
+
+    /// <summary>Gets the number of columns in this value (1 for scalars).</summary>
+    public abstract int ColCount { get; }
+
     /// <inheritdoc />
     public int CompareTo(object? obj) => obj is ExcelValue ev ? CompareTo(ev) : 1;
 

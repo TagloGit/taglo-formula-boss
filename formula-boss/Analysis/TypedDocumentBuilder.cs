@@ -102,6 +102,8 @@ internal static class TypedDocumentBuilder
         // Indexer for bracket access
         sb.AppendLine("public ColumnValue this[string columnName] => default!;");
         sb.AppendLine("public ColumnValue this[int index] => default!;");
+        sb.AppendLine("public int RowCount => 0;");
+        sb.AppendLine("public int ColCount => 0;");
         sb.AppendLine("public int ColumnCount => 0;");
 
         var mapping = ColumnMapper.BuildMapping(columns.ToArray());
