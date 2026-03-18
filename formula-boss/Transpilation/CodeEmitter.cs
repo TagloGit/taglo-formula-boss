@@ -1,6 +1,8 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
+using FormulaBoss.Compilation;
+
 namespace FormulaBoss.Transpilation;
 
 /// <summary>
@@ -208,14 +210,11 @@ public class CodeEmitter
     {
         var sb = new StringBuilder();
 
-        // Using directives
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Collections;");
-        sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using System.Text;");
-        sb.AppendLine("using System.Text.RegularExpressions;");
-        sb.AppendLine("using FormulaBoss.Runtime;");
+        // Using directives (shared with ImportedTypeNames for free-variable filtering)
+        foreach (var ns in ImportedTypeNames.ImportedNamespaces)
+        {
+            sb.AppendLine($"using {ns};");
+        }
         sb.AppendLine();
 
         // Class

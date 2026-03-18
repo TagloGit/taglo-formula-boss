@@ -107,6 +107,31 @@ public class InputDetectorTests
         Assert.DoesNotContain("ex", result.Parameters);
     }
 
+    [Theory]
+    [InlineData("Regex")]
+    [InlineData("DateTime")]
+    [InlineData("TimeSpan")]
+    [InlineData("StringBuilder")]
+    [InlineData("Convert")]
+    [InlineData("Math")]
+    [InlineData("Enumerable")]
+    public void Detect_BclTypeName_NotParameter(string typeName)
+    {
+        var result = _detector.Detect($"{{ var x = {typeName}.Equals(input, input); return x; }}");
+
+        Assert.Contains("input", result.Parameters);
+        Assert.DoesNotContain(typeName, result.Parameters);
+    }
+
+    [Fact]
+    public void Detect_RegexMatches_OnlyInputIsParameter()
+    {
+        var result = _detector.Detect(
+            "{ var text = (string)input; var ms = Regex.Matches(text, @\"(.)(\\.1*)\"); return ms; }");
+
+        Assert.Equal(["input"], result.Parameters);
+    }
+
     #endregion
 
     #region Range Reference Detection
