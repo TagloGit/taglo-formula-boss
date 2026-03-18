@@ -1,5 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 
+using FormulaBoss.Compilation;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -35,7 +37,8 @@ public class InputDetector
         @"(?:'[^']+?'!|[A-Za-z0-9_]+!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?",
         RegexOptions.Compiled);
 
-    // C# keywords and common type names that should not be treated as free variables
+    // C# keywords and built-in type aliases that should not be treated as free variables.
+    // BCL and Runtime type names are resolved dynamically via ImportedTypeNames.
     private static readonly HashSet<string> IgnoredIdentifiers = new(StringComparer.Ordinal)
     {
         // C# keywords commonly used in expressions
@@ -65,7 +68,7 @@ public class InputDetector
         "try",
         "catch",
         "finally",
-        // Common type names
+        // C# built-in type aliases (these are keywords, not resolved from assemblies)
         "string",
         "int",
         "double",
@@ -76,29 +79,9 @@ public class InputDetector
         "long",
         "char",
         "byte",
-        "Convert",
-        "Math",
-        "String",
-        "Int32",
-        "Double",
-        "Boolean",
-        "Enumerable",
+        // Namespace identifiers (not types, so not in ImportedTypeNames)
         "System",
-        "Linq",
-        // Runtime type names (these resolve at runtime, not as free vars)
-        "ExcelValue",
-        "ExcelArray",
-        "ExcelTable",
-        "ExcelScalar",
-        "Row",
-        "Column",
-        "Cell",
-        "Interior",
-        "CellFont",
-        "RangeOrigin",
-        "ResultConverter",
-        "IExcelRange",
-        "RuntimeBridge"
+        "Linq"
     };
 
     /// <summary>
@@ -270,9 +253,10 @@ public class InputDetector
         {
             var name = identifier.Identifier.Text;
 
-            // Skip if it's a known identifier
+            // Skip if it's a known identifier or a type name from the imported namespaces
             if (allLambdaParams.Contains(name) ||
-                IgnoredIdentifiers.Contains(name) || declaredLocals.Contains(name))
+                IgnoredIdentifiers.Contains(name) || declaredLocals.Contains(name) ||
+                ImportedTypeNames.Get().Contains(name))
             {
                 continue;
             }
