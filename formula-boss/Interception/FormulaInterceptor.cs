@@ -318,8 +318,9 @@ public class FormulaInterceptor : IDisposable
             return;
         }
 
+        var settings = EditorSettings.Load();
         var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResults,
-            rewrittenResultExpression);
+            rewrittenResultExpression, settings.IndentSize);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
         WriteFormula(cell, newFormula);

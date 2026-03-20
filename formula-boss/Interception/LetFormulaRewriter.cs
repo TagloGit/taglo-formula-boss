@@ -21,7 +21,6 @@ public record ProcessedBinding(
 /// </summary>
 public static class LetFormulaRewriter
 {
-    private const string Indent = "    ";
     private const char NewLine = '\n'; // Use LF only - Excel COM doesn't like \r\n
 
     /// <summary>
@@ -29,12 +28,19 @@ public static class LetFormulaRewriter
     ///     and replacing backtick expressions with UDF calls.
     ///     Formats output with one binding per line for readability.
     /// </summary>
+    /// <param name="original">The parsed LET structure.</param>
+    /// <param name="processedBindings">Backtick bindings that were compiled to UDFs.</param>
+    /// <param name="processedResults">Backtick expressions in the result, if any.</param>
+    /// <param name="rewrittenResultExpression">Rewritten result expression referencing new bindings.</param>
+    /// <param name="indentSize">Number of spaces per indent level (default 4 for backwards compatibility).</param>
     public static string Rewrite(
         LetStructure original,
         IReadOnlyDictionary<string, ProcessedBinding> processedBindings,
         IReadOnlyList<ProcessedBinding>? processedResults = null,
-        string? rewrittenResultExpression = null)
+        string? rewrittenResultExpression = null,
+        int indentSize = 4)
     {
+        var indent = new string(' ', indentSize);
         var sb = new StringBuilder();
         sb.Append("=LET(").Append(NewLine);
 
@@ -45,17 +51,18 @@ public static class LetFormulaRewriter
             if (processedBindings.TryGetValue(variableName, out var processed))
             {
                 // This binding had a backtick expression - insert _src_ and UDF call
-                sb.Append(Indent).Append("_src_").Append(variableName).Append(", ");
-                sb.Append('"').Append(EscapeForExcelString(processed.OriginalExpression)).Append("\",").Append(NewLine);
+                sb.Append(indent).Append("_src_").Append(variableName).Append(", ");
+                sb.Append('"').Append(EscapeForExcelString(processed.OriginalExpression)).Append("\",")
+                    .Append(NewLine);
 
-                sb.Append(Indent).Append(variableName).Append(", ");
+                sb.Append(indent).Append(variableName).Append(", ");
                 AppendUdfCall(sb, processed);
                 sb.Append(',').Append(NewLine);
             }
             else
             {
                 // Normal binding - keep as-is
-                sb.Append(Indent).Append(binding.VariableName).Append(", ");
+                sb.Append(indent).Append(binding.VariableName).Append(", ");
                 sb.Append(binding.Value).Append(',').Append(NewLine);
             }
         }
@@ -66,22 +73,22 @@ public static class LetFormulaRewriter
             // Result expression had backtick(s) - add _src_ doc and binding for each
             foreach (var processedResult in processedResults)
             {
-                sb.Append(Indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
+                sb.Append(indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
                 sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",")
                     .Append(NewLine);
 
-                sb.Append(Indent).Append(processedResult.VariableName).Append(", ");
+                sb.Append(indent).Append(processedResult.VariableName).Append(", ");
                 AppendUdfCall(sb, processedResult);
                 sb.Append(',').Append(NewLine);
             }
 
             // Final expression references the new bindings
-            sb.Append(Indent).Append(rewrittenResultExpression ?? processedResults[0].VariableName).Append(')');
+            sb.Append(indent).Append(rewrittenResultExpression ?? processedResults[0].VariableName).Append(')');
         }
         else
         {
             // Result expression is plain - keep as-is (no trailing comma)
-            sb.Append(Indent).Append(original.ResultExpression.Trim()).Append(')');
+            sb.Append(indent).Append(original.ResultExpression.Trim()).Append(')');
         }
 
         return sb.ToString();
