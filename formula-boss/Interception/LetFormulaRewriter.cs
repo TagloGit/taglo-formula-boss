@@ -95,8 +95,8 @@ public static class LetFormulaRewriter
         sb.Append(')');
 
         // Format the flat formula using LetFormulaFormatter for consistent output.
-        // When nestedLetDepth <= 0, the formatter returns the flat formula unchanged.
-        return LetFormulaFormatter.Format(sb.ToString(), indentSize, nestedLetDepth, maxLineLength);
+        // Always format at least depth 1 — this is a constructed formula, not user-written.
+        return LetFormulaFormatter.Format(sb.ToString(), indentSize, Math.Max(1, nestedLetDepth), maxLineLength);
     }
 
     /// <summary>

@@ -1,5 +1,7 @@
 using System.Text;
 
+using FormulaBoss.UI;
+
 namespace FormulaBoss.Interception;
 
 /// <summary>
@@ -66,10 +68,10 @@ public static class LetFormulaReconstructor
             return false;
         }
 
-        // Reconstruct as a flat formula — formatting is handled by the caller
-        // (FormatLetIfEnabled in DetectEditorContent) so it respects AutoFormatLet.
+        // Build a flat formula, then format it using the user's settings.
+        // This is a constructed formula (not user-written), so always format for readability.
         var sb = new StringBuilder();
-        sb.Append("'=LET(");
+        sb.Append("=LET(");
 
         foreach (var binding in structure.Bindings)
         {
@@ -111,10 +113,14 @@ public static class LetFormulaReconstructor
         // Handle result expression - emit as-is (variable references like _result
         // are just normal LET bindings, same as any user-chosen name)
         sb.Append(structure.ResultExpression.Trim());
-
         sb.Append(')');
 
-        editableFormula = sb.ToString();
+        // Format using user's indent size — always at least depth 1 for readability
+        var settings = EditorSettings.Load();
+        var formatted = LetFormulaFormatter.Format(sb.ToString(), settings.IndentSize, Math.Max(1, settings.NestedLetDepth));
+
+        // Prepend quote prefix for text storage
+        editableFormula = "'" + formatted;
         return true;
     }
 

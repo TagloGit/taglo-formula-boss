@@ -274,7 +274,7 @@ public class LetFormulaRewriterTests
     }
 
     [Fact]
-    public void Rewrite_SkipsFormattingWhenNestedLetDepthIsZero()
+    public void Rewrite_AlwaysFormatsAtLeastDepth1_EvenWhenNestedLetDepthIsZero()
     {
         var formula = "=LET(x, 1, y, 2, x + y)";
         LetFormulaParser.TryParse(formula, out var structure);
@@ -282,8 +282,9 @@ public class LetFormulaRewriterTests
         var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>(),
             nestedLetDepth: 0);
 
-        // nestedLetDepth=0 means no formatting — flat single-line output
-        Assert.DoesNotContain("\n", result);
+        // Rewriter constructs formulas from scratch — always formats for readability
+        var lines = result.Split('\n');
+        Assert.True(lines.Length >= 3, "Expected formatted output even with nestedLetDepth=0");
     }
 
     #endregion
