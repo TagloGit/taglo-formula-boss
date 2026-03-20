@@ -68,8 +68,7 @@ public static class LetFormulaReconstructor
             return false;
         }
 
-        // Build a flat formula, then format it using the user's settings.
-        // This is a constructed formula (not user-written), so always format for readability.
+        // Build a flat formula, then optionally format using user's settings.
         var sb = new StringBuilder();
         sb.Append("=LET(");
 
@@ -115,12 +114,15 @@ public static class LetFormulaReconstructor
         sb.Append(structure.ResultExpression.Trim());
         sb.Append(')');
 
-        // Format using user's indent size — always at least depth 1 for readability
+        // Format if AutoFormatLet is enabled; otherwise return flat
         var settings = EditorSettings.Load();
-        var formatted = LetFormulaFormatter.Format(sb.ToString(), settings.IndentSize, Math.Max(1, settings.NestedLetDepth));
+        var flat = sb.ToString();
+        var result = settings.AutoFormatLet
+            ? LetFormulaFormatter.Format(flat, settings.IndentSize, Math.Max(1, settings.NestedLetDepth))
+            : flat;
 
         // Prepend quote prefix for text storage
-        editableFormula = "'" + formatted;
+        editableFormula = "'" + result;
         return true;
     }
 
