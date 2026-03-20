@@ -21,8 +21,6 @@ public record ProcessedBinding(
 /// </summary>
 public static class LetFormulaRewriter
 {
-    private const char NewLine = '\n'; // Use LF only - Excel COM doesn't like \r\n
-
     /// <summary>
     ///     Rewrites a LET formula, inserting _src_ documentation variables
     ///     and replacing backtick expressions with UDF calls.
@@ -32,17 +30,22 @@ public static class LetFormulaRewriter
     /// <param name="processedBindings">Backtick bindings that were compiled to UDFs.</param>
     /// <param name="processedResults">Backtick expressions in the result, if any.</param>
     /// <param name="rewrittenResultExpression">Rewritten result expression referencing new bindings.</param>
-    /// <param name="indentSize">Number of spaces per indent level (default 4 for backwards compatibility).</param>
+    /// <param name="indentSize">Number of spaces per indent level.</param>
+    /// <param name="nestedLetDepth">How many levels of nested LETs to format (0 = off, 1 = top only).</param>
+    /// <param name="maxLineLength">Max line length before wrapping (0 = always wrap).</param>
     public static string Rewrite(
         LetStructure original,
         IReadOnlyDictionary<string, ProcessedBinding> processedBindings,
         IReadOnlyList<ProcessedBinding>? processedResults = null,
         string? rewrittenResultExpression = null,
-        int indentSize = 4)
+        int indentSize = 4,
+        int nestedLetDepth = 1,
+        int maxLineLength = 0)
     {
-        var indent = new string(' ', indentSize);
+        // Build a flat (single-line) formula with _src_ bindings inserted,
+        // then let LetFormulaFormatter handle all formatting.
         var sb = new StringBuilder();
-        sb.Append("=LET(").Append(NewLine);
+        sb.Append("=LET(");
 
         foreach (var binding in original.Bindings)
         {
@@ -51,19 +54,18 @@ public static class LetFormulaRewriter
             if (processedBindings.TryGetValue(variableName, out var processed))
             {
                 // This binding had a backtick expression - insert _src_ and UDF call
-                sb.Append(indent).Append("_src_").Append(variableName).Append(", ");
-                sb.Append('"').Append(EscapeForExcelString(processed.OriginalExpression)).Append("\",")
-                    .Append(NewLine);
+                sb.Append("_src_").Append(variableName).Append(", ");
+                sb.Append('"').Append(EscapeForExcelString(processed.OriginalExpression)).Append("\", ");
 
-                sb.Append(indent).Append(variableName).Append(", ");
+                sb.Append(variableName).Append(", ");
                 AppendUdfCall(sb, processed);
-                sb.Append(',').Append(NewLine);
+                sb.Append(", ");
             }
             else
             {
                 // Normal binding - keep as-is
-                sb.Append(indent).Append(binding.VariableName).Append(", ");
-                sb.Append(binding.Value).Append(',').Append(NewLine);
+                sb.Append(binding.VariableName.Trim()).Append(", ");
+                sb.Append(binding.Value.Trim()).Append(", ");
             }
         }
 
@@ -73,25 +75,28 @@ public static class LetFormulaRewriter
             // Result expression had backtick(s) - add _src_ doc and binding for each
             foreach (var processedResult in processedResults)
             {
-                sb.Append(indent).Append("_src_").Append(processedResult.VariableName).Append(", ");
-                sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\",")
-                    .Append(NewLine);
+                sb.Append("_src_").Append(processedResult.VariableName).Append(", ");
+                sb.Append('"').Append(EscapeForExcelString(processedResult.OriginalExpression)).Append("\", ");
 
-                sb.Append(indent).Append(processedResult.VariableName).Append(", ");
+                sb.Append(processedResult.VariableName).Append(", ");
                 AppendUdfCall(sb, processedResult);
-                sb.Append(',').Append(NewLine);
+                sb.Append(", ");
             }
 
             // Final expression references the new bindings
-            sb.Append(indent).Append(rewrittenResultExpression ?? processedResults[0].VariableName).Append(')');
+            sb.Append(rewrittenResultExpression ?? processedResults[0].VariableName);
         }
         else
         {
-            // Result expression is plain - keep as-is (no trailing comma)
-            sb.Append(indent).Append(original.ResultExpression.Trim()).Append(')');
+            // Result expression is plain - keep as-is
+            sb.Append(original.ResultExpression.Trim());
         }
 
-        return sb.ToString();
+        sb.Append(')');
+
+        // Format the flat formula using LetFormulaFormatter for consistent output.
+        // Always format at least depth 1 — this is a constructed formula, not user-written.
+        return LetFormulaFormatter.Format(sb.ToString(), indentSize, Math.Max(1, nestedLetDepth), maxLineLength);
     }
 
     /// <summary>

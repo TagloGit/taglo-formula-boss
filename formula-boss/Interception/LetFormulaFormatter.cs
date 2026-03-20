@@ -186,12 +186,21 @@ public static class LetFormulaFormatter
             }
         }
 
-        // Result expression
+        // Result expression — check length the same way as bindings
         result = MaybeFormatNestedLet(result, indent, indentSize, remainingDepth);
         if (!wrapping)
         {
             var spacer = firstOnLine ? "" : " ";
-            sb.Append(spacer).Append(result).Append(')');
+            var wouldBe = currentLineLength + spacer.Length + result.Length + 1; // +1 for closing ')'
+            if (firstOnLine || wouldBe <= maxLineLength)
+            {
+                sb.Append(spacer).Append(result).Append(')');
+            }
+            else
+            {
+                sb.Append(NewLine);
+                sb.Append(indent).Append(result).Append(')');
+            }
         }
         else
         {

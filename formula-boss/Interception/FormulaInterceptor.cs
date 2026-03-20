@@ -320,7 +320,7 @@ public class FormulaInterceptor : IDisposable
 
         var settings = EditorSettings.Load();
         var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResults,
-            rewrittenResultExpression, settings.IndentSize);
+            rewrittenResultExpression, settings.IndentSize, settings.NestedLetDepth, settings.MaxLineLength);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
         WriteFormula(cell, newFormula);
