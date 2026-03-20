@@ -319,8 +319,10 @@ public class FormulaInterceptor : IDisposable
         }
 
         var settings = EditorSettings.Load();
+        var depth = settings.AutoFormatLet ? Math.Max(1, settings.NestedLetDepth) : 0;
+        var lineLen = settings.AutoFormatLet ? settings.MaxLineLength : 0;
         var newFormula = LetFormulaRewriter.Rewrite(letStructure, processedBindings, processedResults,
-            rewrittenResultExpression, settings.IndentSize, settings.NestedLetDepth, settings.MaxLineLength);
+            rewrittenResultExpression, settings.IndentSize, depth, lineLen);
         Debug.WriteLine($"Rewriting LET formula to: {newFormula}");
 
         WriteFormula(cell, newFormula);
