@@ -188,6 +188,21 @@ public class LetFormulaFormatterTests
         Assert.True(lines.Length >= 3, "Expected wrapping after limit exceeded");
     }
 
+    [Fact]
+    public void Format_MaxLineLength_ResultWrapsIndependentlyOfBindings()
+    {
+        var formula = "=LET(x, 1, y, 2, z, 3, x+y+z+data)";
+
+        // At 28, bindings "x, 1, y, 2, z, 3," fit (27 chars with =LET()
+        // but adding " x+y+z+data)" would exceed 28
+        var result = LetFormulaFormatter.Format(formula, indentSize: 4, maxLineLength: 28);
+
+        // All bindings on first line, result wraps
+        Assert.StartsWith("=LET(x, 1, y, 2, z, 3,", result);
+        Assert.Contains("\n", result);
+        Assert.EndsWith("x+y+z+data)", result);
+    }
+
     #endregion
 
     #region String Literals
