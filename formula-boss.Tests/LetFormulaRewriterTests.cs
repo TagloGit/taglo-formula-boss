@@ -225,6 +225,68 @@ public class LetFormulaRewriterTests
         Assert.Contains("    y, 2,", result);
     }
 
+    [Fact]
+    public void Rewrite_RespectsCustomIndentSize()
+    {
+        var formula = "=LET(x, 1, y, 2, x + y)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>(),
+            indentSize: 2);
+
+        Assert.Contains("  x, 1,", result);
+        Assert.Contains("  y, 2,", result);
+        // Should NOT contain 4-space indent
+        Assert.DoesNotContain("    x,", result);
+    }
+
+    [Fact]
+    public void Rewrite_DelegatesToLetFormulaFormatter()
+    {
+        // Verify that the rewriter produces the same output as the formatter
+        // would for the equivalent flat formula
+        var formula = "=LET(x, 1, y, 2, x + y)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>(),
+            indentSize: 2);
+
+        var expected = LetFormulaFormatter.Format("=LET(x, 1, y, 2, x + y)", indentSize: 2);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void Rewrite_WithProcessedBindings_FormatsViaFormatter()
+    {
+        var formula = "=LET(data, A1:A10, filtered, `data.where(v => v > 0)`, SUM(filtered))";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var processedBindings = new Dictionary<string, ProcessedBinding>
+        {
+            ["filtered"] = new("filtered", "data.where(v => v > 0)", "FILTERED", new[] { "data" })
+        };
+
+        var result = LetFormulaRewriter.Rewrite(structure!, processedBindings, indentSize: 2);
+
+        // Should use 2-space indent
+        Assert.Contains("  _src_filtered,", result);
+        Assert.Contains("  data, A1:A10,", result);
+    }
+
+    [Fact]
+    public void Rewrite_AlwaysFormatsAtLeastDepth1_EvenWhenNestedLetDepthIsZero()
+    {
+        var formula = "=LET(x, 1, y, 2, x + y)";
+        LetFormulaParser.TryParse(formula, out var structure);
+
+        var result = LetFormulaRewriter.Rewrite(structure!, new Dictionary<string, ProcessedBinding>(),
+            nestedLetDepth: 0);
+
+        // Should still be formatted (not flat) because rewriter always formats at least depth 1
+        var lines = result.Split('\n');
+        Assert.True(lines.Length >= 3, "Expected formatted output even with nestedLetDepth=0");
+    }
+
     #endregion
 
     #region Flat Parameters in UDF Calls

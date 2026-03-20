@@ -176,7 +176,8 @@ public static class ShowFloatingEditorCommand
         var prefix = cell.PrefixCharacter as string;
         if (prefix == "'")
         {
-            return cell.Value2 as string ?? "";
+            var text = cell.Value2 as string ?? "";
+            return FormatLetIfEnabled(text);
         }
 
         // Processed FB LET formula: contains _src_ variables from pipeline
@@ -186,12 +187,32 @@ public static class ShowFloatingEditorCommand
                 editableFormula != null)
             {
                 // TryReconstruct adds a leading ' for text storage — strip it for the editor
-                return editableFormula.StartsWith('\'') ? editableFormula[1..] : editableFormula;
+                var text = editableFormula.StartsWith('\'') ? editableFormula[1..] : editableFormula;
+                return FormatLetIfEnabled(text);
             }
         }
 
-        // Processed basic FB / non-FB formula: show formula as-is
-        return formula;
+        // Processed basic FB / non-FB formula: format LET if applicable
+        return FormatLetIfEnabled(formula);
+    }
+
+    /// <summary>
+    ///     Formats a formula using LetFormulaFormatter if AutoFormatLet is enabled
+    ///     and the formula is a LET formula.
+    /// </summary>
+    private static string FormatLetIfEnabled(string formula)
+    {
+        var settings = EditorSettings.Load();
+        if (!settings.AutoFormatLet)
+        {
+            return formula;
+        }
+
+        return LetFormulaFormatter.Format(
+            formula,
+            settings.IndentSize,
+            settings.NestedLetDepth,
+            settings.MaxLineLength);
     }
 
     /// <summary>
@@ -292,8 +313,11 @@ public static class ShowFloatingEditorCommand
                 }
                 else if (formula.StartsWith('='))
                 {
+                    // Format LET formulas before writing to the cell
+                    var formatted = FormatLetIfEnabled(formula);
+
                     // Regular formula — write directly via Formula2 for dynamic array support
-                    cell.Formula2 = formula;
+                    cell.Formula2 = formatted;
                 }
                 else
                 {
