@@ -401,8 +401,7 @@ public static class ShowFloatingEditorCommand
 
                     if (_window is { IsVisible: true })
                     {
-                        _window.ApplyIndentSize(settings.IndentSize);
-                        _window.ApplyWordWrap(settings.WordWrap);
+                        _window.ApplySettings(settings);
                     }
                 }
             });
