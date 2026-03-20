@@ -394,6 +394,9 @@ public static class ShowFloatingEditorCommand
                     settings.AnimationStyle = dialog.SelectedAnimation;
                     settings.IndentSize = dialog.SelectedIndentSize;
                     settings.WordWrap = dialog.SelectedWordWrap;
+                    settings.AutoFormatLet = dialog.SelectedAutoFormatLet;
+                    settings.NestedLetDepth = dialog.SelectedNestedLetDepth;
+                    settings.MaxLineLength = dialog.SelectedMaxLineLength;
                     settings.Save();
 
                     if (_window is { IsVisible: true })
