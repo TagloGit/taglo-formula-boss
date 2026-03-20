@@ -14,6 +14,10 @@ public partial class SettingsDialog
         IndentSizeBox.Text = settings.IndentSize.ToString();
 
         WordWrapCheck.IsChecked = settings.WordWrap;
+
+        AutoFormatLetCheck.IsChecked = settings.AutoFormatLet;
+        NestedLetDepthBox.Text = settings.NestedLetDepth.ToString();
+        MaxLineLengthBox.Text = settings.MaxLineLength.ToString();
     }
 
     public AnimationStyle SelectedAnimation =>
@@ -23,6 +27,14 @@ public partial class SettingsDialog
         int.TryParse(IndentSizeBox.Text, out var size) && size is >= 1 and <= 8 ? size : 2;
 
     public bool SelectedWordWrap => WordWrapCheck.IsChecked == true;
+
+    public bool SelectedAutoFormatLet => AutoFormatLetCheck.IsChecked == true;
+
+    public int SelectedNestedLetDepth =>
+        int.TryParse(NestedLetDepthBox.Text, out var depth) && depth is >= 0 and <= 10 ? depth : 1;
+
+    public int SelectedMaxLineLength =>
+        int.TryParse(MaxLineLengthBox.Text, out var len) && len >= 0 ? len : 0;
 
     private void OnOk(object sender, RoutedEventArgs e)
     {

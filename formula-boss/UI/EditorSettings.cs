@@ -22,6 +22,9 @@ public class EditorSettings
     public double FontSize { get; set; } = 13;
     public AnimationStyle AnimationStyle { get; set; } = AnimationStyle.Chomp;
     public bool WordWrap { get; set; } = true;
+    public bool AutoFormatLet { get; set; } = true;
+    public int NestedLetDepth { get; set; } = 1;
+    public int MaxLineLength { get; set; }
 
     private static string SettingsDirectory =>
         Path.Combine(
