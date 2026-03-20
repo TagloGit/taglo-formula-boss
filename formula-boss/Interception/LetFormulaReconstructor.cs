@@ -9,8 +9,6 @@ public static class LetFormulaReconstructor
 {
     private const string SourcePrefix = "_src_";
     private const string HeaderSuffix = "_hdr"; // Header bindings for dynamic column names
-    private const string Indent = "    ";
-    private const char NewLine = '\n'; // Use LF only - Excel COM doesn't like \r\n
 
     /// <summary>
     /// Checks if a formula is a processed Formula Boss LET formula (contains _src_ variables).
@@ -68,9 +66,10 @@ public static class LetFormulaReconstructor
             return false;
         }
 
-        // Reconstruct the formula with line breaks for readability
+        // Reconstruct as a flat formula — formatting is handled by the caller
+        // (FormatLetIfEnabled in DetectEditorContent) so it respects AutoFormatLet.
         var sb = new StringBuilder();
-        sb.Append("'=LET(").Append(NewLine);
+        sb.Append("'=LET(");
 
         foreach (var binding in structure.Bindings)
         {
@@ -89,7 +88,6 @@ public static class LetFormulaReconstructor
                 continue;
             }
 
-            sb.Append(Indent);
             sb.Append(varName);
             sb.Append(", ");
 
@@ -107,12 +105,11 @@ public static class LetFormulaReconstructor
                 sb.Append(binding.Value.Trim());
             }
 
-            sb.Append(',').Append(NewLine);
+            sb.Append(", ");
         }
 
         // Handle result expression - emit as-is (variable references like _result
         // are just normal LET bindings, same as any user-chosen name)
-        sb.Append(Indent);
         sb.Append(structure.ResultExpression.Trim());
 
         sb.Append(')');
