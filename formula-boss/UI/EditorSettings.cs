@@ -52,6 +52,19 @@ public class EditorSettings
         return new EditorSettings();
     }
 
+    public void CopyFrom(EditorSettings other)
+    {
+        Width = other.Width;
+        Height = other.Height;
+        IndentSize = other.IndentSize;
+        FontSize = other.FontSize;
+        AnimationStyle = other.AnimationStyle;
+        WordWrap = other.WordWrap;
+        AutoFormatLet = other.AutoFormatLet;
+        NestedLetDepth = other.NestedLetDepth;
+        MaxLineLength = other.MaxLineLength;
+    }
+
     public void Save()
     {
         try

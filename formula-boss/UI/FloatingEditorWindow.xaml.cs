@@ -403,14 +403,11 @@ public partial class FloatingEditorWindow
         Hide();
     }
 
-    internal void ApplyWordWrap(bool wordWrap)
+    internal void ApplySettings(EditorSettings settings)
     {
-        FormulaEditor.WordWrap = wordWrap;
-    }
-
-    internal void ApplyIndentSize(int indentSize)
-    {
-        FormulaEditor.Options.IndentationSize = indentSize;
+        _settings.CopyFrom(settings);
+        FormulaEditor.WordWrap = settings.WordWrap;
+        FormulaEditor.Options.IndentationSize = settings.IndentSize;
     }
 
     internal void DisposeWorkspace()
