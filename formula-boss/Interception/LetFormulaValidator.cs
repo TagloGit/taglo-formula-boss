@@ -94,13 +94,23 @@ public static class LetFormulaValidator
                 continue;
             }
 
+            var trimStart = nameArg.Value.Length - nameArg.Value.TrimStart().Length;
+            var trimmedLength = name.Length;
+
             if (!IsValidLetVariableName(name))
             {
-                // Find the trimmed name's position within the argument
-                var trimStart = nameArg.Value.Length - nameArg.Value.TrimStart().Length;
-                var trimmedLength = name.Length;
                 errors.Add(new LetError(nameArg.StartOffset + trimStart, trimmedLength,
                     $"Invalid variable name '{name}'"));
+            }
+            else if (LooksLikeCellAddress(name))
+            {
+                errors.Add(new LetError(nameArg.StartOffset + trimStart, trimmedLength,
+                    $"Variable name '{name}' conflicts with a cell address"));
+            }
+            else if (name.Length >= 255)
+            {
+                errors.Add(new LetError(nameArg.StartOffset + trimStart, trimmedLength,
+                    "Variable name exceeds 255 characters"));
             }
         }
 
@@ -110,5 +120,47 @@ public static class LetFormulaValidator
     private static bool IsValidLetVariableName(string name) =>
         name.Length > 0 &&
         (char.IsLetter(name[0]) || name[0] == '_') &&
-        name.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '.');
+        name.All(c => char.IsLetterOrDigit(c) || c == '_');
+
+    /// <summary>
+    ///     Checks whether a name matches the pattern of an Excel cell address (1-3 letters + 1-7 digits).
+    ///     Excel columns run A–XFD (max 3 letters) and rows 1–1048576 (max 7 digits).
+    ///     The check is conservative: any letter prefix followed by digits is flagged,
+    ///     even if the column is beyond XFD, since Excel still rejects these as variable names.
+    /// </summary>
+    private static bool LooksLikeCellAddress(string name)
+    {
+        // Must start with a letter (underscore-prefixed names are always safe)
+        if (name[0] == '_')
+        {
+            return false;
+        }
+
+        // Find where letters end and digits begin
+        var i = 0;
+        while (i < name.Length && char.IsLetter(name[i]))
+        {
+            i++;
+        }
+
+        // Must have at least one letter and at least one digit, and nothing else
+        if (i == 0 || i >= name.Length)
+        {
+            return false;
+        }
+
+        // Everything after the letters must be digits
+        for (var j = i; j < name.Length; j++)
+        {
+            if (!char.IsDigit(name[j]))
+            {
+                return false;
+            }
+        }
+
+        // Letter prefix 1-3 chars + digit suffix 1-7 chars matches cell address pattern
+        var letterCount = i;
+        var digitCount = name.Length - i;
+        return letterCount <= 3 && digitCount is >= 1 and <= 7;
+    }
 }

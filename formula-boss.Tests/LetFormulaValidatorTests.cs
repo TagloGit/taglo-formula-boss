@@ -177,10 +177,40 @@ public class LetFormulaValidatorTests
     }
 
     [Fact]
-    public void Validate_AllowsDotInVariableNames()
+    public void Validate_RejectsDotInVariableNames()
     {
-        // Excel LET allows dotted names like sheet1.range
-        var errors = LetFormulaValidator.Validate("=LET(a.b, 5, a.b)");
+        var errors = LetFormulaValidator.Validate("=LET(a.b, 5, x)");
+        Assert.Single(errors);
+        Assert.Contains("Invalid variable name", errors[0].Message);
+    }
+
+    [Theory]
+    [InlineData("A1")]
+    [InlineData("B2")]
+    [InlineData("XFD1")]
+    [InlineData("AA100")]
+    [InlineData("row1")]
+    [InlineData("row2")]
+    [InlineData("Col5")]
+    public void Validate_DetectsCellAddressConflict(string name)
+    {
+        var formula = $"=LET({name}, 5, {name})";
+        var errors = LetFormulaValidator.Validate(formula);
+        Assert.Single(errors);
+        Assert.Contains("conflicts with a cell address", errors[0].Message);
+    }
+
+    [Theory]
+    [InlineData("_x")]
+    [InlineData("total")]
+    [InlineData("myVar")]
+    [InlineData("data123abc")]
+    [InlineData("ABCD1")]       // 4 letters — beyond column range
+    [InlineData("x12345678")]   // 8 digits — beyond row range
+    public void Validate_AllowsNonCellAddressNames(string name)
+    {
+        var formula = $"=LET({name}, 5, {name})";
+        var errors = LetFormulaValidator.Validate(formula);
         Assert.Empty(errors);
     }
 }
