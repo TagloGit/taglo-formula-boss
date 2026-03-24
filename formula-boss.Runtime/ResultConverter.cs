@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Runtime.CompilerServices;
 
 namespace FormulaBoss.Runtime;
 
@@ -128,15 +129,31 @@ public static class ResultConverter
                 return string.Empty;
             }
 
-            var arr = new object?[list.Count, 1];
+            if (list[0] is ITuple firstTuple)
+            {
+                var cols = firstTuple.Length;
+                var arr = new object?[list.Count, cols];
+                for (var r = 0; r < list.Count; r++)
+                {
+                    var tuple = (ITuple)list[r];
+                    for (var c = 0; c < cols; c++)
+                    {
+                        arr[r, c] = tuple[c];
+                    }
+                }
+
+                return arr;
+            }
+
+            var singleCol = new object?[list.Count, 1];
             for (var r = 0; r < list.Count; r++)
             {
-                arr[r, 0] = list[r] is ExcelValue ev2 ? ev2.RawValue
+                singleCol[r, 0] = list[r] is ExcelValue ev2 ? ev2.RawValue
                     : list[r] is Cell c ? c.Value
                     : list[r];
             }
 
-            return arr;
+            return singleCol;
         }
 
         return result;

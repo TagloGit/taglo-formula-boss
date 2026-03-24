@@ -253,4 +253,54 @@ public class ResultConverterTests
         Assert.Equal("Alice", arr[0, 0]);
         Assert.Equal(30.0, arr[0, 1]);
     }
+
+    [Fact]
+    public void Convert_ListOfValueTuple2_UnpacksToColumns()
+    {
+        var list = new List<(string, double)> { ("Foo", 1.0), ("Bar", 2.0) };
+        var result = ResultConverter.Convert(list);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal("Foo", arr[0, 0]);
+        Assert.Equal(1.0, arr[0, 1]);
+        Assert.Equal("Bar", arr[1, 0]);
+        Assert.Equal(2.0, arr[1, 1]);
+    }
+
+    [Fact]
+    public void Convert_ListOfValueTuple3_UnpacksToColumns()
+    {
+        var list = new List<(string, int, double)> { ("A", 1, 1.5), ("B", 2, 2.5) };
+        var result = ResultConverter.Convert(list);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(2, arr.GetLength(0));
+        Assert.Equal(3, arr.GetLength(1));
+        Assert.Equal("A", arr[0, 0]);
+        Assert.Equal(1, arr[0, 1]);
+        Assert.Equal(1.5, arr[0, 2]);
+        Assert.Equal("B", arr[1, 0]);
+        Assert.Equal(2, arr[1, 1]);
+        Assert.Equal(2.5, arr[1, 2]);
+    }
+
+    [Fact]
+    public void Convert_EmptyListOfValueTuple_ReturnsEmpty()
+    {
+        var list = new List<(string, double)>();
+        var result = ResultConverter.Convert(list);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Convert_SingleValueTupleInList_ReturnsOneRow()
+    {
+        var list = new List<(string, double)> { ("Only", 99.0) };
+        var result = ResultConverter.Convert(list);
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(1, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal("Only", arr[0, 0]);
+        Assert.Equal(99.0, arr[0, 1]);
+    }
 }

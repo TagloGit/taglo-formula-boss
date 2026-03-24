@@ -570,4 +570,36 @@ public class WrapperTypePipelineTests
     }
 
     #endregion
+
+    #region ValueTuple Unpacking
+
+    [Fact]
+    public void StatementBlock_ListOfValueTuple_UnpacksToColumns()
+    {
+        var expression = @"{
+    var result = new List<(int, string)>();
+    for (int i = 0; i < 3; i++)
+    {
+        result.Add(new (i, ""Test""));
+    }
+    return result;
+}";
+        var compilation = NewPipelineTestHelpers.CompileExpression(expression);
+
+        _output.WriteLine(compilation.GetDiagnostics());
+        Assert.True(compilation.Success, compilation.ErrorMessage);
+
+        // No parameters — invoke directly
+        NewPipelineTestHelpers.SetupDelegatesPublic();
+        var result = compilation.Method!.Invoke(null, Array.Empty<object>());
+
+        _output.WriteLine($"Result type: {result?.GetType()}");
+        var arr = Assert.IsType<object?[,]>(result);
+        Assert.Equal(3, arr.GetLength(0));
+        Assert.Equal(2, arr.GetLength(1));
+        Assert.Equal(0, arr[0, 0]);
+        Assert.Equal("Test", arr[0, 1]);
+    }
+
+    #endregion
 }
