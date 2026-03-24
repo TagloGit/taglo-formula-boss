@@ -140,57 +140,60 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
 
     private async Task UpdateErrorsAsync(CancellationToken ct)
     {
-        var workspace = _getWorkspace();
-        if (workspace == null)
-        {
-            return;
-        }
-
         var text = _editor.Text;
         var metadata = _getMetadata();
 
-        var buildResult = SyntheticDocumentBuilder.BuildForDiagnostics(text, metadata);
-        if (buildResult == null)
+        var newMarkers = new List<ErrorMarker>();
+
+        // LET structural errors (synchronous — no Roslyn needed)
+        var letErrors = LetFormulaValidator.Validate(text);
+        foreach (var letError in letErrors)
         {
-            _markers = [];
-            _editor.TextArea.TextView.InvalidateLayer(Layer);
-            return;
+            newMarkers.Add(new ErrorMarker(letError.StartOffset, letError.Length, letError.Message));
         }
 
-        ct.ThrowIfCancellationRequested();
-
-        var diagnostics = await workspace.GetDiagnosticsAsync(buildResult.Source, ct);
-
-        ct.ThrowIfCancellationRequested();
-
-        var newMarkers = new List<ErrorMarker>();
-        var exprStart = buildResult.ExpressionStartInSynthetic;
-        var exprEnd = exprStart + buildResult.ExpressionLength;
-
-        foreach (var diagnostic in diagnostics)
+        // Roslyn diagnostics for backtick expressions
+        var workspace = _getWorkspace();
+        var buildResult = workspace != null
+            ? SyntheticDocumentBuilder.BuildForDiagnostics(text, metadata)
+            : null;
+        if (buildResult != null)
         {
-            var span = diagnostic.Location.SourceSpan;
+            ct.ThrowIfCancellationRequested();
 
-            // Only show diagnostics within the expression region
-            if (span.Start < exprStart || span.Start >= exprEnd)
+            var diagnostics = await workspace.GetDiagnosticsAsync(buildResult.Source, ct);
+
+            ct.ThrowIfCancellationRequested();
+
+            var exprStart = buildResult.ExpressionStartInSynthetic;
+            var exprEnd = exprStart + buildResult.ExpressionLength;
+
+            foreach (var diagnostic in diagnostics)
             {
-                continue;
-            }
+                var span = diagnostic.Location.SourceSpan;
 
-            // Filter trailing diagnostics to reduce noise while typing
-            if (span.Start >= exprEnd - 2)
-            {
-                continue;
-            }
+                // Only show diagnostics within the expression region
+                if (span.Start < exprStart || span.Start >= exprEnd)
+                {
+                    continue;
+                }
 
-            var editorOffset = span.Start - exprStart + buildResult.ExpressionStartInEditor;
-            var length = Math.Min(span.Length, buildResult.ExpressionLength - (span.Start - exprStart));
-            if (length <= 0)
-            {
-                length = 1;
-            }
+                // Filter trailing diagnostics to reduce noise while typing
+                if (span.Start >= exprEnd - 2)
+                {
+                    continue;
+                }
 
-            newMarkers.Add(new ErrorMarker(editorOffset, length, diagnostic.GetMessage()));
+                var editorOffset = span.Start - exprStart + buildResult.ExpressionStartInEditor;
+                var length = Math.Min(span.Length,
+                    buildResult.ExpressionLength - (span.Start - exprStart));
+                if (length <= 0)
+                {
+                    length = 1;
+                }
+
+                newMarkers.Add(new ErrorMarker(editorOffset, length, diagnostic.GetMessage()));
+            }
         }
 
         _markers = newMarkers;
