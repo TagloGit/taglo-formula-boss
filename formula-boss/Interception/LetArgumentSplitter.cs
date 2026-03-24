@@ -3,6 +3,14 @@
 namespace FormulaBoss.Interception;
 
 /// <summary>
+///     Represents a LET argument with its position in the original formula text.
+/// </summary>
+/// <param name="Value">The argument text.</param>
+/// <param name="StartOffset">Start position in the original formula string.</param>
+/// <param name="Length">Character length of the argument.</param>
+internal record PositionedArgument(string Value, int StartOffset, int Length);
+
+/// <summary>
 ///     Splits LET formula arguments by comma, correctly handling nested brackets,
 ///     backtick regions (treated as opaque), and string literals.
 /// </summary>
@@ -20,6 +28,13 @@ internal static class LetArgumentSplitter
     ///     (missing closing paren returns whatever arguments were found).
     /// </summary>
     public static List<string> SplitTolerant(string text, int startPos) => SplitCore(text, startPos);
+
+    /// <summary>
+    ///     Splits LET arguments starting at <paramref name="startPos" /> in <paramref name="text" />,
+    ///     returning each argument with its position in the original text.
+    /// </summary>
+    public static List<PositionedArgument> SplitWithPositions(string text, int startPos) =>
+        SplitCorePositioned(text, startPos);
 
     /// <summary>
     ///     Finds the matching closing parenthesis for the opening parenthesis at
@@ -196,6 +211,109 @@ internal static class LetArgumentSplitter
         if (current.Length > 0)
         {
             args.Add(current.ToString());
+        }
+
+        return args;
+    }
+
+    private static List<PositionedArgument> SplitCorePositioned(string text, int startPos)
+    {
+        var args = new List<PositionedArgument>();
+        var current = new StringBuilder();
+        var argStart = startPos;
+        var depth = 0;
+        var inBacktick = false;
+        var inString = false;
+        var stringChar = '\0';
+
+        for (var i = startPos; i < text.Length; i++)
+        {
+            var c = text[i];
+
+            if (inBacktick)
+            {
+                current.Append(c);
+                if (c == '`')
+                {
+                    inBacktick = false;
+                }
+
+                continue;
+            }
+
+            if (inString)
+            {
+                current.Append(c);
+                if (c == stringChar)
+                {
+                    if (i + 1 < text.Length && text[i + 1] == stringChar)
+                    {
+                        current.Append(text[i + 1]);
+                        i++;
+                    }
+                    else
+                    {
+                        inString = false;
+                    }
+                }
+
+                continue;
+            }
+
+            switch (c)
+            {
+                case '`':
+                    inBacktick = true;
+                    current.Append(c);
+                    break;
+                case '"':
+                case '\'':
+                    inString = true;
+                    stringChar = c;
+                    current.Append(c);
+                    break;
+                case '(':
+                case '{':
+                case '[':
+                    depth++;
+                    current.Append(c);
+                    break;
+                case '}':
+                case ']':
+                    depth--;
+                    current.Append(c);
+                    break;
+                case ')':
+                    if (depth > 0)
+                    {
+                        depth--;
+                        current.Append(c);
+                    }
+                    else
+                    {
+                        if (current.Length > 0)
+                        {
+                            args.Add(new PositionedArgument(current.ToString(), argStart, current.Length));
+                        }
+
+                        return args;
+                    }
+
+                    break;
+                case ',' when depth == 0:
+                    args.Add(new PositionedArgument(current.ToString(), argStart, current.Length));
+                    current.Clear();
+                    argStart = i + 1;
+                    break;
+                default:
+                    current.Append(c);
+                    break;
+            }
+        }
+
+        if (current.Length > 0)
+        {
+            args.Add(new PositionedArgument(current.ToString(), argStart, current.Length));
         }
 
         return args;
