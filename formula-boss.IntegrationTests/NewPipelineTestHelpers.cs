@@ -105,6 +105,11 @@ public static class NewPipelineTestHelpers
     }
 
     /// <summary>
+    ///     Public entry point for tests that invoke compiled methods directly (no parameters).
+    /// </summary>
+    public static void SetupDelegatesPublic() => SetupDelegates();
+
+    /// <summary>
     ///     Sets up RuntimeHelpers delegates for test execution.
     /// </summary>
     private static void SetupDelegates()

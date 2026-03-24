@@ -1349,6 +1349,35 @@ public class PipelineTests
     }
 
     [Fact]
+    public void StatementBlock_ListOfValueTuple_UnpacksToColumns()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.EnterBacktickFormula(ws, "A1",
+                "=LET(t, `{ var r = new List<(int, string)>(); r.Add((1, \"Hello\")); r.Add((2, \"World\")); return r; }`, t)");
+
+            var result = TestUtilities.WaitForResult(ws, "A1", _output);
+
+            _output.WriteLine($"A1 formula: {TestUtilities.GetCellFormula(ws, "A1")}");
+            _output.WriteLine($"A1={TestUtilities.GetCellValue(ws, "A1")}, B1={TestUtilities.GetCellValue(ws, "B1")}");
+            _output.WriteLine($"A2={TestUtilities.GetCellValue(ws, "A2")}, B2={TestUtilities.GetCellValue(ws, "B2")}");
+            _output.WriteLine($"A1 comment: {TestUtilities.GetCellComment(ws, "A1")}");
+
+            Assert.NotNull(result);
+            // Should unpack tuples to 2 columns: int column + string column
+            Assert.Equal(1.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "A1")));
+            Assert.Equal("Hello", TestUtilities.GetCellValue(ws, "B1"));
+            Assert.Equal(2.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "A2")));
+            Assert.Equal("World", TestUtilities.GetCellValue(ws, "B2"));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void Table_ColumnAccess_Sum()
     {
         var ws = _excel.AddWorksheet();
