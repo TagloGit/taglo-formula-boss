@@ -207,6 +207,10 @@ public class LetFormulaValidatorTests
     [InlineData("data123abc")]
     [InlineData("ABCD1")]       // 4 letters — beyond column range
     [InlineData("x12345678")]   // 8 digits — beyond row range
+    [InlineData("yyy12")]       // column YYY = 17571, beyond XFD (16384)
+    [InlineData("XFE1")]        // column XFE = 16385, just past last column
+    [InlineData("A0")]          // row 0 doesn't exist
+    [InlineData("A1048577")]    // row beyond max
     public void Validate_AllowsNonCellAddressNames(string name)
     {
         var formula = $"=LET({name}, 5, {name})";

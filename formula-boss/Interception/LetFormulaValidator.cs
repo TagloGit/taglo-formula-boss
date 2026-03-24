@@ -123,14 +123,12 @@ public static class LetFormulaValidator
         name.All(c => char.IsLetterOrDigit(c) || c == '_');
 
     /// <summary>
-    ///     Checks whether a name matches the pattern of an Excel cell address (1-3 letters + 1-7 digits).
-    ///     Excel columns run A–XFD (max 3 letters) and rows 1–1048576 (max 7 digits).
-    ///     The check is conservative: any letter prefix followed by digits is flagged,
-    ///     even if the column is beyond XFD, since Excel still rejects these as variable names.
+    ///     Checks whether a name is an actual Excel cell address within the grid.
+    ///     Columns A–XFD (1–16384) and rows 1–1048576. Names beyond the grid
+    ///     (e.g. YYY12) are valid variable names and are not flagged.
     /// </summary>
     private static bool LooksLikeCellAddress(string name)
     {
-        // Must start with a letter (underscore-prefixed names are always safe)
         if (name[0] == '_')
         {
             return false;
@@ -143,13 +141,12 @@ public static class LetFormulaValidator
             i++;
         }
 
-        // Must have at least one letter and at least one digit, and nothing else
+        // Must have letters followed by only digits
         if (i == 0 || i >= name.Length)
         {
             return false;
         }
 
-        // Everything after the letters must be digits
         for (var j = i; j < name.Length; j++)
         {
             if (!char.IsDigit(name[j]))
@@ -158,9 +155,34 @@ public static class LetFormulaValidator
             }
         }
 
-        // Letter prefix 1-3 chars + digit suffix 1-7 chars matches cell address pattern
-        var letterCount = i;
-        var digitCount = name.Length - i;
-        return letterCount <= 3 && digitCount is >= 1 and <= 7;
+        // Check column is within A–XFD (1–16384)
+        var col = ColumnLettersToNumber(name, i);
+        if (col < 1 || col > 16384)
+        {
+            return false;
+        }
+
+        // Check row is within 1–1048576 (no leading zeros)
+        var rowPart = name.AsSpan(i);
+        if (rowPart[0] == '0')
+        {
+            return false;
+        }
+
+        return long.TryParse(rowPart, out var row) && row >= 1 && row <= 1048576;
+    }
+
+    /// <summary>
+    ///     Converts a column letter prefix (e.g. "A" → 1, "XFD" → 16384) to its number.
+    /// </summary>
+    private static int ColumnLettersToNumber(string name, int letterCount)
+    {
+        var result = 0;
+        for (var i = 0; i < letterCount; i++)
+        {
+            result = result * 26 + (char.ToUpperInvariant(name[i]) - 'A' + 1);
+        }
+
+        return result;
     }
 }
