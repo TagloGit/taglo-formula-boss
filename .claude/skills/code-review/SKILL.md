@@ -1,6 +1,15 @@
-# Reviewer — Formula Boss
+---
+name: code-review
+description: "Code review a pull request. Usage: /code-review <PR number>"
+---
+
+# Code Review — Formula Boss
 
 Review a PR for code quality and adherence to spec/plan.
+
+## Arguments
+
+- `/code-review <PR number>` — Review the specified pull request
 
 ## Instructions
 
@@ -14,11 +23,14 @@ Review a PR for code quality and adherence to spec/plan.
    - Are there tests? Are they meaningful?
    - Does it follow .NET 6 / C# 10 conventions (file-scoped namespaces, `_camelCase` fields)?
    - Any ExcelDNA assembly identity issues in generated code?
+   - Delegate bridge pattern used correctly (no host type references in bridge classes)?
+   - COM objects released properly via `Marshal.ReleaseComObject()`?
    - Any obvious bugs or edge cases?
 7. Report findings
 
 ## Output Format
 
+```markdown
 ### PR Review: #N — [title]
 
 **Plan Compliance:** [Good/Partial/Poor] — [brief note]
@@ -26,8 +38,10 @@ Review a PR for code quality and adherence to spec/plan.
 **Code Quality:** [observations]
 **Issues Found:** [list or "None"]
 **Recommendation:** [Approve / Request Changes / Needs Discussion]
+```
 
 ## Behaviour Notes
+
 - Do NOT write code or make changes
 - Do NOT merge PRs
 - Be constructive — flag issues but also note what's done well
