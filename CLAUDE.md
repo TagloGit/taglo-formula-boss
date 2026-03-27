@@ -61,7 +61,7 @@ This repo follows the [Taglo Claude Code workflow](https://github.com/TagloGit/t
 - `/planner <topic>` — Spec and plan creation (global skill)
 - `/pm` — Cross-repo status (global skill)
 - `/backlog-admin` — Quick issue creation (global skill)
-- Reviewer subagent — PR review (`.claude/agents/reviewer.md`)
+- `/code-review <pr>` — PR code review
 
 ### Specs and Plans
 - Specs: `specs/NNNN-short-title.md`
