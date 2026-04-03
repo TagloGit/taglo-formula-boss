@@ -86,24 +86,6 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override IExcelRange Where(Func<ExcelScalar, bool> predicate) =>
         predicate(this) ? this : new ExcelArray(new object[0, 0]);
 
-    public override IExcelRange Select(Func<ExcelValue, ExcelValue> selector)
-    {
-        var result = selector(this);
-        return result;
-    }
-
-    public override IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector)
-    {
-        var results = selector(this).ToList();
-        var array = new object?[results.Count, 1];
-        for (var i = 0; i < results.Count; i++)
-        {
-            array[i, 0] = results[i].RawValue;
-        }
-
-        return new ExcelArray(array);
-    }
-
     public override bool Any(Func<ExcelScalar, bool> predicate) => predicate(this);
     public override bool All(Func<ExcelScalar, bool> predicate) => predicate(this);
 

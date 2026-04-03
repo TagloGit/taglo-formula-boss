@@ -197,12 +197,12 @@ public class ExcelScalarTests
     }
 
     [Fact]
-    public void SelectMany_FlattensResults()
+    public void SelectMany_ViaLinq_FlattensResults()
     {
         var scalar = new ExcelScalar(3.0);
         var result = scalar.SelectMany(v =>
-            new ExcelValue[] { new ExcelScalar((double)v), new ExcelScalar((double)v * 10) });
-        Assert.Equal(2, result.Count());
+            new[] { (double)v, (double)v * 10 }).ToList();
+        Assert.Equal(2, result.Count);
     }
 
     [Fact]

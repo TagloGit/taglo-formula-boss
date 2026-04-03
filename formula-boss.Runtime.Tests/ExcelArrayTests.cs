@@ -115,17 +115,16 @@ public class ExcelArrayTests
         Assert.Null(result);
     }
 
-    // --- Element-wise Select ---
+    // --- LINQ Select (formerly custom Select, now falls through to Enumerable.Select) ---
 
     [Fact]
-    public void Select_TransformsCellsElementWise()
+    public void Select_ViaLinq_TransformsCellsElementWise()
     {
         var arr = MakeSingleColumn();
-        var result = arr.Select(v => new ExcelScalar((double)v * 10));
-        var rows = result.Rows.ToList();
-        Assert.Equal(3, rows.Count);
-        Assert.Equal(10.0, (double)rows[0][0]);
-        Assert.Equal(30.0, (double)rows[2][0]);
+        var result = arr.Select(v => (double)v * 10).ToList();
+        Assert.Equal(3, result.Count);
+        Assert.Equal(10.0, result[0]);
+        Assert.Equal(30.0, result[2]);
     }
 
     // --- Element-wise OrderBy ---
@@ -341,15 +340,15 @@ public class ExcelArrayTests
         Assert.Equal((6.0, 2, 1), visited[5]);
     }
 
-    // --- SelectMany ---
+    // --- LINQ SelectMany (formerly custom SelectMany) ---
 
     [Fact]
-    public void SelectMany_FlattensResults()
+    public void SelectMany_ViaLinq_FlattensResults()
     {
         var arr = new ExcelArray(new object?[,] { { 1.0 }, { 2.0 } });
         var result = arr.SelectMany(v =>
-            new ExcelValue[] { new ExcelScalar((double)v), new ExcelScalar((double)v * 10) });
-        Assert.Equal(4, result.Count());
+            new[] { (double)v, (double)v * 10 }).ToList();
+        Assert.Equal(4, result.Count);
     }
 
     // --- Empty array edge cases ---

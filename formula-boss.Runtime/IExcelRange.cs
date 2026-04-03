@@ -27,16 +27,6 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <returns>A new range containing only matching elements.</returns>
     IExcelRange Where(Func<ExcelScalar, bool> predicate);
 
-    /// <summary>Projects each element into a new value.</summary>
-    /// <param name="selector">A function that transforms each element.</param>
-    /// <returns>A new range containing the transformed values.</returns>
-    IExcelRange Select(Func<ExcelValue, ExcelValue> selector);
-
-    /// <summary>Projects each element to a sequence and flattens the results.</summary>
-    /// <param name="selector">A function that returns a sequence for each element.</param>
-    /// <returns>A new range containing all flattened values.</returns>
-    IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector);
-
     /// <summary>Returns true if any element matches the predicate.</summary>
     /// <param name="predicate">A function to test each element.</param>
     bool Any(Func<ExcelScalar, bool> predicate);
