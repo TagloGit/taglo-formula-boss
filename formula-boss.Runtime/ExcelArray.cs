@@ -196,7 +196,14 @@ public class ExcelArray : ExcelValue, IExcelRange
         for (var r = 0; r < rows; r++)
             for (var c = 0; c < cols; c++)
             {
-                var mapped = selector(new ExcelScalar(_data[r, c]));
+                var localR = r;
+                var localC = c;
+                Func<Cell>? cellAccessor = _origin != null && RuntimeBridge.GetCell != null
+                    ? () => RuntimeBridge.GetCell(_origin.SheetName,
+                        _origin.TopRow + localR, _origin.LeftCol + localC)
+                    : null;
+                var scalar = new ExcelScalar(_data[r, c]) { CellAccessor = cellAccessor };
+                var mapped = selector(scalar);
                 result[r, c] = mapped.RawValue is object?[,] arr ? arr[0, 0] : mapped.RawValue;
             }
 
