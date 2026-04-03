@@ -116,7 +116,7 @@ public class ExcelArray : ExcelValue, IExcelRange
         }
     }
 
-    public override IExcelRange Where(Func<ExcelValue, bool> predicate)
+    public override IExcelRange Where(Func<ExcelScalar, bool> predicate)
     {
         var results = ElementWise().Where(e => predicate(e)).ToList();
         var array = new object?[results.Count, 1];
@@ -157,16 +157,16 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
-    public override bool Any(Func<ExcelValue, bool> predicate) =>
+    public override bool Any(Func<ExcelScalar, bool> predicate) =>
         ElementWise().Any(e => predicate(e));
 
-    public override bool All(Func<ExcelValue, bool> predicate) =>
+    public override bool All(Func<ExcelScalar, bool> predicate) =>
         ElementWise().All(e => predicate(e));
 
-    public override ExcelValue First(Func<ExcelValue, bool> predicate) =>
+    public override ExcelValue First(Func<ExcelScalar, bool> predicate) =>
         ElementWise().First(e => predicate(e));
 
-    public override ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate) =>
+    public override ExcelValue? FirstOrDefault(Func<ExcelScalar, bool> predicate) =>
         ElementWise().FirstOrDefault(e => predicate(e));
 
     public override int Count() => _data.GetLength(0) * _data.GetLength(1);
@@ -188,7 +188,7 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelScalar(count == 0 ? 0.0 : sum / count);
     }
 
-    public override IExcelRange Map(Func<ExcelValue, ExcelValue> selector)
+    public override IExcelRange Map(Func<ExcelScalar, ExcelScalar> selector)
     {
         var rows = _data.GetLength(0);
         var cols = _data.GetLength(1);
@@ -203,13 +203,13 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(result, ColumnMap);
     }
 
-    public override IExcelRange OrderBy(Func<ExcelValue, object> keySelector)
+    public override IExcelRange OrderBy(Func<ExcelScalar, object> keySelector)
     {
         var elements = ElementWise().OrderBy(e => keySelector(e)).ToList();
         return FromElements(elements);
     }
 
-    public override IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector)
+    public override IExcelRange OrderByDescending(Func<ExcelScalar, object> keySelector)
     {
         var elements = ElementWise().OrderByDescending(e => keySelector(e)).ToList();
         return FromElements(elements);
@@ -347,7 +347,7 @@ public class ExcelArray : ExcelValue, IExcelRange
     public override IEnumerator<ExcelValue> GetEnumerator() => ElementWise().GetEnumerator();
 
     /// <inheritdoc />
-    public override void ForEach(Action<ExcelValue, int, int> action)
+    public override void ForEach(Action<ExcelScalar, int, int> action)
     {
         var rows = _data.GetLength(0);
         var cols = _data.GetLength(1);

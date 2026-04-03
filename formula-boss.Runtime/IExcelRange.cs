@@ -25,7 +25,7 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <summary>Filters elements to those matching the predicate.</summary>
     /// <param name="predicate">A function that returns true for elements to keep.</param>
     /// <returns>A new range containing only matching elements.</returns>
-    IExcelRange Where(Func<ExcelValue, bool> predicate);
+    IExcelRange Where(Func<ExcelScalar, bool> predicate);
 
     /// <summary>Projects each element into a new value.</summary>
     /// <param name="selector">A function that transforms each element.</param>
@@ -39,19 +39,19 @@ public interface IExcelRange : IEnumerable<ExcelValue>
 
     /// <summary>Returns true if any element matches the predicate.</summary>
     /// <param name="predicate">A function to test each element.</param>
-    bool Any(Func<ExcelValue, bool> predicate);
+    bool Any(Func<ExcelScalar, bool> predicate);
 
     /// <summary>Returns true if all elements match the predicate.</summary>
     /// <param name="predicate">A function to test each element.</param>
-    bool All(Func<ExcelValue, bool> predicate);
+    bool All(Func<ExcelScalar, bool> predicate);
 
     /// <summary>Returns the first element matching the predicate, or throws if none found.</summary>
     /// <param name="predicate">A function to test each element.</param>
-    ExcelValue First(Func<ExcelValue, bool> predicate);
+    ExcelValue First(Func<ExcelScalar, bool> predicate);
 
     /// <summary>Returns the first element matching the predicate, or null if none found.</summary>
     /// <param name="predicate">A function to test each element.</param>
-    ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate);
+    ExcelValue? FirstOrDefault(Func<ExcelScalar, bool> predicate);
 
     /// <summary>Returns the number of elements in this range.</summary>
     int Count();
@@ -71,15 +71,15 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <summary>Applies a function to each element, preserving the original 2D shape.</summary>
     /// <param name="selector">A function that transforms each element.</param>
     /// <returns>A new range with the same dimensions, containing transformed values.</returns>
-    IExcelRange Map(Func<ExcelValue, ExcelValue> selector);
+    IExcelRange Map(Func<ExcelScalar, ExcelScalar> selector);
 
     /// <summary>Sorts elements in ascending order by the selected key.</summary>
     /// <param name="keySelector">A function that extracts a sort key from each element.</param>
-    IExcelRange OrderBy(Func<ExcelValue, object> keySelector);
+    IExcelRange OrderBy(Func<ExcelScalar, object> keySelector);
 
     /// <summary>Sorts elements in descending order by the selected key.</summary>
     /// <param name="keySelector">A function that extracts a sort key from each element.</param>
-    IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector);
+    IExcelRange OrderByDescending(Func<ExcelScalar, object> keySelector);
 
     /// <summary>Returns the first <paramref name="count" /> elements. If negative, returns the last N elements.</summary>
     /// <param name="count">Number of elements to take.</param>
@@ -94,11 +94,11 @@ public interface IExcelRange : IEnumerable<ExcelValue>
 
     /// <summary>Executes an action for each element in the range.</summary>
     /// <param name="action">The action to perform on each element.</param>
-    void ForEach(Action<ExcelValue> action);
+    void ForEach(Action<ExcelScalar> action);
 
     /// <summary>Executes an action for each element with its row and column indices.</summary>
     /// <param name="action">The action to perform on each element, receiving (value, row, col).</param>
-    void ForEach(Action<ExcelValue, int, int> action);
+    void ForEach(Action<ExcelScalar, int, int> action);
 
     /// <summary>Applies an accumulator function over the elements, returning the final result.</summary>
     /// <param name="seed">The initial accumulator value.</param>
