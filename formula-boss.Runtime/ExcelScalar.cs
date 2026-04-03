@@ -125,6 +125,12 @@ public class ExcelScalar : ExcelValue, IExcelRange
         return result;
     }
 
+    public override IExcelRange Map<TResult>(Func<ExcelScalar, TResult> selector)
+    {
+        var result = selector(this);
+        return result is ExcelValue ev ? (IExcelRange)ev : new ExcelScalar(result);
+    }
+
     public override IExcelRange OrderBy(Func<ExcelScalar, object> keySelector) => this;
     public override IExcelRange OrderByDescending(Func<ExcelScalar, object> keySelector) => this;
     public override IExcelRange Take(int count) => count == 0 ? new ExcelArray(new object[0, 0]) : this;

@@ -668,4 +668,70 @@ public class ExcelArrayTests
 
         Assert.NotNull(caught);
     }
+
+    // --- Map<TResult> ---
+
+    [Fact]
+    public void MapGeneric_ReturnsInt()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
+        var result = arr.Map(x => (int)(double)x);
+        var resultArr = (object?[,])((ExcelValue)result).RawValue!;
+        Assert.Equal(1, resultArr[0, 0]);
+        Assert.Equal(2, resultArr[0, 1]);
+        Assert.Equal(3, resultArr[1, 0]);
+        Assert.Equal(4, resultArr[1, 1]);
+    }
+
+    [Fact]
+    public void MapGeneric_ReturnsString()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, 2.0 } });
+        var result = arr.Map(x => $"val:{x}");
+        var resultArr = (object?[,])((ExcelValue)result).RawValue!;
+        Assert.Equal("val:1", resultArr[0, 0]);
+        Assert.Equal("val:2", resultArr[0, 1]);
+    }
+
+    [Fact]
+    public void MapGeneric_Preserves2DShape()
+    {
+        var arr = new ExcelArray(new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 } });
+        var result = arr.Map(x => (double)x > 2.0);
+        var resultArr = (object?[,])((ExcelValue)result).RawValue!;
+        Assert.Equal(2, resultArr.GetLength(0));
+        Assert.Equal(2, resultArr.GetLength(1));
+        Assert.Equal(false, resultArr[0, 0]);
+        Assert.Equal(false, resultArr[0, 1]);
+        Assert.Equal(true, resultArr[1, 0]);
+        Assert.Equal(true, resultArr[1, 1]);
+    }
+
+    [Fact]
+    public void MapGeneric_WithOrigin_ProvidesCellAccess()
+    {
+        RuntimeBridge.GetCell = (sheet, row, col) => new Cell
+        {
+            Value = $"{sheet}!R{row}C{col}",
+            Interior = new Interior(row + col, 0)
+        };
+        try
+        {
+            var origin = new RangeOrigin("Sheet1", 2, 3);
+            var data = new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 } };
+            var arr = new ExcelArray(data, origin: origin);
+
+            var result = arr.Map(x => x.Cell.Color);
+            var resultArr = (object?[,])((ExcelValue)result).RawValue!;
+
+            Assert.Equal(5, resultArr[0, 0]);  // 2+3
+            Assert.Equal(6, resultArr[0, 1]);  // 2+4
+            Assert.Equal(6, resultArr[1, 0]);  // 3+3
+            Assert.Equal(7, resultArr[1, 1]);  // 3+4
+        }
+        finally
+        {
+            RuntimeBridge.GetCell = null;
+        }
+    }
 }
