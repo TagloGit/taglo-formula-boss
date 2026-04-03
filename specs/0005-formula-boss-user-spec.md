@@ -165,7 +165,7 @@ Headers are extracted from the first row of the range. When using Excel Tables (
 
 ### Element-Wise Operations (on ExcelValue / IExcelRange)
 
-These iterate over all values in row-major order (left-to-right, top-to-bottom). The lambda parameter is `ExcelValue`:
+These iterate over all values in row-major order (left-to-right, top-to-bottom). The lambda parameter is `ExcelScalar`:
 
 | Operation | Returns | Description |
 |---|---|---|
@@ -173,6 +173,7 @@ These iterate over all values in row-major order (left-to-right, top-to-bottom).
 | `.Select(x => expr)` | `IExcelRange` | Project elements (flattens to 1 column) |
 | `.SelectMany(x => seq)` | `IExcelRange` | Flatten nested sequences |
 | `.Map(x => expr)` | `IExcelRange` | Transform elements (preserves 2D shape) |
+| `.Map<TResult>(x => expr)` | `IExcelRange` | Transform elements to non-ExcelScalar type (e.g. `int`, `string`) |
 | `.Any(x => pred)` | `bool` | True if any element matches |
 | `.All(x => pred)` | `bool` | True if all elements match |
 | `.First(x => pred)` | `ExcelValue` | First matching element |
@@ -366,6 +367,11 @@ The floating editor provides Roslyn-powered autocomplete:
 ### Element-wise transform preserving shape
 ```
 '=`myRange.Map(x => x * 1.1)`
+```
+
+### Map cell colors to values
+```
+'=`maze.Map(c => c.Cell.Color)`
 ```
 
 ### Conditional with statement block
