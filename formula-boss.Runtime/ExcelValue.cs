@@ -63,12 +63,6 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract IExcelRange Where(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />
-    public abstract IExcelRange Select(Func<ExcelValue, ExcelValue> selector);
-
-    /// <inheritdoc />
-    public abstract IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector);
-
-    /// <inheritdoc />
     public abstract bool Any(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />

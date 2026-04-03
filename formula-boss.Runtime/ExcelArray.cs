@@ -128,35 +128,6 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
-    public override IExcelRange Select(Func<ExcelValue, ExcelValue> selector)
-    {
-        var results = ElementWise().Select(e => selector(e)).ToList();
-        if (results.Count == 0)
-        {
-            return new ExcelArray(new object?[0, 1]);
-        }
-
-        var array = new object?[results.Count, 1];
-        for (var i = 0; i < results.Count; i++)
-        {
-            array[i, 0] = results[i].RawValue is object?[,] arr ? arr[0, 0] : results[i].RawValue;
-        }
-
-        return new ExcelArray(array);
-    }
-
-    public override IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector)
-    {
-        var results = ElementWise().SelectMany(e => selector(e)).ToList();
-        var array = new object?[results.Count, 1];
-        for (var i = 0; i < results.Count; i++)
-        {
-            array[i, 0] = results[i].RawValue;
-        }
-
-        return new ExcelArray(array);
-    }
-
     public override bool Any(Func<ExcelScalar, bool> predicate) =>
         ElementWise().Any(e => predicate(e));
 
