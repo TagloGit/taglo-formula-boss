@@ -99,6 +99,9 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract IExcelRange Map(Func<ExcelScalar, ExcelScalar> selector);
 
     /// <inheritdoc />
+    public abstract IExcelRange Map<TResult>(Func<ExcelScalar, TResult> selector);
+
+    /// <inheritdoc />
     public abstract IExcelRange OrderBy(Func<ExcelScalar, object> keySelector);
 
     /// <inheritdoc />

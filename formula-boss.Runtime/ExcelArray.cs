@@ -210,6 +210,27 @@ public class ExcelArray : ExcelValue, IExcelRange
         return new ExcelArray(result, ColumnMap);
     }
 
+    public override IExcelRange Map<TResult>(Func<ExcelScalar, TResult> selector)
+    {
+        var rows = _data.GetLength(0);
+        var cols = _data.GetLength(1);
+        var result = new object?[rows, cols];
+        for (var r = 0; r < rows; r++)
+            for (var c = 0; c < cols; c++)
+            {
+                var localR = r;
+                var localC = c;
+                Func<Cell>? cellAccessor = _origin != null && RuntimeBridge.GetCell != null
+                    ? () => RuntimeBridge.GetCell(_origin.SheetName,
+                        _origin.TopRow + localR, _origin.LeftCol + localC)
+                    : null;
+                var scalar = new ExcelScalar(_data[r, c]) { CellAccessor = cellAccessor };
+                result[r, c] = selector(scalar);
+            }
+
+        return new ExcelArray(result, ColumnMap);
+    }
+
     public override IExcelRange OrderBy(Func<ExcelScalar, object> keySelector)
     {
         var elements = ElementWise().OrderBy(e => keySelector(e)).ToList();

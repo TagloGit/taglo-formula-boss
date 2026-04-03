@@ -73,6 +73,12 @@ public interface IExcelRange : IEnumerable<ExcelValue>
     /// <returns>A new range with the same dimensions, containing transformed values.</returns>
     IExcelRange Map(Func<ExcelScalar, ExcelScalar> selector);
 
+    /// <summary>Applies a function to each element, boxing the result directly into the output array.</summary>
+    /// <typeparam name="TResult">The return type of the selector.</typeparam>
+    /// <param name="selector">A function that transforms each element.</param>
+    /// <returns>A new range with the same dimensions, containing transformed values.</returns>
+    IExcelRange Map<TResult>(Func<ExcelScalar, TResult> selector);
+
     /// <summary>Sorts elements in ascending order by the selected key.</summary>
     /// <param name="keySelector">A function that extracts a sort key from each element.</param>
     IExcelRange OrderBy(Func<ExcelScalar, object> keySelector);

@@ -214,6 +214,31 @@ public class ExcelScalarTests
     }
 
     [Fact]
+    public void MapGeneric_ReturnsInt()
+    {
+        var scalar = new ExcelScalar(5.0);
+        var result = scalar.Map(v => (int)(double)v * 2);
+        Assert.Equal(10, ((ExcelValue)result).RawValue);
+    }
+
+    [Fact]
+    public void MapGeneric_ReturnsString()
+    {
+        var scalar = new ExcelScalar(42.0);
+        var result = scalar.Map(v => $"answer:{v}");
+        Assert.Equal("answer:42", ((ExcelValue)result).RawValue);
+    }
+
+    [Fact]
+    public void MapGeneric_WithExcelValueResult_ReturnsDirectly()
+    {
+        var scalar = new ExcelScalar(5.0);
+        var result = scalar.Map(v => (ExcelValue)new ExcelScalar((double)v + 1));
+        Assert.IsType<ExcelScalar>(result);
+        Assert.Equal(6.0, ((ExcelValue)result).RawValue);
+    }
+
+    [Fact]
     public void OrderBy_ReturnsSelf()
     {
         var scalar = new ExcelScalar(42.0);
