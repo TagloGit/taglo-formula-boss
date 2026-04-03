@@ -60,7 +60,7 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract IEnumerable<Cell> Cells { get; }
 
     /// <inheritdoc />
-    public abstract IExcelRange Where(Func<ExcelValue, bool> predicate);
+    public abstract IExcelRange Where(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />
     public abstract IExcelRange Select(Func<ExcelValue, ExcelValue> selector);
@@ -69,16 +69,16 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract IExcelRange SelectMany(Func<ExcelValue, IEnumerable<ExcelValue>> selector);
 
     /// <inheritdoc />
-    public abstract bool Any(Func<ExcelValue, bool> predicate);
+    public abstract bool Any(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />
-    public abstract bool All(Func<ExcelValue, bool> predicate);
+    public abstract bool All(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />
-    public abstract ExcelValue First(Func<ExcelValue, bool> predicate);
+    public abstract ExcelValue First(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />
-    public abstract ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate);
+    public abstract ExcelValue? FirstOrDefault(Func<ExcelScalar, bool> predicate);
 
     /// <inheritdoc />
     public abstract int Count();
@@ -96,13 +96,13 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract ExcelScalar Average();
 
     /// <inheritdoc />
-    public abstract IExcelRange Map(Func<ExcelValue, ExcelValue> selector);
+    public abstract IExcelRange Map(Func<ExcelScalar, ExcelScalar> selector);
 
     /// <inheritdoc />
-    public abstract IExcelRange OrderBy(Func<ExcelValue, object> keySelector);
+    public abstract IExcelRange OrderBy(Func<ExcelScalar, object> keySelector);
 
     /// <inheritdoc />
-    public abstract IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector);
+    public abstract IExcelRange OrderByDescending(Func<ExcelScalar, object> keySelector);
 
     /// <inheritdoc />
     public abstract IExcelRange Take(int count);
@@ -114,16 +114,16 @@ public abstract class ExcelValue : IExcelRange, IComparable<ExcelValue>, ICompar
     public abstract IExcelRange Distinct();
 
     /// <inheritdoc />
-    public void ForEach(Action<ExcelValue> action)
+    public void ForEach(Action<ExcelScalar> action)
     {
         foreach (var el in this)
         {
-            action(el);
+            action((ExcelScalar)el);
         }
     }
 
     /// <inheritdoc />
-    public abstract void ForEach(Action<ExcelValue, int, int> action);
+    public abstract void ForEach(Action<ExcelScalar, int, int> action);
 
     /// <inheritdoc />
     public abstract dynamic Aggregate(dynamic seed, Func<dynamic, dynamic, dynamic> func);

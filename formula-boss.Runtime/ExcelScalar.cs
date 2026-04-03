@@ -83,7 +83,7 @@ public class ExcelScalar : ExcelValue, IExcelRange
     }
 
     // Element-wise: a scalar is a single element
-    public override IExcelRange Where(Func<ExcelValue, bool> predicate) =>
+    public override IExcelRange Where(Func<ExcelScalar, bool> predicate) =>
         predicate(this) ? this : new ExcelArray(new object[0, 0]);
 
     public override IExcelRange Select(Func<ExcelValue, ExcelValue> selector)
@@ -104,13 +104,13 @@ public class ExcelScalar : ExcelValue, IExcelRange
         return new ExcelArray(array);
     }
 
-    public override bool Any(Func<ExcelValue, bool> predicate) => predicate(this);
-    public override bool All(Func<ExcelValue, bool> predicate) => predicate(this);
+    public override bool Any(Func<ExcelScalar, bool> predicate) => predicate(this);
+    public override bool All(Func<ExcelScalar, bool> predicate) => predicate(this);
 
-    public override ExcelValue First(Func<ExcelValue, bool> predicate) =>
+    public override ExcelValue First(Func<ExcelScalar, bool> predicate) =>
         predicate(this) ? this : throw new InvalidOperationException("No matching element.");
 
-    public override ExcelValue? FirstOrDefault(Func<ExcelValue, bool> predicate) =>
+    public override ExcelValue? FirstOrDefault(Func<ExcelScalar, bool> predicate) =>
         predicate(this) ? this : null;
 
     public override int Count() => 1;
@@ -119,14 +119,14 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override ExcelScalar Max() => new(Convert.ToDouble(_value));
     public override ExcelScalar Average() => new(Convert.ToDouble(_value));
 
-    public override IExcelRange Map(Func<ExcelValue, ExcelValue> selector)
+    public override IExcelRange Map(Func<ExcelScalar, ExcelScalar> selector)
     {
         var result = selector(this);
         return result;
     }
 
-    public override IExcelRange OrderBy(Func<ExcelValue, object> keySelector) => this;
-    public override IExcelRange OrderByDescending(Func<ExcelValue, object> keySelector) => this;
+    public override IExcelRange OrderBy(Func<ExcelScalar, object> keySelector) => this;
+    public override IExcelRange OrderByDescending(Func<ExcelScalar, object> keySelector) => this;
     public override IExcelRange Take(int count) => count == 0 ? new ExcelArray(new object[0, 0]) : this;
     public override IExcelRange Skip(int count) => count == 0 ? this : new ExcelArray(new object[0, 0]);
     public override IExcelRange Distinct() => this;
@@ -176,7 +176,7 @@ public class ExcelScalar : ExcelValue, IExcelRange
     public override int IndexOf(object? value) => Equals(RawValue, value) ? 0 : -1;
 
     /// <inheritdoc />
-    public override void ForEach(Action<ExcelValue, int, int> action) => action(this, 0, 0);
+    public override void ForEach(Action<ExcelScalar, int, int> action) => action(this, 0, 0);
 
     /// <inheritdoc />
     public override IEnumerator<ExcelValue> GetEnumerator()
