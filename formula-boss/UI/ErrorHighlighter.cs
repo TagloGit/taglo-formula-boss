@@ -161,7 +161,7 @@ internal sealed class ErrorHighlighter : IBackgroundRenderer
         {
             ct.ThrowIfCancellationRequested();
 
-            var diagnostics = await workspace.GetDiagnosticsAsync(buildResult.Source, ct);
+            var diagnostics = await workspace!.GetDiagnosticsAsync(buildResult.Source, ct);
 
             ct.ThrowIfCancellationRequested();
 
