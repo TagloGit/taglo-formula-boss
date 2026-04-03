@@ -354,4 +354,34 @@ public class ExcelScalarTests
         Assert.Single(visited);
         Assert.Equal((42.0, 0, 0), visited[0]);
     }
+
+    // --- Implicit conversions into ExcelScalar ---
+
+    [Fact]
+    public void ImplicitConversion_FromDouble()
+    {
+        ExcelScalar scalar = 42.5;
+        Assert.Equal(42.5, scalar.RawValue);
+    }
+
+    [Fact]
+    public void ImplicitConversion_FromInt()
+    {
+        ExcelScalar scalar = 7;
+        Assert.Equal(7.0, scalar.RawValue);
+    }
+
+    [Fact]
+    public void ImplicitConversion_FromString()
+    {
+        ExcelScalar scalar = "hello";
+        Assert.Equal("hello", scalar.RawValue);
+    }
+
+    [Fact]
+    public void ImplicitConversion_FromBool()
+    {
+        ExcelScalar scalar = true;
+        Assert.Equal(true, scalar.RawValue);
+    }
 }
