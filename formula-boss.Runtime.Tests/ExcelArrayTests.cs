@@ -619,4 +619,53 @@ public class ExcelArrayTests
         Assert.Equal(30.0, resultArr[1, 0]);
         Assert.Equal(40.0, resultArr[1, 1]);
     }
+
+    [Fact]
+    public void Map_WithOrigin_ProvidesCellAccess()
+    {
+        RuntimeBridge.GetCell = (sheet, row, col) => new Cell
+        {
+            Value = $"{sheet}!R{row}C{col}",
+            Interior = new Interior(row + col, 0)
+        };
+        try
+        {
+            var origin = new RangeOrigin("Sheet1", 2, 3);
+            var data = new object?[,] { { 1.0, 2.0 }, { 3.0, 4.0 } };
+            var arr = new ExcelArray(data, origin: origin);
+
+            var colors = new List<int>();
+            arr.Map(x =>
+            {
+                colors.Add(x.Cell.Color);
+                return x;
+            });
+
+            // Row 0, Col 0 → origin (2,3) → color = 2+3 = 5
+            // Row 0, Col 1 → origin (2,4) → color = 2+4 = 6
+            // Row 1, Col 0 → origin (3,3) → color = 3+3 = 6
+            // Row 1, Col 1 → origin (3,4) → color = 3+4 = 7
+            Assert.Equal(new[] { 5, 6, 6, 7 }, colors);
+        }
+        finally
+        {
+            RuntimeBridge.GetCell = null;
+        }
+    }
+
+    [Fact]
+    public void Map_WithoutOrigin_CellThrows()
+    {
+        var data = new object?[,] { { 1.0 } };
+        var arr = new ExcelArray(data);
+
+        InvalidOperationException? caught = null;
+        arr.Map(x =>
+        {
+            caught = Assert.Throws<InvalidOperationException>(() => _ = x.Cell);
+            return x;
+        });
+
+        Assert.NotNull(caught);
+    }
 }
