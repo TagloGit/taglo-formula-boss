@@ -14,6 +14,12 @@ public class ExcelScalar : ExcelValue, IExcelRange
 
     public override object? RawValue => _value;
 
+    // Implicit conversions from primitives
+    public static implicit operator ExcelScalar(double value) => new(value);
+    public static implicit operator ExcelScalar(int value) => new((double)value);
+    public static implicit operator ExcelScalar(string value) => new(value);
+    public static implicit operator ExcelScalar(bool value) => new(value);
+
     /// <summary>
     ///     Lazy cell accessor, set by <see cref="Row" /> when positional context is available.
     ///     Invokes <see cref="RuntimeBridge.GetCell" /> to escalate to COM.
