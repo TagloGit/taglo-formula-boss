@@ -1378,6 +1378,45 @@ public class PipelineTests
     }
 
     [Fact]
+    public void Map_CellColor_Returns2DColorIndices()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            // Set up a 2x2 grid with different colors
+            TestUtilities.SetCellValue(ws, "A1", 1.0);
+            TestUtilities.SetCellValue(ws, "B1", 2.0);
+            TestUtilities.SetCellValue(ws, "A2", 3.0);
+            TestUtilities.SetCellValue(ws, "B2", 4.0);
+
+            // Color cells: A1=yellow(6), B1=red(3), A2=green(4), B2=yellow(6)
+            TestUtilities.SetCellColor(ws, "A1", 6);
+            TestUtilities.SetCellColor(ws, "B1", 3);
+            TestUtilities.SetCellColor(ws, "A2", 4);
+            TestUtilities.SetCellColor(ws, "B2", 6);
+
+            TestUtilities.EnterBacktickFormula(ws, "D1", "=`A1:B2.Map(c => c.Cell.Color)`");
+
+            var result = TestUtilities.WaitForResult(ws, "D1", _output);
+
+            _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
+            _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
+            _output.WriteLine($"D2={TestUtilities.GetCellValue(ws, "D2")}, E2={TestUtilities.GetCellValue(ws, "E2")}");
+            _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
+
+            Assert.NotNull(result);
+            Assert.Equal(6.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D1")));
+            Assert.Equal(3.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "E1")));
+            Assert.Equal(4.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "D2")));
+            Assert.Equal(6.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "E2")));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void Table_ColumnAccess_Sum()
     {
         var ws = _excel.AddWorksheet();
