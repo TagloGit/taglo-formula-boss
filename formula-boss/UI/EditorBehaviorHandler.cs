@@ -235,6 +235,12 @@ internal class EditorBehaviorHandler
 
             if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None)
             {
+                // Let the completion popup handle Enter for item insertion
+                if (IsCompletionWindowOpen?.Invoke() == true)
+                {
+                    return;
+                }
+
                 HandleEnter();
                 e.Handled = true;
                 return;
