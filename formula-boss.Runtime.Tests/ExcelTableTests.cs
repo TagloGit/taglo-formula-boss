@@ -143,7 +143,7 @@ public class ExcelTableTests
     public void Lookup_ExactMatch_ReturnsValue()
     {
         var table = MakeTable();
-        var result = table.Lookup("Alice", table["Name"], table["Age"]);
+        var result = ExcelTable.Lookup("Alice", table["Name"], table["Age"]);
         Assert.Equal(30.0, result.RawValue);
     }
 
@@ -151,7 +151,7 @@ public class ExcelTableTests
     public void Lookup_CaseInsensitiveStringMatch()
     {
         var table = MakeTable();
-        var result = table.Lookup("alice", table["Name"], table["Age"]);
+        var result = ExcelTable.Lookup("alice", table["Name"], table["Age"]);
         Assert.Equal(30.0, result.RawValue);
     }
 
@@ -159,7 +159,7 @@ public class ExcelTableTests
     public void Lookup_NumericMatch()
     {
         var table = MakeTable();
-        var result = table.Lookup(30.0, table["Age"], table["Name"]);
+        var result = ExcelTable.Lookup(30.0, table["Age"], table["Name"]);
         Assert.Equal("Alice", result.RawValue);
     }
 
@@ -167,15 +167,14 @@ public class ExcelTableTests
     public void Lookup_NoMatch_Throws()
     {
         var table = MakeTable();
-        Assert.Throws<KeyNotFoundException>(
-            () => table.Lookup("Nobody", table["Name"], table["Age"]));
+        Assert.Throws<KeyNotFoundException>(() => ExcelTable.Lookup("Nobody", table["Name"], table["Age"]));
     }
 
     [Fact]
     public void Lookup_NoMatch_ReturnsIfNotFound()
     {
         var table = MakeTable();
-        var result = table.Lookup("Nobody", table["Name"], table["Age"], "N/A");
+        var result = ExcelTable.Lookup("Nobody", table["Name"], table["Age"], "N/A");
         Assert.Equal("N/A", result.RawValue);
     }
 
@@ -183,12 +182,9 @@ public class ExcelTableTests
     public void Lookup_ReturnsFirstOccurrence()
     {
         var table = new ExcelTable(
-            new object?[,]
-            {
-                { "Engineering", 1.0 }, { "Marketing", 2.0 }, { "Engineering", 3.0 }
-            },
+            new object?[,] { { "Engineering", 1.0 }, { "Marketing", 2.0 }, { "Engineering", 3.0 } },
             ["Department", "Id"]);
-        var result = table.Lookup("Engineering", table["Department"], table["Id"]);
+        var result = ExcelTable.Lookup("Engineering", table["Department"], table["Id"]);
         Assert.Equal(1.0, result.RawValue);
     }
 
@@ -196,7 +192,7 @@ public class ExcelTableTests
     public void Lookup_ExcelValueUnwrapped()
     {
         var table = MakeTable();
-        var result = table.Lookup(new ExcelScalar("Bob"), table["Name"], table["Age"]);
+        var result = ExcelTable.Lookup(new ExcelScalar("Bob"), table["Name"], table["Age"]);
         Assert.Equal(25.0, result.RawValue);
     }
 
@@ -206,7 +202,6 @@ public class ExcelTableTests
         var table = MakeTable();
         var shortTable = new ExcelTable(
             new object?[,] { { "X", 1.0 } }, ["Name", "Age"]);
-        Assert.Throws<ArgumentException>(
-            () => table.Lookup("Alice", table["Name"], shortTable["Age"]));
+        Assert.Throws<ArgumentException>(() => ExcelTable.Lookup("Alice", table["Name"], shortTable["Age"]));
     }
 }
