@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -21,10 +21,9 @@ namespace FormulaBoss.UI.Completion;
 internal sealed class CompletionPopup
 {
     private static readonly Brush HighlightBrush = new SolidColorBrush(Color.FromRgb(180, 205, 235));
+    private readonly Popup _popup;
 
     private readonly TextArea _textArea;
-    private readonly Popup _popup;
-    private readonly Border _border;
     private int _endOffset;
 
     public CompletionPopup(TextArea textArea)
@@ -40,7 +39,7 @@ internal sealed class CompletionPopup
         listBox.Resources[SystemColors.HighlightTextBrushKey] = Brushes.Black;
         listBox.MaxHeight = 300;
 
-        _border = new Border
+        var border = new Border
         {
             Background = SystemColors.WindowBrush,
             BorderBrush = SystemColors.ActiveBorderBrush,
@@ -52,7 +51,7 @@ internal sealed class CompletionPopup
 
         _popup = new Popup
         {
-            Child = _border,
+            Child = border,
             Placement = PlacementMode.Custom,
             CustomPopupPlacementCallback = PlacePopup,
             PlacementTarget = textArea.TextView,
@@ -223,11 +222,9 @@ internal sealed class CompletionPopup
         }));
     }
 
-    private void OnParentLocationChanged(object? sender, EventArgs e)
-    {
+    private void OnParentLocationChanged(object? sender, EventArgs e) =>
         // Force WPF to recalculate popup placement when the parent window moves
         _popup.HorizontalOffset = 0;
-    }
 
     /// <summary>
     ///     DPI-safe placement callback using relative coordinates.
