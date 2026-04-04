@@ -1,4 +1,4 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 /// <summary>An Excel table (named range with column headers) supporting row-wise and element-wise operations.</summary>
 public class ExcelTable : ExcelArray
@@ -74,7 +74,7 @@ public class ExcelTable : ExcelArray
     /// <param name="lookupColumn">The column to search in.</param>
     /// <param name="returnColumn">The column to return the value from.</param>
     /// <param name="ifNotFound">Value to return if no match is found. If null and no match, throws.</param>
-    public ExcelScalar Lookup(object value, Column lookupColumn, Column returnColumn,
+    public static ExcelScalar Lookup(object value, Column lookupColumn, Column returnColumn,
         object? ifNotFound = null)
     {
         if (lookupColumn.RowCount != returnColumn.RowCount)
