@@ -85,7 +85,7 @@ public partial class FloatingEditorWindow
                 Hide();
             },
             IsCompletionListEmpty = () =>
-                _completionPopup != null && _completionPopup.CompletionList.ListBox.Items.Count == 0,
+                _completionPopup != null && _completionPopup.CompletionList.ListBox?.Items.Count == 0,
             IsCompletionWindowOpen = () => _completionPopup != null,
             SignatureHelpRequested = () => ShowSignatureHelp(),
             SignatureHelpDismissRequested = DismissSignatureHelp,
@@ -275,12 +275,12 @@ public partial class FloatingEditorWindow
             _completionPopup.CompletionList.SelectItem(textUpToCaret[^wordLength..]);
         }
 
-        _completionPopup.Show();
         _completionPopup.Closed += (_, _) =>
         {
             _completionPopup = null;
             _behaviorHandler.IsBracketContext = false;
         };
+        _completionPopup.Show();
     }
 
     private async void ShowSignatureHelp()

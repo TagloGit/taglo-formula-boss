@@ -1,8 +1,9 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Document;
@@ -30,14 +31,7 @@ internal sealed class CompletionPopup
     {
         _textArea = textArea;
 
-        CompletionList = new CompletionList { IsFiltering = true };
-
-        // Style the list box
-        var listBox = CompletionList.ListBox;
-        ScrollViewer.SetHorizontalScrollBarVisibility(listBox, ScrollBarVisibility.Disabled);
-        listBox.Resources[SystemColors.HighlightBrushKey] = HighlightBrush;
-        listBox.Resources[SystemColors.HighlightTextBrushKey] = Brushes.Black;
-        listBox.MaxHeight = 300;
+        CompletionList = new CompletionList { IsFiltering = true, MaxHeight = 300 };
 
         var border = new Border
         {
@@ -79,7 +73,6 @@ internal sealed class CompletionPopup
         _textArea.Document.Changing += OnDocumentChanging;
         _textArea.Caret.PositionChanged += OnCaretPositionChanged;
         _textArea.PreviewKeyDown += OnPreviewKeyDown;
-        _textArea.LostKeyboardFocus += OnLostFocus;
 
         var parentWindow = Window.GetWindow(_textArea);
         if (parentWindow != null)
@@ -88,6 +81,27 @@ internal sealed class CompletionPopup
         }
 
         _popup.IsOpen = true;
+
+        // Style the ListBox after the popup opens — CompletionList.ListBox
+        // returns null until the control's template is applied in a visual tree.
+        var listBox = CompletionList.ListBox;
+        if (listBox != null)
+        {
+            ScrollViewer.SetHorizontalScrollBarVisibility(listBox, ScrollBarVisibility.Disabled);
+            listBox.Resources[SystemColors.HighlightBrushKey] = HighlightBrush;
+            listBox.Resources[SystemColors.HighlightTextBrushKey] = Brushes.Black;
+        }
+
+        // Defer focus-loss subscription: creating the Popup's HWND can cause a
+        // transient LostKeyboardFocus on the TextArea. A handler dispatched at
+        // Normal priority would close the popup before it ever renders.
+        _textArea.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (_popup.IsOpen)
+            {
+                _textArea.LostKeyboardFocus += OnLostFocus;
+            }
+        }));
     }
 
     public void Close()
@@ -139,7 +153,6 @@ internal sealed class CompletionPopup
         }
         else if (e.Offset < StartOffset)
         {
-            var shift = e.InsertionLength - e.RemovalLength;
             // If removal reaches into our region, close
             if (e.Offset + e.RemovalLength > StartOffset)
             {
@@ -147,6 +160,7 @@ internal sealed class CompletionPopup
                 return;
             }
 
+            var shift = e.InsertionLength - e.RemovalLength;
             StartOffset += shift;
             _endOffset += shift;
         }
@@ -173,7 +187,7 @@ internal sealed class CompletionPopup
         CompletionList.SelectItem(text);
 
         // If filtering left no visible items, close
-        if (CompletionList.ListBox.Items.Count == 0)
+        if (CompletionList.ListBox?.Items.Count == 0)
         {
             Close();
             return;
