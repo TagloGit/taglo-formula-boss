@@ -1,15 +1,12 @@
 ﻿using System.ComponentModel;
 using System.Reflection;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 
 using FormulaBoss.UI.Completion;
 
-using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 
@@ -21,7 +18,7 @@ public partial class FloatingEditorWindow
     private readonly DispatcherTimer _saveTimer;
     private readonly EditorSettings _settings;
     private readonly EditorBehaviorHandler _behaviorHandler;
-    private CompletionWindow? _completionWindow;
+    private CompletionPopup? _completionPopup;
     private bool _sizeChanged;
     private RoslynWorkspaceManager? _workspaceManager;
     private RoslynCompletionProvider? _completionProvider;
@@ -74,11 +71,11 @@ public partial class FloatingEditorWindow
         _behaviorHandler = new EditorBehaviorHandler(FormulaEditor)
         {
             CompletionRequested = _ => ShowCompletion(),
-            CompletionCloseRequested = _ => _completionWindow?.Close(),
+            CompletionCloseRequested = _ => _completionPopup?.Close(),
             ForceCompletionRequested = () =>
             {
-                _completionWindow?.Close();
-                _completionWindow = null;
+                _completionPopup?.Close();
+                _completionPopup = null;
                 ShowCompletion();
             },
             FormulaApplyRequested = text =>
@@ -88,8 +85,8 @@ public partial class FloatingEditorWindow
                 Hide();
             },
             IsCompletionListEmpty = () =>
-                _completionWindow != null && _completionWindow.CompletionList.ListBox.Items.Count == 0,
-            IsCompletionWindowOpen = () => _completionWindow != null,
+                _completionPopup != null && _completionPopup.CompletionList.ListBox?.Items.Count == 0,
+            IsCompletionWindowOpen = () => _completionPopup != null,
             SignatureHelpRequested = () => ShowSignatureHelp(),
             SignatureHelpDismissRequested = DismissSignatureHelp,
             IsSignatureHelpVisible = () => _signatureHelpPopup?.IsVisible == true,
@@ -203,8 +200,8 @@ public partial class FloatingEditorWindow
 
     private async void ShowCompletion()
     {
-        // Don't open a second window
-        if (_completionWindow != null)
+        // Don't open a second popup
+        if (_completionPopup != null)
         {
             return;
         }
@@ -237,8 +234,8 @@ public partial class FloatingEditorWindow
             return;
         }
 
-        // Don't open if another window appeared while we were awaiting
-        if (_completionWindow != null)
+        // Don't open if another popup appeared while we were awaiting
+        if (_completionPopup != null)
         {
             return;
         }
@@ -256,46 +253,34 @@ public partial class FloatingEditorWindow
             }
         }
 
-        _completionWindow = new CompletionWindow(FormulaEditor.TextArea)
+        _completionPopup = new CompletionPopup(FormulaEditor.TextArea)
         {
-            MinWidth = 250,
-            MaxWidth = 600,
-            CloseWhenCaretAtBeginning = true,
-            SizeToContent = SizeToContent.WidthAndHeight
+            CloseWhenCaretAtBeginning = true
         };
-
-        // Enable filtering mode (default only highlights best match, doesn't hide non-matches)
-        _completionWindow.CompletionList.IsFiltering = true;
-
-        // Style the completion list
-        var listBox = _completionWindow.CompletionList.ListBox;
-        ScrollViewer.SetHorizontalScrollBarVisibility(listBox, ScrollBarVisibility.Disabled);
-        listBox.Resources[SystemColors.HighlightBrushKey] = new SolidColorBrush(Color.FromRgb(180, 205, 235));
-        listBox.Resources[SystemColors.HighlightTextBrushKey] = Brushes.Black;
 
         if (wordLength > 0)
         {
-            _completionWindow.StartOffset = FormulaEditor.CaretOffset - wordLength;
+            _completionPopup.StartOffset = FormulaEditor.CaretOffset - wordLength;
         }
 
         foreach (var item in items)
         {
-            _completionWindow.CompletionList.CompletionData.Add(item);
+            _completionPopup.CompletionList.CompletionData.Add(item);
         }
 
         // Force initial filter - the document change that triggered us already
-        // happened before the window was hooked into document events
+        // happened before the popup was hooked into document events
         if (wordLength > 0)
         {
-            _completionWindow.CompletionList.SelectItem(textUpToCaret[^wordLength..]);
+            _completionPopup.CompletionList.SelectItem(textUpToCaret[^wordLength..]);
         }
 
-        _completionWindow.Show();
-        _completionWindow.Closed += (_, _) =>
+        _completionPopup.Closed += (_, _) =>
         {
-            _completionWindow = null;
+            _completionPopup = null;
             _behaviorHandler.IsBracketContext = false;
         };
+        _completionPopup.Show();
     }
 
     private async void ShowSignatureHelp()
