@@ -6,7 +6,7 @@ using FormulaBoss.Commands;
 using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 using FormulaBoss.Runtime;
-using FormulaBoss.Updates;
+using Taglo.Excel.Common;
 
 namespace FormulaBoss;
 
@@ -64,7 +64,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     {
         _instance = this;
 
-        Logger.Initialize();
+        Logger.Initialize("FormulaBoss");
         Logger.Info("Formula Boss add-in loading");
 
         // Catch exceptions from fire-and-forget tasks so they don't crash the process
@@ -199,7 +199,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
 
             // Fire-and-forget update check — runs on background thread, silent on failure
-            UpdateChecker.CheckForUpdateAsync();
+            var assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+                                  ?? new Version(0, 0, 0);
+            UpdateChecker.Initialize(
+                "https://api.github.com/repos/TagloGit/taglo-formula-boss/releases/latest",
+                $"FormulaBoss/{assemblyVersion}");
+            UpdateChecker.CheckForUpdateAsync(assemblyVersion);
 
             Logger.Info("Formula Boss add-in loaded successfully");
         }

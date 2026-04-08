@@ -5,6 +5,8 @@ using ExcelDna.Integration;
 
 using FormulaBoss.UI;
 
+using Taglo.Excel.Common;
+
 namespace FormulaBoss.Interception;
 
 /// <summary>

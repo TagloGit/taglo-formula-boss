@@ -5,6 +5,8 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
+using Taglo.Excel.Common;
+
 namespace FormulaBoss.UI.Animation;
 
 public partial class AnimationOverlay

@@ -1,4 +1,4 @@
-﻿using FormulaBoss.Updates;
+﻿using Taglo.Excel.Common;
 
 using Xunit;
 
