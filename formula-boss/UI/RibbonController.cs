@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using ExcelDna.Integration.CustomUI;
 
 using FormulaBoss.Commands;
-using FormulaBoss.Updates;
+using Taglo.Excel.Common;
 
 namespace FormulaBoss.UI;
 

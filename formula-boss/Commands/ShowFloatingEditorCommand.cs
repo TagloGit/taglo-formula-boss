@@ -8,6 +8,8 @@ using FormulaBoss.Interception;
 using FormulaBoss.UI;
 using FormulaBoss.UI.Animation;
 
+using Taglo.Excel.Common;
+
 namespace FormulaBoss.Commands;
 
 /// <summary>

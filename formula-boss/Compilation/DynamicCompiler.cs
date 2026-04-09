@@ -8,6 +8,8 @@ using ExcelDna.Integration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
+using Taglo.Excel.Common;
+
 namespace FormulaBoss.Compilation;
 
 /// <summary>
