@@ -4,23 +4,62 @@
 public class ExcelArray : ExcelValue, IExcelRange
 {
     private readonly object?[,] _data;
-    private readonly RangeOrigin? _origin;
 
     public ExcelArray(object?[,] data, Dictionary<string, int>? columnMap = null,
         RangeOrigin? origin = null)
     {
         _data = data;
         ColumnMap = columnMap;
-        _origin = origin;
+        Origin = origin;
     }
 
     protected Dictionary<string, int>? ColumnMap { get; }
 
     /// <summary>Gets the range origin for this array, if available.</summary>
-    protected RangeOrigin? Origin => _origin;
+    protected RangeOrigin? Origin { get; }
 
     /// <inheritdoc />
     public override object RawValue => _data;
+
+    public override ColumnCollection Cols
+    {
+        get
+        {
+            var data = _data;
+            var rowCount = data.GetLength(0);
+            var colCount = data.GetLength(1);
+            var columns = new List<Column>(colCount);
+            for (var c = 0; c < colCount; c++)
+            {
+                var colData = new object?[rowCount, 1];
+                for (var r = 0; r < rowCount; r++)
+                {
+                    colData[r, 0] = data[r, c];
+                }
+
+                var colOrigin = Origin != null
+                    ? Origin with { LeftCol = Origin.LeftCol + c }
+                    : null;
+
+                string? name = null;
+                if (ColumnMap != null)
+                {
+                    foreach (var kvp in ColumnMap)
+                    {
+                        if (kvp.Value == c)
+                        {
+                            name = kvp.Key;
+                            break;
+                        }
+                    }
+                }
+
+                columns.Add(new Column(colData, name, c, colOrigin));
+            }
+
+            return new ColumnCollection(columns);
+        }
+    }
 
     /// <summary>Gets the number of rows in this array.</summary>
     public override int RowCount => _data.GetLength(0);
@@ -44,9 +83,9 @@ public class ExcelArray : ExcelValue, IExcelRange
                 }
 
                 var rowIdx = r;
-                Func<int, Cell>? cellResolver = _origin != null && RuntimeBridge.GetCell != null
-                    ? colIdx => RuntimeBridge.GetCell(_origin.SheetName,
-                        _origin.TopRow + rowIdx, _origin.LeftCol + colIdx)
+                Func<int, Cell>? cellResolver = Origin != null && RuntimeBridge.GetCell != null
+                    ? colIdx => RuntimeBridge.GetCell(Origin.SheetName,
+                        Origin.TopRow + rowIdx, Origin.LeftCol + colIdx)
                     : null;
                 rows.Add(new Row(values, ColumnMap, cellResolver, rowIdx));
             }
@@ -55,51 +94,11 @@ public class ExcelArray : ExcelValue, IExcelRange
         }
     }
 
-    public override ColumnCollection Cols
-    {
-        get
-        {
-            var data = _data;
-            var rowCount = data.GetLength(0);
-            var colCount = data.GetLength(1);
-            var columns = new List<Column>(colCount);
-            for (var c = 0; c < colCount; c++)
-            {
-                var colData = new object?[rowCount, 1];
-                for (var r = 0; r < rowCount; r++)
-                {
-                    colData[r, 0] = data[r, c];
-                }
-
-                var colOrigin = _origin != null
-                    ? _origin with { LeftCol = _origin.LeftCol + c }
-                    : null;
-
-                string? name = null;
-                if (ColumnMap != null)
-                {
-                    foreach (var kvp in ColumnMap)
-                    {
-                        if (kvp.Value == c)
-                        {
-                            name = kvp.Key;
-                            break;
-                        }
-                    }
-                }
-
-                columns.Add(new Column(colData, name, c, colOrigin));
-            }
-
-            return new ColumnCollection(columns);
-        }
-    }
-
     public override IEnumerable<Cell> Cells
     {
         get
         {
-            if (_origin == null || RuntimeBridge.GetCell == null)
+            if (Origin == null || RuntimeBridge.GetCell == null)
             {
                 throw new InvalidOperationException(
                     "Cell access requires a macro-type UDF with range position context.");
@@ -110,8 +109,8 @@ public class ExcelArray : ExcelValue, IExcelRange
             for (var r = 0; r < rows; r++)
                 for (var c = 0; c < cols; c++)
                 {
-                    yield return RuntimeBridge.GetCell(_origin.SheetName,
-                        _origin.TopRow + r, _origin.LeftCol + c);
+                    yield return RuntimeBridge.GetCell(Origin.SheetName,
+                        Origin.TopRow + r, Origin.LeftCol + c);
                 }
         }
     }
@@ -169,9 +168,9 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var localR = r;
                 var localC = c;
-                Func<Cell>? cellAccessor = _origin != null && RuntimeBridge.GetCell != null
-                    ? () => RuntimeBridge.GetCell(_origin.SheetName,
-                        _origin.TopRow + localR, _origin.LeftCol + localC)
+                Func<Cell>? cellAccessor = Origin != null && RuntimeBridge.GetCell != null
+                    ? () => RuntimeBridge.GetCell(Origin.SheetName,
+                        Origin.TopRow + localR, Origin.LeftCol + localC)
                     : null;
                 var scalar = new ExcelScalar(_data[r, c]) { CellAccessor = cellAccessor };
                 var mapped = selector(scalar);
@@ -191,9 +190,9 @@ public class ExcelArray : ExcelValue, IExcelRange
             {
                 var localR = r;
                 var localC = c;
-                Func<Cell>? cellAccessor = _origin != null && RuntimeBridge.GetCell != null
-                    ? () => RuntimeBridge.GetCell(_origin.SheetName,
-                        _origin.TopRow + localR, _origin.LeftCol + localC)
+                Func<Cell>? cellAccessor = Origin != null && RuntimeBridge.GetCell != null
+                    ? () => RuntimeBridge.GetCell(Origin.SheetName,
+                        Origin.TopRow + localR, Origin.LeftCol + localC)
                     : null;
                 var scalar = new ExcelScalar(_data[r, c]) { CellAccessor = cellAccessor };
                 result[r, c] = selector(scalar);
