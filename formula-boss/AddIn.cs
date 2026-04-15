@@ -194,6 +194,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Initialize result conversion delegate — delegates to shared ResultConverter.Convert()
             RuntimeHelpers.ToResultDelegate = result => ResultConverter.Convert(result);
 
+            // Reset the debug-mode trace buffer. Subsequent tasks in #298 will add delegate
+            // initialisation here as the rewriter and compile path are wired up.
+            Tracer.Reset();
+
             // Defer event hookup until Excel is fully initialized
             // ExcelAsyncUtil.QueueAsMacro ensures we run after AutoOpen completes
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
