@@ -11,4 +11,12 @@ public record TranspileResult(
     string SourceCode,
     string MethodName,
     bool RequiresObjectModel,
-    string OriginalExpression);
+    string OriginalExpression)
+{
+    /// <summary>
+    ///     Optional parallel debug-instrumented source code and method name. Populated by
+    ///     <see cref="CodeEmitter.EmitDebug" /> when a debug variant is requested alongside the
+    ///     normal emit.
+    /// </summary>
+    public TranspileResult? DebugVariant { get; init; }
+}

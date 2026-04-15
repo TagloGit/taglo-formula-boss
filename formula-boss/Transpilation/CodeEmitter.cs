@@ -3,6 +3,10 @@ using System.Text;
 
 using FormulaBoss.Compilation;
 
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 namespace FormulaBoss.Transpilation;
 
 /// <summary>
@@ -12,6 +16,7 @@ namespace FormulaBoss.Transpilation;
 public class CodeEmitter
 {
     public const string UdfPrefix = "__FB_";
+    public const string DebugSuffix = "_DEBUG";
 
     private static readonly HashSet<string> ReservedExcelNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -124,6 +129,63 @@ public class CodeEmitter
 
         var source = BuildSource(rewrittenDetection, methodName);
         return new TranspileResult(source, methodName, detection.RequiresObjectModel, originalExpression);
+    }
+
+    /// <summary>
+    ///     Emits a debug-instrumented variant of the UDF. The method name gets a
+    ///     <see cref="DebugSuffix" /> suffix and the user block is rewritten by
+    ///     <see cref="DebugInstrumentationRewriter" /> to fire <c>Tracer</c> calls.
+    /// </summary>
+    /// <param name="detection">Detection result from <see cref="InputDetector" />.</param>
+    /// <param name="originalExpression">The original user expression.</param>
+    /// <param name="preferredName">Optional preferred UDF name (suffix is appended).</param>
+    /// <param name="headersByParameter">Column header mapping per parameter (as for <see cref="Emit" />).</param>
+    /// <param name="callerAddressExpression">
+    ///     C# expression that resolves to the caller cell address string. Defaults to an empty
+    ///     literal; the compile/register path supplies the real expression.
+    /// </param>
+    public TranspileResult EmitDebug(
+        DetectionResult detection,
+        string originalExpression,
+        string? preferredName = null,
+        Dictionary<string, string[]>? headersByParameter = null,
+        string callerAddressExpression = "\"\"")
+    {
+        var baseName = GenerateMethodName(originalExpression, preferredName);
+        var methodName = baseName + DebugSuffix;
+
+        var rewrittenDetection = detection;
+        if (headersByParameter is { Count: > 0 })
+        {
+            rewrittenDetection = ApplyDotNotationRewrite(detection, headersByParameter);
+        }
+
+        var instrumentedDetection = InstrumentForDebug(rewrittenDetection, methodName, callerAddressExpression);
+        var source = BuildSource(instrumentedDetection, methodName);
+        return new TranspileResult(source, methodName, detection.RequiresObjectModel, originalExpression);
+    }
+
+    private static DetectionResult InstrumentForDebug(
+        DetectionResult detection,
+        string traceName,
+        string callerAddressExpression)
+    {
+        // Normalise to a statement block so the rewriter sees a BlockSyntax in every case.
+        var blockText = detection.IsStatementBlock
+            ? detection.NormalizedExpression
+            : $"{{ return {detection.NormalizedExpression}; }}";
+
+        if (SyntaxFactory.ParseStatement(blockText) is not BlockSyntax block)
+        {
+            return detection;
+        }
+
+        var instrumented = DebugInstrumentationRewriter.Instrument(block, traceName, callerAddressExpression);
+        return detection with
+        {
+            NormalizedExpression = instrumented.NormalizeWhitespace().ToFullString(),
+            IsStatementBlock = true
+        };
     }
 
     private static DetectionResult ApplyDotNotationRewrite(
