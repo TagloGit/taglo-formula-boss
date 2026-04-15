@@ -1,4 +1,4 @@
-namespace FormulaBoss.Runtime;
+﻿namespace FormulaBoss.Runtime;
 
 /// <summary>
 ///     Buffer + delegate bridge for debug-mode trace capture.
@@ -16,8 +16,8 @@ public static class Tracer
     /// <summary>Hard cap on snapshot rows per run.</summary>
     public const int MaxRows = 1000;
 
-    private static readonly object _lock = new();
-    private static readonly ThreadLocal<TraceBuffer?> _current = new();
+    private static readonly object Lock = new();
+    private static readonly ThreadLocal<TraceBuffer?> Current = new();
 
     /// <summary>The most recently populated buffer (for <c>FB.LastTrace()</c>).</summary>
     public static TraceBuffer? LastBuffer { get; private set; }
@@ -31,9 +31,9 @@ public static class Tracer
     public static void Begin(string name, string callerAddr)
     {
         var buffer = new TraceBuffer(name, callerAddr);
-        lock (_lock)
+        lock (Lock)
         {
-            _current.Value = buffer;
+            Current.Value = buffer;
             LastBuffer = buffer;
         }
     }
@@ -41,7 +41,7 @@ public static class Tracer
     /// <summary>Record a local variable's current value in the live state map.</summary>
     public static void Set(string name, object? value)
     {
-        var buffer = _current.Value;
+        var buffer = Current.Value;
         buffer?.Set(name, value);
     }
 
@@ -53,14 +53,14 @@ public static class Tracer
     /// </summary>
     public static void Snapshot(string kind, int depth, string? branch)
     {
-        var buffer = _current.Value;
+        var buffer = Current.Value;
         buffer?.Snapshot(kind, depth, branch);
     }
 
     /// <summary>Record the returned value in the "return" column of the live state map.</summary>
     public static void Return(object? value)
     {
-        var buffer = _current.Value;
+        var buffer = Current.Value;
         buffer?.Return(value);
     }
 
@@ -71,16 +71,16 @@ public static class Tracer
     /// </summary>
     public static void TruncateWarn()
     {
-        var buffer = _current.Value;
+        var buffer = Current.Value;
         buffer?.TruncateWarn();
     }
 
     /// <summary>Reset all in-memory state (for tests and add-in reload).</summary>
     public static void Reset()
     {
-        lock (_lock)
+        lock (Lock)
         {
-            _current.Value = null;
+            Current.Value = null;
             LastBuffer = null;
         }
     }
@@ -89,11 +89,11 @@ public static class Tracer
 /// <summary>A single trace run's recorded rows plus live variable state.</summary>
 public sealed class TraceBuffer
 {
-    private readonly List<string> _columnOrder = new();
-    private readonly HashSet<string> _columnSet = new();
-    private readonly Dictionary<string, object?> _liveState = new();
+    private readonly List<string> _columnOrder = [];
+    private readonly HashSet<string> _columnSet = [];
+    private readonly Dictionary<string, object?> _liveState = [];
+    private readonly List<Dictionary<string, object?>> _rows = [];
     private readonly object _sync = new();
-    private readonly List<Dictionary<string, object?>> _rows = new();
     private int _snapshotCount;
     private bool _truncated;
 
@@ -168,10 +168,7 @@ public sealed class TraceBuffer
         }
     }
 
-    internal void Return(object? value)
-    {
-        Set("return", value);
-    }
+    internal void Return(object? value) => Set("return", value);
 
     internal void TruncateWarn()
     {

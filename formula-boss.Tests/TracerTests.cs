@@ -1,4 +1,4 @@
-using FormulaBoss.Runtime;
+﻿using FormulaBoss.Runtime;
 
 using Xunit;
 
@@ -15,10 +15,7 @@ public class TracerTests : IDisposable
         Tracer.Reset();
     }
 
-    public void Dispose()
-    {
-        Tracer.Reset();
-    }
+    public void Dispose() => Tracer.Reset();
 
     [Fact]
     public void Begin_CreatesBuffer_SetsLastBuffer()
@@ -26,7 +23,7 @@ public class TracerTests : IDisposable
         Tracer.Begin("foo", "Sheet1!A1");
 
         Assert.NotNull(Tracer.LastBuffer);
-        Assert.Equal("foo", Tracer.LastBuffer!.Name);
+        Assert.Equal("foo", Tracer.LastBuffer.Name);
         Assert.Equal("Sheet1!A1", Tracer.LastBuffer.CallerAddress);
         Assert.Empty(Tracer.LastBuffer.Rows);
     }
@@ -40,7 +37,7 @@ public class TracerTests : IDisposable
         Assert.Single(Tracer.LastBuffer!.Rows);
 
         Tracer.Begin("foo", "Sheet1!A1");
-        Assert.Empty(Tracer.LastBuffer!.Rows);
+        Assert.Empty(Tracer.LastBuffer.Rows);
         Assert.Empty(Tracer.LastBuffer.LocalNames);
     }
 
