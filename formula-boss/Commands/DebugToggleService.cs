@@ -1,6 +1,4 @@
-using System.Diagnostics;
-
-using ExcelDna.Integration;
+﻿using System.Diagnostics;
 
 using FormulaBoss.Interception;
 using FormulaBoss.Transpilation;
@@ -65,10 +63,7 @@ public class DebugToggleService
     /// <summary>
     ///     Checks whether the given formula currently has any _DEBUG call sites.
     /// </summary>
-    public static bool IsDebugMode(string? formula)
-    {
-        return LetFormulaReconstructor.GetDebugCallSites(formula).Count > 0;
-    }
+    public static bool IsDebugMode(string? formula) => LetFormulaReconstructor.GetDebugCallSites(formula).Count > 0;
 
     /// <summary>
     ///     Gets the names of normal (non-debug) FB call sites in the formula.
