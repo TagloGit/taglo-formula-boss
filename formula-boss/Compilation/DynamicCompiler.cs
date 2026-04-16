@@ -19,6 +19,12 @@ public class DynamicCompiler
 {
     private readonly HashSet<string> _registeredUdfs = [];
 
+    // Trampoline dispatch: registered delegates call through this dictionary so that
+    // re-editing a formula can swap the implementation without re-registering (which
+    // would trigger an ExcelDNA "Repeated function name" warning popup).
+    private readonly Dictionary<string, Delegate> _implementations = new();
+    private readonly Dictionary<string, int> _registeredParamCounts = new();
+
     /// <summary>
     ///     Compiles C# source code and registers all UDFs in it.
     ///     Returns a list of compilation errors, or empty list on success.
@@ -162,6 +168,10 @@ public class DynamicCompiler
 
     /// <summary>
     ///     Registers all public static methods from the compiled assembly as Excel UDFs.
+    ///     Uses a trampoline pattern: the delegate registered with ExcelDNA dispatches
+    ///     through <see cref="_implementations" />, so re-edits just swap the target
+    ///     without calling <c>RegisterDelegates</c> again (avoiding the "Repeated
+    ///     function name" warning popup).
     /// </summary>
     private void RegisterFunctionsFromAssembly(Assembly assembly, bool isMacroType)
     {
@@ -173,10 +183,27 @@ public class DynamicCompiler
             {
                 try
                 {
-                    RegisterMethod(method, isMacroType);
+                    var paramCount = method.GetParameters().Length;
+                    var implDelegate = Delegate.CreateDelegate(CreateDelegateType(method), method);
 
-                    var verb = _registeredUdfs.Add(method.Name) ? "Registered" : "Re-registered";
-                    Debug.WriteLine($"{verb} dynamic UDF: {method.Name}");
+                    if (_registeredUdfs.Contains(method.Name)
+                        && _registeredParamCounts.TryGetValue(method.Name, out var prevCount)
+                        && prevCount == paramCount)
+                    {
+                        // Same param count — hot-swap the implementation; trampoline picks it up.
+                        _implementations[method.Name] = implDelegate;
+                        Debug.WriteLine($"Updated UDF implementation: {method.Name}");
+                    }
+                    else
+                    {
+                        // First registration (or param count changed) — register trampoline.
+                        _implementations[method.Name] = implDelegate;
+                        var trampoline = CreateTrampoline(method.Name, paramCount);
+                        RegisterTrampoline(method.Name, trampoline, method, isMacroType);
+                        _registeredUdfs.Add(method.Name);
+                        _registeredParamCounts[method.Name] = paramCount;
+                        Debug.WriteLine($"Registered dynamic UDF: {method.Name}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -187,7 +214,7 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    ///     Static version for test functions (doesn't track UDFs).
+    ///     Static version for test/spike functions — registers directly without trampolines.
     /// </summary>
     private static void RegisterFunctionsFromAssemblyStatic(Assembly assembly)
     {
@@ -199,7 +226,7 @@ public class DynamicCompiler
             {
                 try
                 {
-                    RegisterMethod(method);
+                    RegisterMethodDirect(method);
                     Debug.WriteLine($"Registered dynamic UDF: {method.Name}");
                 }
                 catch (Exception ex)
@@ -211,12 +238,11 @@ public class DynamicCompiler
     }
 
     /// <summary>
-    ///     Registers a single method as an Excel UDF.
+    ///     Registers a single method directly with ExcelDNA (no trampoline).
+    ///     Used only for one-off test/spike functions that are never re-registered.
     /// </summary>
-    private static void RegisterMethod(MethodInfo method, bool isMacroType = false)
+    private static void RegisterMethodDirect(MethodInfo method, bool isMacroType = false)
     {
-        // Create function attribute - all dynamically compiled UDFs use the method name
-        // IsMacroType = true is required for object model UDFs so that xlfReftext works
         var funcAttr = new ExcelFunctionAttribute
         {
             Name = method.Name,
@@ -224,20 +250,64 @@ public class DynamicCompiler
             IsMacroType = isMacroType
         };
 
-        var parameters = method.GetParameters();
-        var argAttrs = new List<object>();
-
-        foreach (var param in parameters)
-        {
-            // All transpiled UDFs expect range references, so set AllowReference = true
-            argAttrs.Add(new ExcelArgumentAttribute { Name = param.Name, AllowReference = true });
-        }
+        var argAttrs = method.GetParameters()
+            .Select(p => (object)new ExcelArgumentAttribute { Name = p.Name, AllowReference = true })
+            .ToList();
 
         var delegateType = CreateDelegateType(method);
         var del = Delegate.CreateDelegate(delegateType, method);
 
         ExcelIntegration.RegisterDelegates(
             [del],
+            [funcAttr],
+            [argAttrs]);
+    }
+
+    /// <summary>
+    ///     Creates a trampoline delegate that dispatches through <see cref="_implementations" />.
+    ///     The trampoline is registered once with ExcelDNA; the underlying implementation
+    ///     can be swapped without re-registering.
+    /// </summary>
+    private Delegate CreateTrampoline(string name, int paramCount)
+    {
+        // All generated UDF params/returns are object.
+        return paramCount switch
+        {
+            0 => new Func<object>(
+                () => ((Func<object>)_implementations[name])()),
+            1 => new Func<object, object>(
+                p0 => ((Func<object, object>)_implementations[name])(p0)),
+            2 => new Func<object, object, object>(
+                (p0, p1) => ((Func<object, object, object>)_implementations[name])(p0, p1)),
+            3 => new Func<object, object, object, object>(
+                (p0, p1, p2) => ((Func<object, object, object, object>)_implementations[name])(p0, p1, p2)),
+            4 => new Func<object, object, object, object, object>(
+                (p0, p1, p2, p3) =>
+                    ((Func<object, object, object, object, object>)_implementations[name])(p0, p1, p2, p3)),
+            _ => throw new NotSupportedException($"Methods with {paramCount} parameters not supported")
+        };
+    }
+
+    /// <summary>
+    ///     Registers a trampoline delegate with ExcelDNA, using parameter metadata from
+    ///     the original compiled method.
+    /// </summary>
+    private static void RegisterTrampoline(
+        string name, Delegate trampoline, MethodInfo originalMethod, bool isMacroType)
+    {
+        var funcAttr = new ExcelFunctionAttribute
+        {
+            Name = name,
+            Description = $"Dynamic UDF: {name}",
+            IsMacroType = isMacroType
+        };
+
+        var argAttrs = originalMethod.GetParameters()
+            .Select(p => (object)new ExcelArgumentAttribute { Name = p.Name, AllowReference = true })
+            .ToList();
+
+        ExcelIntegration.RegisterDelegates(
+            [trampoline],
             [funcAttr],
             [argAttrs]);
     }

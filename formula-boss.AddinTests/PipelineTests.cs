@@ -1077,8 +1077,10 @@ public class PipelineTests
             Assert.Contains("__FB_X", formula2);
             Assert.DoesNotContain("__FB_X_2", formula2);
 
-            // C1 also references __FB_X, so it should get the updated behaviour on recalc
-            TestUtilities.RecalcWorksheet(ws);
+            // C1 also references __FB_X, so it should get the updated behaviour.
+            // CalculateFullRebuild is needed because inputs (A1:A3) didn't change — a normal
+            // recalc skips non-volatile UDFs whose inputs are unchanged.
+            _excel.Application.CalculateFullRebuild();
             var resultC1After = TestUtilities.WaitForResult(ws, "C1", _output);
             _output.WriteLine($"Step 3 - C1 value after recalc: {resultC1After}");
             Assert.NotNull(resultC1After);
