@@ -39,7 +39,7 @@ Instead:
 - Better yet, make your expression a LET argument, so that Formula Boss will give it a nice name instead of a hash.
 - Either way, your formula is fully editable — press _Ctrl+Shift+`_ on any Formula Boss cell to reopen the editor.
 
-🚨 Warning: The Formula Boss is forgetful. It won't remember your functions next time you open Excel. You can recreate them by opening and saving the workbook, but if you haven't saved, they're gone!
+🚨 Warning: The Formula Boss is forgetful. It won't automatically remember your functions next time you open Excel, but it WILL recreate them if you still have Formula Boss active and you haven't removed the source code from your LET.
 
 🫣 **"But I don't know C#!"**
 
