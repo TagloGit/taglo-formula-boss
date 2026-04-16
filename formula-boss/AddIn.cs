@@ -265,7 +265,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Start listening for worksheet changes
             _interceptor.Start();
 
-            // Listen for workbook open events to rehydrate debug variants
+            // Listen for workbook open events to rehydrate FB formulas
             dynamic app = ExcelDnaUtil.Application;
             app.WorkbookOpen += new WorkbookOpenHandler(OnWorkbookOpen);
 
@@ -287,7 +287,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         {
             try
             {
-                RehydrateDebugVariants(workbook);
+                RehydrateFormulas(workbook);
             }
             catch (Exception ex)
             {
@@ -297,10 +297,11 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     }
 
     /// <summary>
-    ///     Scans all sheets in the workbook for cells with _DEBUG call sites and
-    ///     compiles the debug variant for each, so debug mode survives file reopen.
+    ///     Scans all sheets in the workbook for cells with FB call sites and recompiles
+    ///     them so formulas survive file reopen. Handles both normal and debug variants.
+    ///     Normal variants are rehydrated first (debug compilation may depend on them).
     /// </summary>
-    private void RehydrateDebugVariants(dynamic workbook)
+    private void RehydrateFormulas(dynamic workbook)
     {
         if (_pipeline == null)
         {
@@ -318,7 +319,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 sheet = sheets[i];
                 usedRange = sheet.UsedRange;
-                ScanRangeForDebugCallSites(usedRange);
+                ScanRangeForCallSites(usedRange);
             }
             catch (Exception ex)
             {
@@ -341,7 +342,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         Marshal.ReleaseComObject(sheets);
     }
 
-    private void ScanRangeForDebugCallSites(dynamic usedRange)
+    private void ScanRangeForCallSites(dynamic usedRange)
     {
         var rows = (int)usedRange.Rows.Count;
         var cols = (int)usedRange.Columns.Count;
@@ -355,19 +356,25 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 {
                     cell = usedRange.Cells[r, c];
                     var formula = cell.Formula2 as string;
-                    if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.DebugSuffix))
+                    if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.UdfPrefix))
                     {
                         continue;
+                    }
+
+                    // Rehydrate normal variants first, then debug variants
+                    var normalNames = LetFormulaReconstructor.GetNormalCallSites(formula);
+                    if (normalNames.Count > 0)
+                    {
+                        Debug.WriteLine($"Rehydrating normal variants for: {string.Join(", ", normalNames)}");
+                        RehydrateCellFormulas(formula, normalNames);
                     }
 
                     var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
-                    if (debugNames.Count == 0)
+                    if (debugNames.Count > 0)
                     {
-                        continue;
+                        Debug.WriteLine($"Rehydrating debug variants for: {string.Join(", ", debugNames)}");
+                        RehydrateCellFormulas(formula, debugNames);
                     }
-
-                    Debug.WriteLine($"Rehydrating debug variants for: {string.Join(", ", debugNames)}");
-                    RehydrateCellDebugVariants(formula, debugNames);
                 }
                 catch (Exception ex)
                 {
@@ -385,10 +392,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     }
 
     /// <summary>
-    ///     Compiles the debug variant for each debug call site found in the formula
-    ///     by extracting the DSL source from the matching _src_ bindings.
+    ///     Compiles UDFs for the given call site names by extracting DSL source
+    ///     from the matching _src_ bindings in the formula.
     /// </summary>
-    private void RehydrateCellDebugVariants(string formula, List<string> debugNames)
+    private void RehydrateCellFormulas(string formula, List<string> names)
     {
         if (!LetFormulaParser.TryParse(formula, out var structure) || structure == null)
         {
@@ -413,8 +420,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             }
         }
 
-        // Compile both normal and debug variants for each name
-        foreach (var name in debugNames)
+        foreach (var name in names)
         {
             if (sourceMap.TryGetValue(name, out var source))
             {
@@ -422,11 +428,11 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 {
                     var context = new ExpressionContext(name);
                     _pipeline!.Process(source, context);
-                    Debug.WriteLine($"Rehydrated debug variant for: {name}");
+                    Debug.WriteLine($"Rehydrated: {name}");
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Failed to rehydrate debug variant for {name}: {ex.Message}");
+                    Debug.WriteLine($"Failed to rehydrate {name}: {ex.Message}");
                 }
             }
         }

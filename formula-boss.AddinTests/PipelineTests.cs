@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 using Xunit;
 using Xunit.Abstractions;
 
@@ -1467,6 +1469,126 @@ public class PipelineTests
         finally
         {
             TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void ReopenWorkbook_RehydratesNormalFormula()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"FB_NormalRehydrate_{Guid.NewGuid():N}.xlsx");
+        dynamic? newWb = null;
+
+        try
+        {
+            // Step 1: Create a workbook with a LET-style FB formula, save it
+            var ws = _excel.AddWorksheet();
+            try
+            {
+                TestUtilities.SetCellValue(ws, "A1", 5.0);
+                TestUtilities.SetCellValue(ws, "A2", 15.0);
+                TestUtilities.SetCellValue(ws, "A3", 25.0);
+
+                TestUtilities.EnterBacktickFormula(ws, "B1",
+                    "=LET(data, A1:A3, result, `data.Where(v => v > 10)`, result)");
+
+                var result = TestUtilities.WaitForResult(ws, "B1", _output);
+                Assert.NotNull(result);
+
+                // Get the compiled formula (should contain __FB_ and _src_)
+                var compiledFormula = TestUtilities.GetCellFormula(ws, "B1");
+                _output.WriteLine($"Compiled formula: {compiledFormula}");
+                Assert.Contains("__FB_", compiledFormula);
+                Assert.Contains("_src_", compiledFormula);
+
+                // Copy to a new workbook and save
+                newWb = _excel.Application.Workbooks.Add();
+                var newWs = newWb.Worksheets[1];
+                try
+                {
+                    TestUtilities.SetCellValue(newWs, "A1", 5.0);
+                    TestUtilities.SetCellValue(newWs, "A2", 15.0);
+                    TestUtilities.SetCellValue(newWs, "A3", 25.0);
+
+                    var newCell = newWs.Range["B1"];
+                    try
+                    {
+                        newCell.Formula2 = compiledFormula;
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(newCell);
+                    }
+
+                    // xlOpenXMLWorkbook = 51
+                    newWb.SaveAs(tempPath, 51);
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(newWs);
+                }
+
+                newWb.Close(false);
+                Marshal.ReleaseComObject(newWb);
+                newWb = null;
+            }
+            finally
+            {
+                TestUtilities.CleanupWorksheet(ws);
+            }
+
+            // Step 2: Reopen — rehydration should recompile the normal UDF
+            newWb = _excel.Application.Workbooks.Open(tempPath);
+            Thread.Sleep(5000); // Wait for WorkbookOpen event + rehydration + recalc
+
+            var reopenWs = newWb.Worksheets[1];
+            try
+            {
+                var reopenFormula = TestUtilities.GetCellFormula(reopenWs, "B1");
+                var reopenValue = TestUtilities.GetCellValue(reopenWs, "B1");
+                _output.WriteLine($"After reopen - formula: {reopenFormula}");
+                _output.WriteLine($"After reopen - value: {reopenValue} (type: {reopenValue?.GetType()?.Name})");
+
+                // Formula should still have __FB_ call site
+                Assert.Contains("__FB_", reopenFormula);
+
+                // Value should NOT be #NAME? — the UDF should be recompiled
+                Assert.NotNull(reopenValue);
+                var isNameError = reopenValue is int errorCode && errorCode == -2146826259;
+                var isStringError = reopenValue is string s && s.Contains("#NAME");
+                Assert.False(isNameError || isStringError,
+                    $"Expected valid result after rehydration but got: {reopenValue}");
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(reopenWs);
+            }
+        }
+        finally
+        {
+            if (newWb != null)
+            {
+                try
+                {
+                    newWb.Close(false);
+                    Marshal.ReleaseComObject(newWb);
+                }
+                catch
+                {
+                    // Best-effort cleanup
+                }
+            }
+
+            try
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
         }
     }
 }

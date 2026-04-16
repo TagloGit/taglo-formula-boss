@@ -356,6 +356,78 @@ public class LetFormulaReconstructorTests
 
     #endregion
 
+    #region GetNormalCallSites
+
+    [Fact]
+    public void GetNormalCallSites_ReturnsEmpty_ForNullOrEmpty()
+    {
+        Assert.Empty(LetFormulaReconstructor.GetNormalCallSites(null));
+        Assert.Empty(LetFormulaReconstructor.GetNormalCallSites(""));
+    }
+
+    [Fact]
+    public void GetNormalCallSites_DetectsNormalCallSite()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED(data),
+            SUM(filtered))";
+        var names = LetFormulaReconstructor.GetNormalCallSites(formula);
+        Assert.Single(names);
+        Assert.Equal("FILTERED", names[0]);
+    }
+
+    [Fact]
+    public void GetNormalCallSites_ExcludesDebugCallSites()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED_DEBUG(data),
+            SUM(filtered))";
+        Assert.Empty(LetFormulaReconstructor.GetNormalCallSites(formula));
+    }
+
+    [Fact]
+    public void GetNormalCallSites_DetectsMultipleNormalCallSites()
+    {
+        var formula = @"=LET(data, A1:F20,
+            _src_colored, ""data.cells.where(c => c.color != 0)"",
+            colored, __FB_COLORED(data),
+            _src_result, ""colored.max()"",
+            result, __FB_RESULT(colored),
+            result)";
+        var names = LetFormulaReconstructor.GetNormalCallSites(formula);
+        Assert.Equal(2, names.Count);
+        Assert.Contains("COLORED", names);
+        Assert.Contains("RESULT", names);
+    }
+
+    [Fact]
+    public void GetNormalCallSites_IgnoresCallSitesInsideStringLiterals()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""__FB_FILTERED(data)"",
+            filtered, __FB_FILTERED_DEBUG(data),
+            SUM(filtered))";
+        Assert.Empty(LetFormulaReconstructor.GetNormalCallSites(formula));
+    }
+
+    [Fact]
+    public void GetNormalCallSites_MixedNormalAndDebug()
+    {
+        var formula = @"=LET(data, A1:F20,
+            _src_colored, ""data.cells.where(c => c.color != 0)"",
+            colored, __FB_COLORED(data),
+            _src_result, ""colored.max()"",
+            result, __FB_RESULT_DEBUG(colored),
+            result)";
+        var names = LetFormulaReconstructor.GetNormalCallSites(formula);
+        Assert.Single(names);
+        Assert.Equal("COLORED", names[0]);
+    }
+
+    #endregion
+
     #region GetDebugCallSites
 
     [Fact]
