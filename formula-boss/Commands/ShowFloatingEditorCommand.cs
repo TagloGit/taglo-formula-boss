@@ -90,6 +90,10 @@ public static class ShowFloatingEditorCommand
             var excelHwnd = new IntPtr(_app.Hwnd);
             var metadata = WorkbookMetadata.CaptureFromExcel(_app);
 
+            // Detect whether the cell's formula is currently in debug mode
+            var cellFormula = cell.Formula2 as string ?? cell.Formula as string ?? "";
+            var isDebugMode = DebugToggleService.IsDebugMode(cellFormula);
+
             // Capture worksheet on the Excel thread (not inside the WPF dispatcher)
             // to avoid cross-apartment COM proxy complications
             worksheet = cell.Worksheet;
@@ -124,6 +128,7 @@ public static class ShowFloatingEditorCommand
                         _window.UpdateTitle(sheetName, currentAddress);
                         _window.Metadata = metadata;
                         _window.FormulaText = editorContent;
+                        _window.SetDebugState(isDebugMode);
                     }
                 }
                 else
@@ -136,6 +141,7 @@ public static class ShowFloatingEditorCommand
                     _window.UpdateTitle(sheetName, currentAddress);
                     _window.Metadata = metadata;
                     _window.FormulaText = editorContent;
+                    _window.SetDebugState(isDebugMode);
 
                     if (!_hasBeenPositioned)
                     {
@@ -261,6 +267,7 @@ public static class ShowFloatingEditorCommand
 
             _window = new FloatingEditorWindow();
             _window.FormulaApplied += OnFormulaApplied;
+            _window.DebugToggleRequested += OnDebugToggleRequested;
             _windowDispatcher = Dispatcher.CurrentDispatcher;
 
             // Catch unhandled exceptions on the WPF thread so they don't crash Excel
@@ -340,6 +347,46 @@ public static class ShowFloatingEditorCommand
                 {
                     _windowDispatcher?.BeginInvoke(() => overlay.BeginFadeOut(1500));
                 }
+            }
+        });
+    }
+
+    private static void OnDebugToggleRequested(object? sender, EventArgs e)
+    {
+        ExcelAsyncUtil.QueueAsMacro(() =>
+        {
+            dynamic? cell = null;
+            try
+            {
+                var worksheet = _targetWorksheet;
+                var address = _targetAddress;
+                if (_app == null || worksheet == null || address == null)
+                {
+                    return;
+                }
+
+                cell = worksheet!.Range[address];
+
+                var pipeline = AddIn.Pipeline;
+                if (pipeline == null)
+                {
+                    Logger.Error("DebugToggle", new InvalidOperationException("Pipeline not initialized"));
+                    return;
+                }
+
+                var service = new DebugToggleService(pipeline);
+                var isDebug = service.Toggle(cell);
+
+                // Update button state on the WPF thread
+                _windowDispatcher?.BeginInvoke(() => _window?.SetDebugState(isDebug));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("DebugToggle", ex);
+            }
+            finally
+            {
+                ReleaseCom(cell);
             }
         });
     }

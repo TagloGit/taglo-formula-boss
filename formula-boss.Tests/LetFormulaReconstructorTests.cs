@@ -355,4 +355,211 @@ public class LetFormulaReconstructorTests
     }
 
     #endregion
+
+    #region GetDebugCallSites
+
+    [Fact]
+    public void GetDebugCallSites_ReturnsEmpty_ForNullOrEmpty()
+    {
+        Assert.Empty(LetFormulaReconstructor.GetDebugCallSites(null));
+        Assert.Empty(LetFormulaReconstructor.GetDebugCallSites(""));
+    }
+
+    [Fact]
+    public void GetDebugCallSites_ReturnsEmpty_ForNormalFormula()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED(data),
+            SUM(filtered))";
+        Assert.Empty(LetFormulaReconstructor.GetDebugCallSites(formula));
+    }
+
+    [Fact]
+    public void GetDebugCallSites_DetectsDebugCallSite()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED_DEBUG(data),
+            SUM(filtered))";
+        var names = LetFormulaReconstructor.GetDebugCallSites(formula);
+        Assert.Single(names);
+        Assert.Equal("FILTERED", names[0]);
+    }
+
+    [Fact]
+    public void GetDebugCallSites_DetectsMultipleDebugCallSites()
+    {
+        var formula = @"=LET(data, A1:F20,
+            _src_colored, ""data.cells.where(c => c.color != 0)"",
+            colored, __FB_COLORED_DEBUG(data),
+            _src_result, ""colored.max()"",
+            result, __FB_RESULT_DEBUG(colored),
+            result)";
+        var names = LetFormulaReconstructor.GetDebugCallSites(formula);
+        Assert.Equal(2, names.Count);
+        Assert.Contains("COLORED", names);
+        Assert.Contains("RESULT", names);
+    }
+
+    [Fact]
+    public void GetDebugCallSites_IgnoresDebugInsideStringLiterals()
+    {
+        // The _src_ binding value is a string literal — should not be scanned
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""__FB_FILTERED_DEBUG(data)"",
+            filtered, __FB_FILTERED(data),
+            SUM(filtered))";
+        Assert.Empty(LetFormulaReconstructor.GetDebugCallSites(formula));
+    }
+
+    #endregion
+
+    #region RewriteCallSitesToDebug
+
+    [Fact]
+    public void RewriteCallSitesToDebug_RewritesSingleCallSite()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.RewriteCallSitesToDebug(formula, new[] { "FILTERED" });
+
+        Assert.Contains("__FB_FILTERED_DEBUG(data)", result);
+        Assert.DoesNotContain("__FB_FILTERED(data)", result);
+    }
+
+    [Fact]
+    public void RewriteCallSitesToDebug_PreservesSourceLiterals()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.RewriteCallSitesToDebug(formula, new[] { "FILTERED" });
+
+        // _src_ binding value should be untouched
+        Assert.Contains(@"_src_filtered, ""data.where(v => v > 0)""", result);
+    }
+
+    [Fact]
+    public void RewriteCallSitesToDebug_RewritesMultipleCallSites()
+    {
+        var formula = @"=LET(data, A1:F20,
+            _src_colored, ""data.cells.where(c => c.color != 0)"",
+            colored, __FB_COLORED(data),
+            _src_result, ""colored.max()"",
+            result, __FB_RESULT(colored),
+            result)";
+
+        var result = LetFormulaReconstructor.RewriteCallSitesToDebug(
+            formula, new[] { "COLORED", "RESULT" });
+
+        Assert.Contains("__FB_COLORED_DEBUG(data)", result);
+        Assert.Contains("__FB_RESULT_DEBUG(colored)", result);
+    }
+
+    [Fact]
+    public void RewriteCallSitesToDebug_DoesNotTouchUnspecifiedNames()
+    {
+        var formula = @"=LET(
+            colored, __FB_COLORED(data),
+            result, __FB_RESULT(colored),
+            result)";
+
+        // Only rewrite COLORED, not RESULT
+        var result = LetFormulaReconstructor.RewriteCallSitesToDebug(formula, new[] { "COLORED" });
+
+        Assert.Contains("__FB_COLORED_DEBUG(data)", result);
+        Assert.Contains("__FB_RESULT(colored)", result);
+        Assert.DoesNotContain("__FB_RESULT_DEBUG", result);
+    }
+
+    #endregion
+
+    #region RewriteCallSitesToNormal
+
+    [Fact]
+    public void RewriteCallSitesToNormal_RewritesDebugCallSite()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED_DEBUG(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.RewriteCallSitesToNormal(formula, new[] { "FILTERED" });
+
+        Assert.Contains("__FB_FILTERED(data)", result);
+        Assert.DoesNotContain("_DEBUG", result);
+    }
+
+    [Fact]
+    public void RewriteCallSitesToNormal_PreservesSourceLiterals()
+    {
+        var formula = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED_DEBUG(data),
+            SUM(filtered))";
+
+        var result = LetFormulaReconstructor.RewriteCallSitesToNormal(formula, new[] { "FILTERED" });
+
+        Assert.Contains(@"_src_filtered, ""data.where(v => v > 0)""", result);
+    }
+
+    #endregion
+
+    #region Round-trip Rewriting
+
+    [Fact]
+    public void RoundTrip_DebugThenNormal_RestoresOriginalFormula()
+    {
+        var original = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v > 0)"",
+            filtered, __FB_FILTERED(data),
+            SUM(filtered))";
+
+        var debugged = LetFormulaReconstructor.RewriteCallSitesToDebug(original, new[] { "FILTERED" });
+        var restored = LetFormulaReconstructor.RewriteCallSitesToNormal(debugged, new[] { "FILTERED" });
+
+        Assert.Equal(original, restored);
+    }
+
+    [Fact]
+    public void RoundTrip_MultipleNames_RestoresOriginalFormula()
+    {
+        var original = @"=LET(data, A1:F20,
+            _src_colored, ""data.cells.where(c => c.color != 0)"",
+            colored, __FB_COLORED(data),
+            _src_result, ""colored.max()"",
+            result, __FB_RESULT(colored),
+            result)";
+
+        var names = new[] { "COLORED", "RESULT" };
+        var debugged = LetFormulaReconstructor.RewriteCallSitesToDebug(original, names);
+        var restored = LetFormulaReconstructor.RewriteCallSitesToNormal(debugged, names);
+
+        Assert.Equal(original, restored);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesEscapedQuotesInSourceLiteral()
+    {
+        var original = @"=LET(data, A1:A10,
+            _src_filtered, ""data.where(v => v == """"test"""")"",
+            filtered, __FB_FILTERED(data),
+            filtered)";
+
+        var debugged = LetFormulaReconstructor.RewriteCallSitesToDebug(original, new[] { "FILTERED" });
+
+        // Escaped quotes inside _src_ binding should be unchanged
+        Assert.Contains(@"""""test""""", debugged);
+
+        var restored = LetFormulaReconstructor.RewriteCallSitesToNormal(debugged, new[] { "FILTERED" });
+        Assert.Equal(original, restored);
+    }
+
+    #endregion
 }

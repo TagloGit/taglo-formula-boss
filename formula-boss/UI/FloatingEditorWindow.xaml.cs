@@ -104,6 +104,11 @@ public partial class FloatingEditorWindow
         CommandBindings.Add(new CommandBinding(toggleWordWrapCommand, (_, _) => ToggleWordWrap()));
         InputBindings.Add(new InputBinding(toggleWordWrapCommand, new KeyGesture(Key.W, ModifierKeys.Alt)));
 
+        // Ctrl+D toggles debug mode
+        var toggleDebugCommand = new RoutedCommand();
+        CommandBindings.Add(new CommandBinding(toggleDebugCommand, (_, _) => OnDebugToggle()));
+        InputBindings.Add(new InputBinding(toggleDebugCommand, new KeyGesture(Key.D, ModifierKeys.Control)));
+
         // Focus the editor when window opens
         Activated += (_, _) =>
         {
@@ -151,6 +156,11 @@ public partial class FloatingEditorWindow
     }
 
     public event EventHandler<string>? FormulaApplied;
+
+    /// <summary>
+    ///     Fired when the user clicks the Debug toggle button or presses Ctrl+D.
+    /// </summary>
+    public event EventHandler? DebugToggleRequested;
 
     private void LoadLogo()
     {
@@ -372,6 +382,22 @@ public partial class FloatingEditorWindow
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Hide();
+
+    private void DebugToggle_Click(object sender, RoutedEventArgs e) => OnDebugToggle();
+
+    private void OnDebugToggle()
+    {
+        DebugToggleRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    ///     Updates the Debug toggle button's checked state.
+    ///     Called from the command layer after detecting the cell's current debug state.
+    /// </summary>
+    public void SetDebugState(bool isDebug)
+    {
+        DebugToggleButton.IsChecked = isDebug;
+    }
 
     private void ToggleWordWrap()
     {

@@ -39,6 +39,36 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Debug toggle button style -->
+        <Style x:Key="DebugToggleButton" TargetType="ToggleButton">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="16,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="border"
+                                Background="#3a3a50"
+                                BorderThickness="0"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#b45309" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.85" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <DockPanel>
         <!-- Bottom toolbar: branding left, buttons right -->
@@ -50,6 +80,13 @@
                 <StackPanel DockPanel.Dock="Right"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
+                    <ToggleButton x:Name="DebugToggleButton"
+                                   Content="Debug (Ctrl+D)"
+                                   Style="{StaticResource DebugToggleButton}"
+                                   Foreground="#cccccc"
+                                   Margin="0,0,6,0"
+                                   Click="DebugToggle_Click"
+                                   ToolTip="Toggle debug tracing for this cell" />
                     <Button Content="Apply (Ctrl+Enter)"
                             Style="{StaticResource EditorButton}"
                             Background="#c2410c"

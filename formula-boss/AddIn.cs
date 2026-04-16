@@ -23,6 +23,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     private bool _isExcelShutdown;
     private FormulaPipeline? _pipeline;
 
+    /// <summary>
+    ///     The active pipeline instance, used by <see cref="Commands.DebugToggleService"/> to
+    ///     compile debug variants on demand.
+    /// </summary>
+    internal static FormulaPipeline? Pipeline => _instance?._pipeline;
+
     public void Dispose()
     {
         if (_disposed)
