@@ -74,6 +74,37 @@ Instead:
 - **Floating editor** — `Ctrl+Shift+`` ` opens an editor with syntax highlighting, error squiggles, and autocomplete
 - **LET integration** — backtick expressions work inside `=LET(...)` formulas
 - **Range references** — `A1:C10` works directly in expressions alongside named ranges and tables
+- **Debug mode** — step-through trace of every variable at every loop iteration, right in the spreadsheet
+
+## Debug Mode
+
+Debug mode lets you trace execution of your formulas — see every variable's value at every loop iteration without leaving Excel.
+
+### Toggle debug on/off
+
+With the floating editor open, click **Debug** or press **Ctrl+Shift+D**. The button turns amber when debug is active.
+
+This rewrites your formula's call sites from `__FB_X(...)` to `__FB_X_DEBUG(...)`. The debug variant captures a trace of every variable assignment and loop iteration as the formula executes.
+
+### View the trace
+
+After your debug formula has recalculated, enter in any cell:
+
+```
+=FB.LastTrace()
+```
+
+This spills a table with columns:
+
+| Column | Description |
+|---|---|
+| `kind` | `entry` (initial state), `iter` (loop iteration), `return` (final result), or `truncated` |
+| `depth` | Loop nesting level (0 = outermost) |
+| `branch` | Which `if`/`else` arm executed |
+| *your variables* | One column per local variable, in first-seen order |
+| `return` | The returned value (populated on `return` rows) |
+
+Traces are capped at 1,000 rows per invocation. Debug mode survives workbook close/reopen — the debug variant is recompiled automatically.
 
 ## Demos
 
