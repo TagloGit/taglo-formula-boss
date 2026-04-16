@@ -101,6 +101,14 @@ public static class RuntimeHelpers
     public static Func<object, object>? ToResultDelegate { get; set; }
 
     /// <summary>
+    ///     Delegate that returns the calling cell's address as a string (e.g. "[Book1]Sheet1!$A$1").
+    ///     Used by debug-instrumented UDFs to pass the caller address to <c>Tracer.Begin</c>.
+    ///     Initialized by <c>AddIn.AutoOpen</c> with a lambda that calls
+    ///     <c>XlCall.Excel(xlfCaller)</c> then <c>xlfReftext</c>.
+    /// </summary>
+    public static Func<string>? GetCallerAddressDelegate { get; set; }
+
+    /// <summary>
     ///     Normalizes a result for return to Excel.
     ///     Handles arrays, enumerables, nulls, and scalars.
     /// </summary>

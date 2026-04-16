@@ -205,4 +205,29 @@ public class TracerTests : IDisposable
         Tracer.TruncateWarn();
         Assert.Null(Tracer.LastBuffer);
     }
+
+    [Fact]
+    public void Set_UnwrapsExcelScalar_ToRawValue()
+    {
+        Tracer.Begin("foo", "A1");
+        var scalar = ExcelValue.Wrap(42.0);
+        Tracer.Set("x", scalar);
+        Tracer.Snapshot("iter", 0, null);
+
+        var arr = Tracer.LastBuffer!.ToObjectArray();
+        // Column: kind, depth, branch, x
+        Assert.Equal(42.0, arr[1, 3]);
+    }
+
+    [Fact]
+    public void Set_UnwrapsExcelScalar_StringValue()
+    {
+        Tracer.Begin("foo", "A1");
+        var scalar = ExcelValue.Wrap("hello");
+        Tracer.Set("s", scalar);
+        Tracer.Snapshot("iter", 0, null);
+
+        var arr = Tracer.LastBuffer!.ToObjectArray();
+        Assert.Equal("hello", arr[1, 3]);
+    }
 }

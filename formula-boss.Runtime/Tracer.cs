@@ -132,6 +132,13 @@ public sealed class TraceBuffer
 
     internal void Set(string name, object? value)
     {
+        // Unwrap ExcelValue wrappers to their underlying primitive so that
+        // ToObjectArray() produces values Excel can display (not #VALUE!).
+        if (value is ExcelValue ev)
+        {
+            value = ev.RawValue;
+        }
+
         lock (_sync)
         {
             _liveState[name] = value;
