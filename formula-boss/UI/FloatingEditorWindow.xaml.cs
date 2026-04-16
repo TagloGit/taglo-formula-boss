@@ -104,10 +104,11 @@ public partial class FloatingEditorWindow
         CommandBindings.Add(new CommandBinding(toggleWordWrapCommand, (_, _) => ToggleWordWrap()));
         InputBindings.Add(new InputBinding(toggleWordWrapCommand, new KeyGesture(Key.W, ModifierKeys.Alt)));
 
-        // Ctrl+D toggles debug mode
+        // Ctrl+Shift+D toggles debug mode (Ctrl+D alone is AvalonEdit's delete-line)
         var toggleDebugCommand = new RoutedCommand();
         CommandBindings.Add(new CommandBinding(toggleDebugCommand, (_, _) => OnDebugToggle()));
-        InputBindings.Add(new InputBinding(toggleDebugCommand, new KeyGesture(Key.D, ModifierKeys.Control)));
+        InputBindings.Add(new InputBinding(toggleDebugCommand,
+            new KeyGesture(Key.D, ModifierKeys.Control | ModifierKeys.Shift)));
 
         // Focus the editor when window opens
         Activated += (_, _) =>
@@ -158,7 +159,7 @@ public partial class FloatingEditorWindow
     public event EventHandler<string>? FormulaApplied;
 
     /// <summary>
-    ///     Fired when the user clicks the Debug toggle button or presses Ctrl+D.
+    ///     Fired when the user clicks the Debug button or presses Ctrl+Shift+D.
     /// </summary>
     public event EventHandler? DebugToggleRequested;
 
@@ -383,20 +384,29 @@ public partial class FloatingEditorWindow
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Hide();
 
-    private void DebugToggle_Click(object sender, RoutedEventArgs e) => OnDebugToggle();
+    private void DebugButton_Click(object sender, RoutedEventArgs e) => OnDebugToggle();
 
     private void OnDebugToggle()
     {
+        DismissSignatureHelp();
         DebugToggleRequested?.Invoke(this, EventArgs.Empty);
+        Hide();
     }
 
     /// <summary>
-    ///     Updates the Debug toggle button's checked state.
-    ///     Called from the command layer after detecting the cell's current debug state.
+    ///     Updates the Debug button label to reflect the cell's current debug state.
+    ///     Called from the command layer when the editor opens or switches cells.
     /// </summary>
     public void SetDebugState(bool isDebug)
     {
-        DebugToggleButton.IsChecked = isDebug;
+        DebugButton.Content = isDebug
+            ? "Stop Debug (Ctrl+Shift+D)"
+            : "Debug (Ctrl+Shift+D)";
+        DebugButton.Background = isDebug
+            ? new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#b45309")!)
+            : new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3a3a50")!);
     }
 
     private void ToggleWordWrap()
