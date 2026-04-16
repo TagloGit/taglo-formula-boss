@@ -145,6 +145,43 @@ public static class LetFormulaReconstructor
     }
 
     /// <summary>
+    /// Returns the names of any UDFs using normal (non-debug) call sites in the formula.
+    /// Names are returned without the <c>__FB_</c> prefix
+    /// (e.g. "FILTERED" for a call site <c>__FB_FILTERED(...)</c>).
+    /// Debug call sites (<c>__FB_X_DEBUG</c>) are excluded.
+    /// </summary>
+    public static List<string> GetNormalCallSites(string? formula)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(formula))
+        {
+            return result;
+        }
+
+        // Match __FB_<name>( but NOT __FB_<name>_DEBUG(
+        var pattern = CodeEmitter.UdfPrefix + @"(\w+?)" + @"(?<!" + CodeEmitter.DebugSuffix + @")\(";
+        foreach (var segment in EnumerateNonStringSegments(formula))
+        {
+            if (segment.IsStringLiteral)
+            {
+                continue;
+            }
+
+            foreach (Match match in Regex.Matches(segment.Text, pattern))
+            {
+                var name = match.Groups[1].Value;
+                // Exclude names that end with _DEBUG (the non-greedy match might still capture them)
+                if (!name.EndsWith(CodeEmitter.DebugSuffix, StringComparison.Ordinal))
+                {
+                    result.Add(name);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Returns the names of any UDFs currently using _DEBUG call sites in the formula.
     /// Names are returned without the <c>__FB_</c> prefix and <c>_DEBUG</c> suffix
     /// (e.g. "FILTERED" for a call site <c>__FB_FILTERED_DEBUG(...)</c>).
