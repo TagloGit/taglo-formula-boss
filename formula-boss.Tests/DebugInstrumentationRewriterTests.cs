@@ -133,6 +133,31 @@ public class DebugInstrumentationRewriterTests
     }
 
     [Fact]
+    public void Instrument_EmitsSetAfterPostfixIncrement()
+    {
+        var code = Rewrite("{ var x = 0; x++; return x; }");
+
+        // One after declaration, one after x++
+        Assert.True(code.Split("Tracer.Set(\"x\", x)").Length - 1 >= 2);
+    }
+
+    [Fact]
+    public void Instrument_EmitsSetAfterPostfixDecrement()
+    {
+        var code = Rewrite("{ var x = 5; x--; return x; }");
+
+        Assert.True(code.Split("Tracer.Set(\"x\", x)").Length - 1 >= 2);
+    }
+
+    [Fact]
+    public void Instrument_EmitsSetAfterPrefixIncrement()
+    {
+        var code = Rewrite("{ var x = 0; ++x; return x; }");
+
+        Assert.True(code.Split("Tracer.Set(\"x\", x)").Length - 1 >= 2);
+    }
+
+    [Fact]
     public void Instrument_BranchLabelTruncatedToMaxLength()
     {
         var code = Rewrite(

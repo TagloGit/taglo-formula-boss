@@ -77,6 +77,18 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
                     when assign.Left is IdentifierNameSyntax id:
                     newStatements.Add(MakeSet(id.Identifier.Text));
                     break;
+                case ExpressionStatementSyntax { Expression: PostfixUnaryExpressionSyntax postfix }
+                    when postfix.Operand is IdentifierNameSyntax postfixId &&
+                         (postfix.IsKind(SyntaxKind.PostIncrementExpression) ||
+                          postfix.IsKind(SyntaxKind.PostDecrementExpression)):
+                    newStatements.Add(MakeSet(postfixId.Identifier.Text));
+                    break;
+                case ExpressionStatementSyntax { Expression: PrefixUnaryExpressionSyntax prefix }
+                    when prefix.Operand is IdentifierNameSyntax prefixId &&
+                         (prefix.IsKind(SyntaxKind.PreIncrementExpression) ||
+                          prefix.IsKind(SyntaxKind.PreDecrementExpression)):
+                    newStatements.Add(MakeSet(prefixId.Identifier.Text));
+                    break;
             }
         }
 
