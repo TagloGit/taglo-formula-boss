@@ -36,10 +36,10 @@ Formula Boss detects the expression, turns it into a User Defined Function (UDF)
 
 Instead:
 - Use the visual editor by pressing _Ctrl+Shift+`_.
-- Better yet, make your expression a LET argument, so that Formula Boss will give it a nice name.
-- Outside of a LET, your function won't be editable - inside a LET, you can use the visual editor to edit your function as much as you like.
+- Better yet, make your expression a LET argument, so that Formula Boss will give it a nice name instead of a hash.
+- Either way, your formula is fully editable — press _Ctrl+Shift+`_ on any Formula Boss cell to reopen the editor.
 
-🚨 Warning: The Formula Boss is forgetful. It won't remember your functions next time you open Excel. If you used a LET function, you can recreate them, otherwise they're gone for good!
+🚨 Warning: The Formula Boss is forgetful. It won't automatically remember your functions next time you open Excel, but it WILL recreate them if you still have Formula Boss active and you haven't removed the source code from your LET.
 
 🫣 **"But I don't know C#!"**
 

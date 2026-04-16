@@ -1481,6 +1481,115 @@ public class PipelineTests
     }
 
     [Fact]
+    public void PlainBacktick_ProducesLetWithSrcBinding()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Sum()`");
+
+            var result = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            var formula = TestUtilities.GetCellFormula(ws, "B1");
+            _output.WriteLine($"B1 formula: {formula}");
+            _output.WriteLine($"B1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(60.0, Convert.ToDouble(result));
+
+            // Formula should be a LET with _src_ binding
+            Assert.NotNull(formula);
+            Assert.StartsWith("=LET(", formula);
+            Assert.Contains("_src_", formula);
+            Assert.Contains("\"A1:A3.Sum()\"", formula);
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void PlainBacktick_ReEdit_ProducesCorrectResult()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            // Step 1: Enter initial backtick formula
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Sum()`");
+
+            var result1 = TestUtilities.WaitForResult(ws, "B1", _output);
+            Assert.NotNull(result1);
+            Assert.Equal(60.0, Convert.ToDouble(result1));
+
+            var formula1 = TestUtilities.GetCellFormula(ws, "B1");
+            _output.WriteLine($"Step 1 - B1 formula: {formula1}");
+
+            // Verify the LET structure with _src_ binding
+            Assert.NotNull(formula1);
+            Assert.StartsWith("=LET(", formula1);
+            Assert.Contains("_src_", formula1);
+
+            // Step 2: Re-enter with a different expression (simulating re-edit)
+            TestUtilities.EnterBacktickFormula(ws, "B1", "=`A1:A3.Count()`");
+
+            var result2 = TestUtilities.WaitForResult(ws, "B1", _output);
+
+            _output.WriteLine($"Step 2 - B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
+            _output.WriteLine($"Step 2 - B1 value: {result2}");
+
+            Assert.NotNull(result2);
+            Assert.Equal(3.0, Convert.ToDouble(result2));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
+    public void PlainBacktick_MultipleExpressions_ProducesLetWithMultipleSrcBindings()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "B1", 3.0);
+            TestUtilities.SetCellValue(ws, "B2", 7.0);
+
+            TestUtilities.EnterBacktickFormula(ws, "C1", "=`A1:A2.Sum()` + `B1:B2.Sum()`");
+
+            var result = TestUtilities.WaitForResult(ws, "C1", _output);
+
+            var formula = TestUtilities.GetCellFormula(ws, "C1");
+            _output.WriteLine($"C1 formula: {formula}");
+            _output.WriteLine($"C1 value: {result}");
+
+            Assert.NotNull(result);
+            Assert.Equal(40.0, Convert.ToDouble(result));
+
+            // Formula should be a LET with _src_ bindings for both expressions
+            Assert.NotNull(formula);
+            Assert.StartsWith("=LET(", formula);
+            Assert.Contains("\"A1:A2.Sum()\"", formula);
+            Assert.Contains("\"B1:B2.Sum()\"", formula);
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void ReopenWorkbook_RehydratesNormalFormula()
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"FB_NormalRehydrate_{Guid.NewGuid():N}.xlsx");
