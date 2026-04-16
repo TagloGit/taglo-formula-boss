@@ -441,3 +441,4 @@ installer/bundled-runtime/
 
 # InnoSetup output
 installer/output/
+/.claude/worktrees
