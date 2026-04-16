@@ -50,6 +50,16 @@
                 <StackPanel DockPanel.Dock="Right"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
+                    <Button x:Name="DebugButton"
+                            Content="Debug (Ctrl+Shift+D)"
+                            Style="{StaticResource EditorButton}"
+                            Background="#3a3a50"
+                            Foreground="#cccccc"
+                            BorderThickness="0"
+                            Margin="0,0,6,0"
+                            Focusable="False"
+                            Click="DebugButton_Click"
+                            ToolTip="Toggle debug tracing for this cell" />
                     <Button Content="Apply (Ctrl+Enter)"
                             Style="{StaticResource EditorButton}"
                             Background="#c2410c"

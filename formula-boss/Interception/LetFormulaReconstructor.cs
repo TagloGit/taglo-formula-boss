@@ -1,5 +1,7 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
+using FormulaBoss.Transpilation;
 using FormulaBoss.UI;
 
 namespace FormulaBoss.Interception;
@@ -125,6 +127,152 @@ public static class LetFormulaReconstructor
         editableFormula = "'" + result;
         return true;
     }
+
+    /// <summary>
+    /// Returns the names of any UDFs currently using _DEBUG call sites in the formula.
+    /// Names are returned without the <c>__FB_</c> prefix and <c>_DEBUG</c> suffix
+    /// (e.g. "FILTERED" for a call site <c>__FB_FILTERED_DEBUG(...)</c>).
+    /// </summary>
+    public static List<string> GetDebugCallSites(string? formula)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(formula))
+        {
+            return result;
+        }
+
+        var pattern = CodeEmitter.UdfPrefix + @"(\w+)" + CodeEmitter.DebugSuffix + @"\(";
+        foreach (var segment in EnumerateNonStringSegments(formula))
+        {
+            if (segment.IsStringLiteral)
+            {
+                continue;
+            }
+
+            foreach (Match match in Regex.Matches(segment.Text, pattern))
+            {
+                result.Add(match.Groups[1].Value);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Rewrites call sites from normal to debug: <c>__FB_&lt;NAME&gt;(</c> → <c>__FB_&lt;NAME&gt;_DEBUG(</c>.
+    /// Only rewrites the specified names. String literals (e.g. <c>_src_</c> bindings) are not touched.
+    /// </summary>
+    public static string RewriteCallSitesToDebug(string formula, IEnumerable<string> names)
+    {
+        var result = formula;
+        foreach (var name in names)
+        {
+            var normalCallSite = CodeEmitter.UdfPrefix + name + "(";
+            var debugCallSite = CodeEmitter.UdfPrefix + name + CodeEmitter.DebugSuffix + "(";
+            result = ReplaceOutsideStringLiterals(result, normalCallSite, debugCallSite);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Rewrites call sites from debug to normal: <c>__FB_&lt;NAME&gt;_DEBUG(</c> → <c>__FB_&lt;NAME&gt;(</c>.
+    /// Only rewrites the specified names. String literals (e.g. <c>_src_</c> bindings) are not touched.
+    /// </summary>
+    public static string RewriteCallSitesToNormal(string formula, IEnumerable<string> names)
+    {
+        var result = formula;
+        foreach (var name in names)
+        {
+            var debugCallSite = CodeEmitter.UdfPrefix + name + CodeEmitter.DebugSuffix + "(";
+            var normalCallSite = CodeEmitter.UdfPrefix + name + "(";
+            result = ReplaceOutsideStringLiterals(result, debugCallSite, normalCallSite);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Replaces all occurrences of <paramref name="oldValue"/> with <paramref name="newValue"/>
+    /// but only outside of Excel string literals (double-quoted regions).
+    /// </summary>
+    private static string ReplaceOutsideStringLiterals(string formula, string oldValue, string newValue)
+    {
+        var sb = new StringBuilder(formula.Length);
+
+        foreach (var segment in EnumerateNonStringSegments(formula))
+        {
+            if (segment.IsStringLiteral)
+            {
+                sb.Append(segment.Text);
+            }
+            else
+            {
+                sb.Append(segment.Text.Replace(oldValue, newValue, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Splits a formula into segments, distinguishing between string literals (double-quoted)
+    /// and non-string regions. Handles escaped quotes (<c>""</c>) inside strings.
+    /// </summary>
+    private static IEnumerable<FormulaSegment> EnumerateNonStringSegments(string formula)
+    {
+        var i = 0;
+        var segmentStart = 0;
+
+        while (i < formula.Length)
+        {
+            if (formula[i] == '"')
+            {
+                // Yield any non-string segment before this quote
+                if (i > segmentStart)
+                {
+                    yield return new FormulaSegment(formula[segmentStart..i], false);
+                }
+
+                // Find the end of the string literal (handling "" escapes)
+                var stringStart = i;
+                i++; // skip opening quote
+                while (i < formula.Length)
+                {
+                    if (formula[i] == '"')
+                    {
+                        i++;
+                        // "" is an escaped quote inside the string, not the end
+                        if (i < formula.Length && formula[i] == '"')
+                        {
+                            i++;
+                            continue;
+                        }
+
+                        // End of string literal
+                        break;
+                    }
+
+                    i++;
+                }
+
+                yield return new FormulaSegment(formula[stringStart..i], true);
+                segmentStart = i;
+            }
+            else
+            {
+                i++;
+            }
+        }
+
+        // Yield any remaining non-string segment
+        if (segmentStart < formula.Length)
+        {
+            yield return new FormulaSegment(formula[segmentStart..], false);
+        }
+    }
+
+    private readonly record struct FormulaSegment(string Text, bool IsStringLiteral);
 
     /// <summary>
     /// Unescapes an Excel string literal value (removes surrounding quotes and unescapes doubled quotes).
