@@ -119,5 +119,5 @@ public static class LetFormulaRewriter
         sb.Append(')');
     }
 
-    private static string EscapeForExcelString(string value) => value.Replace("\"", "\"\"");
+    internal static string EscapeForExcelString(string value) => value.Replace("\"", "\"\"");
 }

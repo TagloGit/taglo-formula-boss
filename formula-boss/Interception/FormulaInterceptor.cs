@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 
 using ExcelDna.Integration;
 
+using FormulaBoss.Transpilation;
 using FormulaBoss.UI;
 
 using Taglo.Excel.Common;
@@ -337,6 +338,8 @@ public class FormulaInterceptor : IDisposable
         }
 
         var replacements = new Dictionary<string, string>();
+        // Track each processed expression for _src_ binding generation (preserves order)
+        var processedExpressions = new List<(string DslExpression, string UdfName, string UdfCall)>();
         var errors = new List<string>();
 
         foreach (var expr in expressions)
@@ -353,6 +356,7 @@ public class FormulaInterceptor : IDisposable
                     : "";
                 var udfCall = $"{result.UdfName}({paramStr})";
                 replacements[expr.Expression] = udfCall;
+                processedExpressions.Add((expr.Expression, result.UdfName, udfCall));
                 Debug.WriteLine($"UDF generated: {udfCall}");
             }
             else
@@ -368,10 +372,47 @@ public class FormulaInterceptor : IDisposable
             return;
         }
 
-        var newFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
+        // Rewrite backtick expressions to UDF calls
+        var rewrittenFormula = BacktickExtractor.RewriteFormula(originalFormula, replacements);
+
+        // Wrap in LET with _src_ bindings so the formula is rehydration-capable and editor-reopenable
+        var newFormula = WrapInLetWithSourceBindings(rewrittenFormula, processedExpressions);
         Debug.WriteLine($"Rewriting formula to: {newFormula}");
 
         WriteFormula(cell, newFormula);
+    }
+
+    /// <summary>
+    ///     Wraps a rewritten formula in a LET with _src_ bindings for each UDF,
+    ///     making plain backtick formulas compatible with rehydration and editor reopen.
+    /// </summary>
+    private static string WrapInLetWithSourceBindings(
+        string rewrittenFormula,
+        List<(string DslExpression, string UdfName, string UdfCall)> processedExpressions)
+    {
+        // Strip leading = for use as the LET result expression
+        var resultExpression = rewrittenFormula.StartsWith('=')
+            ? rewrittenFormula[1..]
+            : rewrittenFormula;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("=LET(");
+
+        foreach (var (dslExpression, udfName, _) in processedExpressions)
+        {
+            // Strip __FB_ prefix for the _src_ key so rehydration can match it
+            // (GetDebugCallSites captures the name between __FB_ and _DEBUG)
+            var srcKey = udfName.StartsWith(CodeEmitter.UdfPrefix, StringComparison.OrdinalIgnoreCase)
+                ? udfName[CodeEmitter.UdfPrefix.Length..]
+                : udfName;
+            sb.Append("_src_").Append(srcKey).Append(", ");
+            sb.Append('"').Append(LetFormulaRewriter.EscapeForExcelString(dslExpression)).Append("\", ");
+        }
+
+        sb.Append(resultExpression);
+        sb.Append(')');
+
+        return sb.ToString();
     }
 
     private static void WriteFormula(dynamic cell, string formula)

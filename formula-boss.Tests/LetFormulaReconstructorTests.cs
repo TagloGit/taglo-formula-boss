@@ -562,4 +562,62 @@ public class LetFormulaReconstructorTests
     }
 
     #endregion
+
+    #region Auto-Wrapped Plain Backtick Reconstruction
+
+    [Fact]
+    public void TryReconstruct_AutoWrappedSingleBacktick_ReconstructsPlainFormula()
+    {
+        // Auto-wrapped plain backtick: =LET(_src_AB12CD34, "A1:A3.Sum()", __FB_AB12CD34(A1:A3))
+        var processed = @"=LET(_src_AB12CD34, ""A1:A3.Sum()"", __FB_AB12CD34(A1:A3))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        // Should reconstruct to plain backtick formula (no LET wrapper)
+        Assert.StartsWith("'=", editable);
+        Assert.Contains("`A1:A3.Sum()`", editable);
+        Assert.DoesNotContain("LET", editable);
+        Assert.DoesNotContain("_src_", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_AutoWrappedMultipleBackticks_ReconstructsPlainFormula()
+    {
+        // Auto-wrapped multiple backtick expressions:
+        // =LET(_src_XXXX, "A1:A2.Sum()", _src_YYYY, "B1:B2.Sum()", __FB_XXXX(A1:A2) + __FB_YYYY(B1:B2))
+        var processed = @"=LET(_src_XXXX, ""A1:A2.Sum()"", _src_YYYY, ""B1:B2.Sum()"", __FB_XXXX(A1:A2) + __FB_YYYY(B1:B2))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains("`A1:A2.Sum()`", editable);
+        Assert.Contains("`B1:B2.Sum()`", editable);
+        Assert.DoesNotContain("LET", editable);
+        Assert.DoesNotContain("_src_", editable);
+        Assert.DoesNotContain("__FB_", editable);
+    }
+
+    [Fact]
+    public void TryReconstruct_AutoWrappedWithEscapedQuotes_UnescapesCorrectly()
+    {
+        var processed = @"=LET(_src_AB12CD34, ""data.where(v => v == """"test"""")"", __FB_AB12CD34(A1:A10))";
+
+        var result = LetFormulaReconstructor.TryReconstruct(processed, out var editable);
+
+        Assert.True(result);
+        Assert.NotNull(editable);
+        Assert.Contains(@"`data.where(v => v == ""test"")`", editable);
+    }
+
+    [Fact]
+    public void IsProcessedFormulaBossLet_ReturnsTrue_ForAutoWrappedFormula()
+    {
+        var formula = @"=LET(_src_AB12CD34, ""A1:A3.Sum()"", __FB_AB12CD34(A1:A3))";
+        Assert.True(LetFormulaReconstructor.IsProcessedFormulaBossLet(formula));
+    }
+
+    #endregion
 }

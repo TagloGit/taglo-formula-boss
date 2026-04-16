@@ -70,26 +70,42 @@ public static class LetFormulaReconstructor
             return false;
         }
 
-        // Build a flat formula, then optionally format using user's settings.
-        var sb = new StringBuilder();
-        sb.Append("=LET(");
-
+        // Collect non-machinery bindings (skip _src_ and _*_hdr)
+        var userBindings = new List<LetBinding>();
         foreach (var binding in structure.Bindings)
         {
             var varName = binding.VariableName.Trim();
 
-            // Skip _src_ bindings - they become backtick expressions
             if (varName.StartsWith(SourcePrefix, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            // Skip _*_hdr header bindings - these are injected machinery for dynamic column names
             if (varName.StartsWith("_", StringComparison.Ordinal) &&
                 varName.EndsWith(HeaderSuffix, StringComparison.Ordinal))
             {
                 continue;
             }
+
+            userBindings.Add(binding);
+        }
+
+        // If there are no user bindings, this was an auto-wrapped plain backtick formula.
+        // Reconstruct as a plain formula with backtick expressions (no LET wrapper).
+        if (userBindings.Count == 0)
+        {
+            var resultExpr = ReplaceFbCallsWithBackticks(structure.ResultExpression.Trim(), sourceExpressions);
+            editableFormula = "'" + resultExpr;
+            return true;
+        }
+
+        // Build a flat formula, then optionally format using user's settings.
+        var sb = new StringBuilder();
+        sb.Append("=LET(");
+
+        foreach (var binding in userBindings)
+        {
+            var varName = binding.VariableName.Trim();
 
             sb.Append(varName);
             sb.Append(", ");
@@ -273,6 +289,103 @@ public static class LetFormulaReconstructor
     }
 
     private readonly record struct FormulaSegment(string Text, bool IsStringLiteral);
+
+    /// <summary>
+    /// Replaces __FB_* UDF calls in a formula expression with backtick DSL expressions,
+    /// using the sourceExpressions map (keyed by UDF name without __FB_ prefix).
+    /// The UDF call including its parenthesized arguments is replaced with `dslExpression`.
+    /// </summary>
+    private static string ReplaceFbCallsWithBackticks(
+        string expression,
+        Dictionary<string, string> sourceExpressions)
+    {
+        var sb = new StringBuilder();
+        var i = 0;
+
+        while (i < expression.Length)
+        {
+            // Look for __FB_ prefix
+            var fbIndex = expression.IndexOf(CodeEmitter.UdfPrefix, i, StringComparison.OrdinalIgnoreCase);
+            if (fbIndex < 0)
+            {
+                sb.Append(expression, i, expression.Length - i);
+                break;
+            }
+
+            // Append everything before the match
+            sb.Append(expression, i, fbIndex - i);
+
+            // Extract the UDF name (everything from __FB_ up to the opening parenthesis)
+            var nameStart = fbIndex + CodeEmitter.UdfPrefix.Length;
+            var parenIndex = expression.IndexOf('(', nameStart);
+            if (parenIndex < 0)
+            {
+                // No opening paren — not a UDF call, emit as-is
+                sb.Append(expression, fbIndex, expression.Length - fbIndex);
+                break;
+            }
+
+            var udfName = expression[fbIndex..parenIndex]; // e.g. __FB_AB12CD34
+
+            // _src_ keys use the name without __FB_ prefix (matching GetDebugCallSites capture group)
+            var srcKey = udfName.StartsWith(CodeEmitter.UdfPrefix, StringComparison.OrdinalIgnoreCase)
+                ? udfName[CodeEmitter.UdfPrefix.Length..]
+                : udfName;
+
+            // Check if we have a _src_ mapping for this UDF name
+            if (sourceExpressions.TryGetValue(srcKey, out var dsl))
+            {
+                // Find the matching closing paren (handle nesting)
+                var closeIndex = FindMatchingParen(expression, parenIndex);
+                if (closeIndex < 0)
+                {
+                    // Malformed — emit rest as-is
+                    sb.Append(expression, fbIndex, expression.Length - fbIndex);
+                    break;
+                }
+
+                // Replace the entire UDF call with backtick expression
+                sb.Append('`').Append(dsl).Append('`');
+                i = closeIndex + 1;
+            }
+            else
+            {
+                // No mapping — emit the UDF prefix and continue scanning
+                sb.Append(CodeEmitter.UdfPrefix);
+                i = nameStart;
+            }
+        }
+
+        // Ensure it starts with =
+        var result = sb.ToString();
+        return result.StartsWith('=') ? result : "=" + result;
+    }
+
+    /// <summary>
+    /// Finds the index of the closing parenthesis matching the opening paren at <paramref name="openIndex"/>.
+    /// </summary>
+    private static int FindMatchingParen(string text, int openIndex)
+    {
+        var depth = 1;
+        for (var j = openIndex + 1; j < text.Length; j++)
+        {
+            switch (text[j])
+            {
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return j;
+                    }
+                    break;
+            }
+        }
+
+        return -1; // unmatched
+    }
 
     /// <summary>
     /// Unescapes an Excel string literal value (removes surrounding quotes and unescapes doubled quotes).
