@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -63,7 +63,8 @@ public class PipelineTests
 
             var result = TestUtilities.WaitForResult(ws, "B1", _output);
 
-            _output.WriteLine($"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
+            _output.WriteLine(
+                $"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
 
             Assert.NotNull(result);
             Assert.Equal(10.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
@@ -168,7 +169,8 @@ public class PipelineTests
 
             _output.WriteLine($"B1 comment: {TestUtilities.GetCellComment(ws, "B1")}");
             _output.WriteLine($"B1 formula: {TestUtilities.GetCellFormula(ws, "B1")}");
-            _output.WriteLine($"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
+            _output.WriteLine(
+                $"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
 
             Assert.NotNull(result);
             Assert.Equal(6.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
@@ -476,13 +478,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -612,13 +614,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -716,8 +718,8 @@ public class PipelineTests
                 // UDF was registered — check for error value
                 // Excel error values come through as int error codes
                 var isError = value == null ||
-                             value is int ||
-                             (value is string s && s.StartsWith('#'));
+                              value is int ||
+                              (value is string s && s.StartsWith('#'));
                 Assert.True(isError, $"Expected error value but got: {value}");
             }
         }
@@ -803,13 +805,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -856,13 +858,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -901,7 +903,8 @@ public class PipelineTests
                     var result = TestUtilities.WaitForResult(ws, "D1", _output);
 
                     _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
-                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, D2={TestUtilities.GetCellValue(ws, "D2")}, D3={TestUtilities.GetCellValue(ws, "D3")}");
+                    _output.WriteLine(
+                        $"D1={TestUtilities.GetCellValue(ws, "D1")}, D2={TestUtilities.GetCellValue(ws, "D2")}, D3={TestUtilities.GetCellValue(ws, "D3")}");
                     _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
 
                     Assert.NotNull(result);
@@ -911,13 +914,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -960,7 +963,8 @@ public class PipelineTests
                     var result = TestUtilities.WaitForResult(ws, "D1", _output);
 
                     _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
-                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, D2={TestUtilities.GetCellValue(ws, "D2")}");
+                    _output.WriteLine(
+                        $"D1={TestUtilities.GetCellValue(ws, "D1")}, D2={TestUtilities.GetCellValue(ws, "D2")}");
                     _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
 
                     Assert.NotNull(result);
@@ -969,13 +973,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -1092,8 +1096,10 @@ public class PipelineTests
                     var result = TestUtilities.WaitForResult(ws, "D1", _output);
 
                     _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
-                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
-                    _output.WriteLine($"D2={TestUtilities.GetCellValue(ws, "D2")}, E2={TestUtilities.GetCellValue(ws, "E2")}");
+                    _output.WriteLine(
+                        $"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
+                    _output.WriteLine(
+                        $"D2={TestUtilities.GetCellValue(ws, "D2")}, E2={TestUtilities.GetCellValue(ws, "E2")}");
                     _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
 
                     Assert.NotNull(result);
@@ -1104,13 +1110,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -1208,7 +1214,8 @@ public class PipelineTests
                     var result = TestUtilities.WaitForResult(ws, "D1", _output);
 
                     _output.WriteLine($"D1 formula: {TestUtilities.GetCellFormula(ws, "D1")}");
-                    _output.WriteLine($"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
+                    _output.WriteLine(
+                        $"D1={TestUtilities.GetCellValue(ws, "D1")}, E1={TestUtilities.GetCellValue(ws, "E1")}");
                     _output.WriteLine($"D1 comment: {TestUtilities.GetCellComment(ws, "D1")}");
 
                     Assert.NotNull(result);
@@ -1217,13 +1224,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
@@ -1248,7 +1255,8 @@ public class PipelineTests
 
             var result = TestUtilities.WaitForResult(ws, "B1", _output);
 
-            _output.WriteLine($"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
+            _output.WriteLine(
+                $"B1={TestUtilities.GetCellValue(ws, "B1")}, B2={TestUtilities.GetCellValue(ws, "B2")}, B3={TestUtilities.GetCellValue(ws, "B3")}");
 
             Assert.NotNull(result);
             Assert.Equal(10.0, Convert.ToDouble(TestUtilities.GetCellValue(ws, "B1")));
@@ -1457,13 +1465,13 @@ public class PipelineTests
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                    Marshal.ReleaseComObject(table);
                 }
             }
             finally
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(tables);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(range);
+                Marshal.ReleaseComObject(tables);
+                Marshal.ReleaseComObject(range);
             }
         }
         finally
