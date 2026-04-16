@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 using ExcelDna.Integration;
 
@@ -6,6 +7,7 @@ using FormulaBoss.Commands;
 using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 using FormulaBoss.Runtime;
+using FormulaBoss.Transpilation;
 using Taglo.Excel.Common;
 
 namespace FormulaBoss;
@@ -261,6 +263,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             // Start listening for worksheet changes
             _interceptor.Start();
 
+            // Listen for workbook open events to rehydrate debug variants
+            dynamic app = ExcelDnaUtil.Application;
+            app.WorkbookOpen += new WorkbookOpenHandler(OnWorkbookOpen);
+
             // Register keyboard shortcut: Ctrl+Shift+` to open floating editor
             // ^+` = Ctrl+Shift+` (^ = Ctrl, + = Shift)
             XlCall.Excel(XlCall.xlcOnKey, "^+`", "ShowFloatingEditor");
@@ -270,6 +276,159 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         catch (Exception ex)
         {
             Logger.Error("InitializeInterception", ex);
+        }
+    }
+
+    private delegate void WorkbookOpenHandler(dynamic workbook);
+
+    private void OnWorkbookOpen(dynamic workbook)
+    {
+        ExcelAsyncUtil.QueueAsMacro(() =>
+        {
+            try
+            {
+                RehydrateDebugVariants(workbook);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("OnWorkbookOpen rehydration", ex);
+            }
+        });
+    }
+
+    /// <summary>
+    ///     Scans all sheets in the workbook for cells with _DEBUG call sites and
+    ///     compiles the debug variant for each, so debug mode survives file reopen.
+    /// </summary>
+    private void RehydrateDebugVariants(dynamic workbook)
+    {
+        if (_pipeline == null)
+        {
+            return;
+        }
+
+        var sheets = workbook.Worksheets;
+        var sheetCount = (int)sheets.Count;
+
+        for (var i = 1; i <= sheetCount; i++)
+        {
+            dynamic? sheet = null;
+            dynamic? usedRange = null;
+            try
+            {
+                sheet = sheets[i];
+                usedRange = sheet.UsedRange;
+                ScanRangeForDebugCallSites(usedRange);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Rehydration error on sheet {i}: {ex.Message}");
+            }
+            finally
+            {
+                if (usedRange != null)
+                {
+                    Marshal.ReleaseComObject(usedRange);
+                }
+
+                if (sheet != null)
+                {
+                    Marshal.ReleaseComObject(sheet);
+                }
+            }
+        }
+
+        Marshal.ReleaseComObject(sheets);
+    }
+
+    private void ScanRangeForDebugCallSites(dynamic usedRange)
+    {
+        var rows = (int)usedRange.Rows.Count;
+        var cols = (int)usedRange.Columns.Count;
+
+        for (var r = 1; r <= rows; r++)
+        {
+            for (var c = 1; c <= cols; c++)
+            {
+                dynamic? cell = null;
+                try
+                {
+                    cell = usedRange.Cells[r, c];
+                    var formula = cell.Formula2 as string;
+                    if (string.IsNullOrEmpty(formula) || !formula!.Contains(CodeEmitter.DebugSuffix))
+                    {
+                        continue;
+                    }
+
+                    var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
+                    if (debugNames.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    Debug.WriteLine($"Rehydrating debug variants for: {string.Join(", ", debugNames)}");
+                    RehydrateCellDebugVariants(formula, debugNames);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Rehydration error at cell [{r},{c}]: {ex.Message}");
+                }
+                finally
+                {
+                    if (cell != null)
+                    {
+                        Marshal.ReleaseComObject(cell);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Compiles the debug variant for each debug call site found in the formula
+    ///     by extracting the DSL source from the matching _src_ bindings.
+    /// </summary>
+    private void RehydrateCellDebugVariants(string formula, List<string> debugNames)
+    {
+        if (!LetFormulaParser.TryParse(formula, out var structure) || structure == null)
+        {
+            return;
+        }
+
+        // Build source map from _src_ bindings
+        var sourceMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var binding in structure.Bindings)
+        {
+            var varName = binding.VariableName.Trim();
+            if (varName.StartsWith("_src_", StringComparison.Ordinal))
+            {
+                var targetName = varName["_src_".Length..];
+                var value = binding.Value.Trim();
+                if (value.StartsWith('"') && value.EndsWith('"') && value.Length >= 2)
+                {
+                    value = value[1..^1].Replace("\"\"", "\"");
+                }
+
+                sourceMap[targetName] = value;
+            }
+        }
+
+        // Compile both normal and debug variants for each name
+        foreach (var name in debugNames)
+        {
+            if (sourceMap.TryGetValue(name, out var source))
+            {
+                try
+                {
+                    var context = new ExpressionContext(name);
+                    _pipeline!.Process(source, context);
+                    Debug.WriteLine($"Rehydrated debug variant for: {name}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to rehydrate debug variant for {name}: {ex.Message}");
+                }
+            }
         }
     }
 
