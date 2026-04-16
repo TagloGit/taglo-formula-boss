@@ -213,7 +213,7 @@ public class InterceptionTests
         Assert.True(result2.Success);
         Assert.Equal($"{CodeEmitter.UdfPrefix}FIRSTUDF", result1.UdfName);
         Assert.Equal($"{CodeEmitter.UdfPrefix}SECONDUDF", result2.UdfName);
-        Assert.Equal(2, compiler.CompileCount); // Should compile twice
+        Assert.Equal(4, compiler.CompileCount); // 2 normal + 2 debug variants
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public class InterceptionTests
         Assert.True(result1.Success);
         Assert.True(result2.Success);
         Assert.Equal(result1.UdfName, result2.UdfName);
-        Assert.Equal(1, compiler.CompileCount); // Should only compile once
+        Assert.Equal(2, compiler.CompileCount); // 1 normal + 1 debug variant (second call hits cache)
     }
 
     [Fact]

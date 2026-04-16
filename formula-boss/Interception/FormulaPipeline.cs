@@ -96,17 +96,15 @@ public class FormulaPipeline
 
         // Step 2: Emit code
         var emitter = new CodeEmitter();
+        var preferredName = context?.PreferredUdfName;
+        if (preferredName != null)
+        {
+            preferredName = GetUniqueUdfName(preferredName, expression);
+        }
+
         TranspileResult transpileResult;
         try
         {
-            var preferredName = context?.PreferredUdfName;
-
-            // If we have a preferred name, check if it's already registered with a different expression
-            if (preferredName != null)
-            {
-                preferredName = GetUniqueUdfName(preferredName, expression);
-            }
-
             transpileResult = emitter.Emit(emitDetection, expression, preferredName);
         }
         catch (Exception ex)
@@ -132,6 +130,37 @@ public class FormulaPipeline
             }
 
             return new PipelineResult(false, null, $"Compile error: {errorMsg}");
+        }
+
+        // Step 3b: Emit and compile the debug-instrumented variant alongside the normal one.
+        // The caller address expression invokes the delegate bridge so the generated code
+        // does not need to reference ExcelDNA's XlCall directly.
+        try
+        {
+            var callerAddrExpr = "FormulaBoss.RuntimeHelpers.GetCallerAddressDelegate?.Invoke() ?? \"\"";
+            var debugResult = emitter.EmitDebug(
+                emitDetection, expression, preferredName,
+                headersByParameter: null, callerAddrExpr);
+
+            Debug.WriteLine("=== Generated DEBUG UDF Source Code ===");
+            Debug.WriteLine(debugResult.SourceCode);
+            Debug.WriteLine("=== End Generated DEBUG Code ===");
+
+            var debugErrors = _compiler.CompileAndRegister(
+                debugResult.SourceCode, debugResult.RequiresObjectModel);
+
+            if (debugErrors.Count > 0)
+            {
+                Debug.WriteLine($"Debug variant compile failed: {string.Join("; ", debugErrors)}");
+            }
+            else
+            {
+                transpileResult = transpileResult with { DebugVariant = debugResult };
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Debug variant emit failed: {ex.Message}");
         }
 
         // Track which expression this UDF name was created from
