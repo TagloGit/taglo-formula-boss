@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 using ExcelDna.Integration;
@@ -8,6 +9,7 @@ using FormulaBoss.Compilation;
 using FormulaBoss.Interception;
 using FormulaBoss.Runtime;
 using FormulaBoss.Transpilation;
+
 using Taglo.Excel.Common;
 
 namespace FormulaBoss;
@@ -26,7 +28,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     private FormulaPipeline? _pipeline;
 
     /// <summary>
-    ///     The active pipeline instance, used by <see cref="Commands.DebugToggleService"/> to
+    ///     The active pipeline instance, used by <see cref="Commands.DebugToggleService" /> to
     ///     compile debug variants on demand.
     /// </summary>
     internal static FormulaPipeline? Pipeline => _instance?._pipeline;
@@ -228,7 +230,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             ExcelAsyncUtil.QueueAsMacro(InitializeInterception);
 
             // Fire-and-forget update check — runs on background thread, silent on failure
-            var assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+            var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version
                                   ?? new Version(0, 0, 0);
             UpdateChecker.Initialize(
                 "https://api.github.com/repos/TagloGit/taglo-formula-boss/releases/latest",
@@ -278,8 +280,6 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             Logger.Error("InitializeInterception", ex);
         }
     }
-
-    private delegate void WorkbookOpenHandler(dynamic workbook);
 
     private void OnWorkbookOpen(dynamic workbook)
     {
@@ -355,7 +355,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 {
                     cell = usedRange.Cells[r, c];
                     var formula = cell.Formula2 as string;
-                    if (string.IsNullOrEmpty(formula) || !formula!.Contains(CodeEmitter.DebugSuffix))
+                    if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.DebugSuffix))
                     {
                         continue;
                     }
@@ -431,6 +431,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             }
         }
     }
+
+    private delegate void WorkbookOpenHandler(dynamic workbook);
 
     /// <summary>
     ///     COM add-in registered solely to receive Excel shutdown notification.

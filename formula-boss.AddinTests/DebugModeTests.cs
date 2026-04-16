@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -12,9 +12,6 @@ namespace FormulaBoss.AddinTests;
 [Collection("Excel Addin")]
 public class DebugModeTests
 {
-    private readonly ExcelAddinFixture _excel;
-    private readonly ITestOutputHelper _output;
-
     /// <summary>
     ///     A scoring-loop expression that iterates over a scores range, tracking per-player
     ///     scores and turn counts with an if/else branch. Produces trace columns:
@@ -31,6 +28,9 @@ public class DebugModeTests
         "} " +
         "return jScore - kScore; " +
         "}";
+
+    private readonly ExcelAddinFixture _excel;
+    private readonly ITestOutputHelper _output;
 
     public DebugModeTests(ExcelAddinFixture excel, ITestOutputHelper output)
     {
@@ -103,7 +103,6 @@ public class DebugModeTests
             Assert.Contains("s", headers);
 
             // Verify we have data rows (at least entry + 4 iterations + return)
-            var kindCol = 1; // D column = 4, so D2 has first data row
             var secondRowKind = TestUtilities.GetCellValue(ws, "D2") as string;
             _output.WriteLine($"D2 (first data kind): {secondRowKind}");
             Assert.Equal("entry", secondRowKind);
@@ -372,7 +371,8 @@ public class DebugModeTests
 
             // Edit source: enter a different expression (simulates re-editing)
             // Use a simpler expression that still loops
-            const string newExpression = "{ var total = 0.0; foreach (var s in scores) { total += (double)s; } return total; }";
+            const string newExpression =
+                "{ var total = 0.0; foreach (var s in scores) { total += (double)s; } return total; }";
             TestUtilities.EnterBacktickFormula(ws, "B1",
                 $"=LET(scores, A1:A4, result, `{newExpression}`, result)");
 
@@ -537,11 +537,11 @@ public class DebugModeTests
         {
             if (char.IsLetter(ch))
             {
-                col = col * 26 + (char.ToUpper(ch) - 'A' + 1);
+                col = (col * 26) + (char.ToUpper(ch) - 'A') + 1;
             }
             else
             {
-                row = row * 10 + (ch - '0');
+                row = (row * 10) + (ch - '0');
             }
         }
 
