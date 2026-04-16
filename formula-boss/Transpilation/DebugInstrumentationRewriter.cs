@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -39,7 +39,7 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
     public static BlockSyntax Instrument(BlockSyntax block, string traceName, string callerAddressExpression)
     {
         var rewriter = new DebugInstrumentationRewriter();
-        var rewritten = (BlockSyntax)rewriter.Visit(block)!;
+        var rewritten = (BlockSyntax)rewriter.Visit(block);
 
         var begin = SyntaxFactory.ParseStatement(
             $"{TracerType}.Begin({Literal(traceName)}, {callerAddressExpression});");
@@ -51,7 +51,7 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
         return rewritten.WithStatements(SyntaxFactory.List(statements));
     }
 
-    public override SyntaxNode? VisitBlock(BlockSyntax node)
+    public override SyntaxNode VisitBlock(BlockSyntax node)
     {
         var newStatements = new List<StatementSyntax>();
         foreach (var stmt in node.Statements)
@@ -83,10 +83,10 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
         return node.WithStatements(SyntaxFactory.List(newStatements));
     }
 
-    public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax node)
+    public override SyntaxNode VisitForEachStatement(ForEachStatementSyntax node)
     {
         _loopDepth++;
-        var body = EnsureBlock((StatementSyntax)Visit(node.Statement)!);
+        var body = EnsureBlock((StatementSyntax)Visit(node.Statement));
         var statements = new List<StatementSyntax> { MakeSet(node.Identifier.Text) };
         statements.AddRange(body.Statements);
         statements.Add(MakeSnapshot("iter"));
@@ -95,10 +95,10 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
         return node.WithStatement(newBody);
     }
 
-    public override SyntaxNode? VisitForStatement(ForStatementSyntax node)
+    public override SyntaxNode VisitForStatement(ForStatementSyntax node)
     {
         _loopDepth++;
-        var body = EnsureBlock((StatementSyntax)Visit(node.Statement)!);
+        var body = EnsureBlock((StatementSyntax)Visit(node.Statement));
         var statements = new List<StatementSyntax>();
         if (node.Declaration != null)
         {
@@ -115,28 +115,28 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
         return node.WithStatement(newBody);
     }
 
-    public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax node)
+    public override SyntaxNode VisitWhileStatement(WhileStatementSyntax node)
     {
         _loopDepth++;
-        var body = EnsureBlock((StatementSyntax)Visit(node.Statement)!);
+        var body = EnsureBlock((StatementSyntax)Visit(node.Statement));
         var statements = new List<StatementSyntax>(body.Statements) { MakeSnapshot("iter") };
         var newBody = body.WithStatements(SyntaxFactory.List(statements));
         _loopDepth--;
         return node.WithStatement(newBody);
     }
 
-    public override SyntaxNode? VisitIfStatement(IfStatementSyntax node)
+    public override SyntaxNode VisitIfStatement(IfStatementSyntax node)
     {
         var savedBranch = _branchLabel;
 
         _branchLabel = MakeBranchLabel(node.Statement);
-        var visitedThen = (StatementSyntax)Visit(node.Statement)!;
+        var visitedThen = (StatementSyntax)Visit(node.Statement);
 
         ElseClauseSyntax? visitedElse = null;
         if (node.Else != null)
         {
             _branchLabel = MakeBranchLabel(node.Else.Statement);
-            var visitedElseStmt = (StatementSyntax)Visit(node.Else.Statement)!;
+            var visitedElseStmt = (StatementSyntax)Visit(node.Else.Statement);
             visitedElse = node.Else.WithStatement(visitedElseStmt);
         }
 
@@ -146,7 +146,7 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
             : node.WithStatement(visitedThen);
     }
 
-    public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax node)
+    public override SyntaxNode VisitReturnStatement(ReturnStatementSyntax node)
     {
         if (node.Expression == null)
         {
@@ -177,7 +177,7 @@ public class DebugInstrumentationRewriter : CSharpSyntaxRewriter
 
     private static string MakeBranchLabel(StatementSyntax stmt)
     {
-        StatementSyntax? first = stmt;
+        var first = stmt;
         if (stmt is BlockSyntax block)
         {
             first = block.Statements.FirstOrDefault();
