@@ -192,29 +192,27 @@ public class FormulaPipeline
     }
 
     /// <summary>
-    ///     Gets a unique UDF name, appending a suffix if the preferred name is already taken by a different expression.
+    ///     Resolves the UDF name for a preferred name. If the preferred name is already
+    ///     registered with a different expression, the old registration is overwritten
+    ///     (cache invalidated) so all cells referencing the UDF get the updated behaviour.
     /// </summary>
     private string GetUniqueUdfName(string preferredName, string expression)
     {
-        var candidateName = preferredName;
-        var suffix = 2;
+        var fullName = FullMethodName(preferredName);
 
-        while (_registeredUdfExpressions.TryGetValue(FullMethodName(candidateName), out var existingExpression))
+        if (_registeredUdfExpressions.TryGetValue(fullName, out var existingExpression)
+            && existingExpression != expression)
         {
-            // If same expression, we can reuse the name (will hit cache anyway)
-            if (existingExpression == expression)
-            {
-                break;
-            }
+            // Different expression wants the same name — overwrite.
+            // Invalidate the stale cache entry so the old expression isn't served from cache.
+            var oldCacheKey = $"{existingExpression}|{preferredName}";
+            _udfCache.Remove(oldCacheKey);
+            _parametersCache.Remove(oldCacheKey);
 
-            // Different expression wants the same name - generate a unique one
-            candidateName = $"{preferredName}_{suffix}";
-            suffix++;
-
-            Debug.WriteLine($"UDF name collision: {preferredName} already registered, trying {candidateName}");
+            Debug.WriteLine($"UDF overwrite: {preferredName} re-edited with new expression");
         }
 
-        return candidateName;
+        return preferredName;
     }
 
     private static string FullMethodName(string preferredName) =>

@@ -1029,6 +1029,68 @@ public class PipelineTests
     }
 
     [Fact]
+    public void ReEdit_LET_SameVariable_OverwritesUdf_NoSuffix()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            TestUtilities.SetCellValue(ws, "A1", 10.0);
+            TestUtilities.SetCellValue(ws, "A2", 20.0);
+            TestUtilities.SetCellValue(ws, "A3", 30.0);
+
+            // Step 1: Enter initial LET formula — creates __FB_X
+            TestUtilities.EnterBacktickFormula(ws, "B1",
+                "=LET(x, `A1:A3.Sum()`, x)");
+
+            var result1 = TestUtilities.WaitForResult(ws, "B1", _output);
+            var formula1 = TestUtilities.GetCellFormula(ws, "B1");
+            _output.WriteLine($"Step 1 - B1 formula: {formula1}");
+            _output.WriteLine($"Step 1 - B1 value: {result1}");
+
+            Assert.NotNull(result1);
+            Assert.Equal(60.0, Convert.ToDouble(result1));
+            Assert.NotNull(formula1);
+            Assert.Contains("__FB_X", formula1);
+            Assert.DoesNotContain("__FB_X_2", formula1);
+
+            // Step 2: Copy the formula to C1 so a second cell references the same UDF
+            TestUtilities.EnterBacktickFormula(ws, "C1",
+                "=LET(x, `A1:A3.Sum()`, x)");
+            var resultC1Before = TestUtilities.WaitForResult(ws, "C1", _output);
+            Assert.NotNull(resultC1Before);
+            Assert.Equal(60.0, Convert.ToDouble(resultC1Before));
+
+            // Step 3: Re-edit B1 with a different expression under the same variable name
+            TestUtilities.EnterBacktickFormula(ws, "B1",
+                "=LET(x, `A1:A3.Count()`, x)");
+
+            var result2 = TestUtilities.WaitForResult(ws, "B1", _output);
+            var formula2 = TestUtilities.GetCellFormula(ws, "B1");
+            _output.WriteLine($"Step 3 - B1 formula: {formula2}");
+            _output.WriteLine($"Step 3 - B1 value: {result2}");
+
+            Assert.NotNull(result2);
+            Assert.Equal(3.0, Convert.ToDouble(result2));
+
+            // Key assertion: same UDF name (__FB_X), no _2 suffix
+            Assert.NotNull(formula2);
+            Assert.Contains("__FB_X", formula2);
+            Assert.DoesNotContain("__FB_X_2", formula2);
+
+            // C1 also references __FB_X, so it should get the updated behaviour on recalc
+            TestUtilities.RecalcWorksheet(ws);
+            var resultC1After = TestUtilities.WaitForResult(ws, "C1", _output);
+            _output.WriteLine($"Step 3 - C1 value after recalc: {resultC1After}");
+            Assert.NotNull(resultC1After);
+            Assert.Equal(3.0, Convert.ToDouble(resultC1After));
+        }
+        finally
+        {
+            TestUtilities.CleanupWorksheet(ws);
+        }
+    }
+
+    [Fact]
     public void ReEdit_SimpleBacktick_ChangedExpression_RecompilesUdf()
     {
         var ws = _excel.AddWorksheet();

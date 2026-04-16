@@ -228,6 +228,14 @@ public static class TestUtilities
     }
 
     /// <summary>
+    ///     Recalculates all formulas in a worksheet.
+    /// </summary>
+    public static void RecalcWorksheet(dynamic ws)
+    {
+        ws.Calculate();
+    }
+
+    /// <summary>
     ///     Gets a cell's comment text, or null if no comment. Releases COM objects.
     /// </summary>
     public static string? GetCellComment(dynamic ws, string cellAddress)

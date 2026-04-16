@@ -171,18 +171,12 @@ public class DynamicCompiler
 
             foreach (var method in methods)
             {
-                // Skip if already registered
-                if (_registeredUdfs.Contains(method.Name))
-                {
-                    Debug.WriteLine($"UDF already registered: {method.Name}");
-                    continue;
-                }
-
                 try
                 {
                     RegisterMethod(method, isMacroType);
-                    _registeredUdfs.Add(method.Name);
-                    Debug.WriteLine($"Registered dynamic UDF: {method.Name}");
+
+                    var verb = _registeredUdfs.Add(method.Name) ? "Registered" : "Re-registered";
+                    Debug.WriteLine($"{verb} dynamic UDF: {method.Name}");
                 }
                 catch (Exception ex)
                 {
