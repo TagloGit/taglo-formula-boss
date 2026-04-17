@@ -310,9 +310,6 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
         var sheets = workbook.Worksheets;
         var sheetCount = (int)sheets.Count;
-
-        Logger.Info($"Rehydration: scanning {sheetCount} sheet(s)");
-
         var totalHits = 0;
 
         for (var i = 1; i <= sheetCount; i++)
@@ -323,8 +320,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 sheet = sheets[i];
                 usedRange = sheet.UsedRange;
-                var sheetName = (string)sheet.Name;
-                totalHits += ScanRangeForCallSites(usedRange, sheetName);
+                totalHits += ScanRangeForCallSites(usedRange);
             }
             catch (Exception ex)
             {
@@ -346,10 +342,13 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
         Marshal.ReleaseComObject(sheets);
 
-        Logger.Info($"Rehydration: {totalHits} FB formula cell(s) processed");
+        if (totalHits > 0)
+        {
+            Logger.Info($"Rehydration: scanned {sheetCount} sheet(s), processed {totalHits} FB cell(s)");
+        }
     }
 
-    private int ScanRangeForCallSites(dynamic usedRange, string sheetName)
+    private int ScanRangeForCallSites(dynamic usedRange)
     {
         // Bulk-read all formulas in a single interop call. For multi-cell ranges
         // Formula2 returns a 2D array; for a 1x1 range it returns the bare value.
@@ -364,10 +363,6 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             var rowBase = arr.GetLowerBound(0);
             var colBase = arr.GetLowerBound(1);
 
-            Logger.Info(
-                $"Rehydration: sheet '{sheetName}' Formula2 is {arr.GetType().Name} " +
-                $"[{rows}x{cols}] (lower bounds {rowBase},{colBase})");
-
             var hits = 0;
             for (var r = 0; r < rows; r++)
             {
@@ -380,12 +375,9 @@ public sealed class AddIn : IExcelAddIn, IDisposable
                 }
             }
 
-            Logger.Info($"Rehydration: sheet '{sheetName}' matched {hits} FB formula cell(s)");
             return hits;
         }
 
-        var typeName = raw?.GetType().FullName ?? "<null>";
-        Logger.Info($"Rehydration: sheet '{sheetName}' Formula2 returned non-array: {typeName}");
         return ProcessFormulaCell(raw as string) ? 1 : 0;
     }
 
@@ -402,14 +394,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             var normalNames = LetFormulaReconstructor.GetNormalCallSites(formula);
             if (normalNames.Count > 0)
             {
-                Logger.Info($"Rehydrating normal variants: {string.Join(", ", normalNames)}");
                 RehydrateCellFormulas(formula, normalNames);
             }
 
             var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
             if (debugNames.Count > 0)
             {
-                Logger.Info($"Rehydrating debug variants: {string.Join(", ", debugNames)}");
                 RehydrateCellFormulas(formula, debugNames);
             }
 
