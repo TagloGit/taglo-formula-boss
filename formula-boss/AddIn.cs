@@ -344,50 +344,60 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
     private void ScanRangeForCallSites(dynamic usedRange)
     {
-        var rows = (int)usedRange.Rows.Count;
-        var cols = (int)usedRange.Columns.Count;
+        // Bulk-read all formulas in a single interop call. For multi-cell ranges
+        // Formula2 returns a 1-indexed object[,]; for a 1x1 range it returns the
+        // bare value. Iterating the managed array avoids one COM round-trip per
+        // cell, which dominates cost on sheets with large used ranges.
+        object raw = usedRange.Formula2;
 
-        for (var r = 1; r <= rows; r++)
+        if (raw is object[,] grid)
         {
-            for (var c = 1; c <= cols; c++)
+            var rows = grid.GetLength(0);
+            var cols = grid.GetLength(1);
+            var rowBase = grid.GetLowerBound(0);
+            var colBase = grid.GetLowerBound(1);
+
+            for (var r = 0; r < rows; r++)
             {
-                dynamic? cell = null;
-                try
+                for (var c = 0; c < cols; c++)
                 {
-                    cell = usedRange.Cells[r, c];
-                    var formula = cell.Formula2 as string;
-                    if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.UdfPrefix))
-                    {
-                        continue;
-                    }
-
-                    // Rehydrate normal variants first, then debug variants
-                    var normalNames = LetFormulaReconstructor.GetNormalCallSites(formula);
-                    if (normalNames.Count > 0)
-                    {
-                        Debug.WriteLine($"Rehydrating normal variants for: {string.Join(", ", normalNames)}");
-                        RehydrateCellFormulas(formula, normalNames);
-                    }
-
-                    var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
-                    if (debugNames.Count > 0)
-                    {
-                        Debug.WriteLine($"Rehydrating debug variants for: {string.Join(", ", debugNames)}");
-                        RehydrateCellFormulas(formula, debugNames);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Rehydration error at cell [{r},{c}]: {ex.Message}");
-                }
-                finally
-                {
-                    if (cell != null)
-                    {
-                        Marshal.ReleaseComObject(cell);
-                    }
+                    ProcessFormulaCell(grid[rowBase + r, colBase + c] as string);
                 }
             }
+        }
+        else
+        {
+            ProcessFormulaCell(raw as string);
+        }
+    }
+
+    private void ProcessFormulaCell(string? formula)
+    {
+        if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.UdfPrefix))
+        {
+            return;
+        }
+
+        try
+        {
+            // Rehydrate normal variants first, then debug variants
+            var normalNames = LetFormulaReconstructor.GetNormalCallSites(formula);
+            if (normalNames.Count > 0)
+            {
+                Debug.WriteLine($"Rehydrating normal variants for: {string.Join(", ", normalNames)}");
+                RehydrateCellFormulas(formula, normalNames);
+            }
+
+            var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
+            if (debugNames.Count > 0)
+            {
+                Debug.WriteLine($"Rehydrating debug variants for: {string.Join(", ", debugNames)}");
+                RehydrateCellFormulas(formula, debugNames);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Rehydration error: {ex.Message}");
         }
     }
 
