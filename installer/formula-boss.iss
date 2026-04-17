@@ -2,7 +2,7 @@
 ; Installs to {localappdata}\FormulaBoss (no admin rights required)
 
 #define MyAppName "Formula Boss"
-#define MyAppVersion "0.1.12"
+#define MyAppVersion "0.1.13"
 #define MyAppPublisher "Taglo"
 #define MyAppURL "https://github.com/TagloGit/taglo-formula-boss"
 
