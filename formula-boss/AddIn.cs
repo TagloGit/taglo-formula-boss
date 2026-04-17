@@ -311,6 +311,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         var sheets = workbook.Worksheets;
         var sheetCount = (int)sheets.Count;
 
+        Logger.Info($"Rehydration: scanning {sheetCount} sheet(s)");
+
+        var totalHits = 0;
+
         for (var i = 1; i <= sheetCount; i++)
         {
             dynamic? sheet = null;
@@ -319,11 +323,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 sheet = sheets[i];
                 usedRange = sheet.UsedRange;
-                ScanRangeForCallSites(usedRange);
+                var sheetName = (string)sheet.Name;
+                totalHits += ScanRangeForCallSites(usedRange, sheetName);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Rehydration error on sheet {i}: {ex.Message}");
+                Logger.Error($"Rehydration sheet {i}", ex);
             }
             finally
             {
@@ -340,42 +345,55 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         }
 
         Marshal.ReleaseComObject(sheets);
+
+        Logger.Info($"Rehydration: {totalHits} FB formula cell(s) processed");
     }
 
-    private void ScanRangeForCallSites(dynamic usedRange)
+    private int ScanRangeForCallSites(dynamic usedRange, string sheetName)
     {
         // Bulk-read all formulas in a single interop call. For multi-cell ranges
-        // Formula2 returns a 1-indexed object[,]; for a 1x1 range it returns the
-        // bare value. Iterating the managed array avoids one COM round-trip per
-        // cell, which dominates cost on sheets with large used ranges.
+        // Formula2 returns a 2D array; for a 1x1 range it returns the bare value.
+        // Iterating the managed array avoids one COM round-trip per cell, which
+        // dominates cost on sheets with large used ranges.
         object raw = usedRange.Formula2;
 
-        if (raw is object[,] grid)
+        if (raw is Array arr && arr.Rank == 2)
         {
-            var rows = grid.GetLength(0);
-            var cols = grid.GetLength(1);
-            var rowBase = grid.GetLowerBound(0);
-            var colBase = grid.GetLowerBound(1);
+            var rows = arr.GetLength(0);
+            var cols = arr.GetLength(1);
+            var rowBase = arr.GetLowerBound(0);
+            var colBase = arr.GetLowerBound(1);
 
+            Logger.Info(
+                $"Rehydration: sheet '{sheetName}' Formula2 is {arr.GetType().Name} " +
+                $"[{rows}x{cols}] (lower bounds {rowBase},{colBase})");
+
+            var hits = 0;
             for (var r = 0; r < rows; r++)
             {
                 for (var c = 0; c < cols; c++)
                 {
-                    ProcessFormulaCell(grid[rowBase + r, colBase + c] as string);
+                    if (ProcessFormulaCell(arr.GetValue(rowBase + r, colBase + c) as string))
+                    {
+                        hits++;
+                    }
                 }
             }
+
+            Logger.Info($"Rehydration: sheet '{sheetName}' matched {hits} FB formula cell(s)");
+            return hits;
         }
-        else
-        {
-            ProcessFormulaCell(raw as string);
-        }
+
+        var typeName = raw?.GetType().FullName ?? "<null>";
+        Logger.Info($"Rehydration: sheet '{sheetName}' Formula2 returned non-array: {typeName}");
+        return ProcessFormulaCell(raw as string) ? 1 : 0;
     }
 
-    private void ProcessFormulaCell(string? formula)
+    private bool ProcessFormulaCell(string? formula)
     {
         if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.UdfPrefix))
         {
-            return;
+            return false;
         }
 
         try
@@ -384,20 +402,23 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             var normalNames = LetFormulaReconstructor.GetNormalCallSites(formula);
             if (normalNames.Count > 0)
             {
-                Debug.WriteLine($"Rehydrating normal variants for: {string.Join(", ", normalNames)}");
+                Logger.Info($"Rehydrating normal variants: {string.Join(", ", normalNames)}");
                 RehydrateCellFormulas(formula, normalNames);
             }
 
             var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
             if (debugNames.Count > 0)
             {
-                Debug.WriteLine($"Rehydrating debug variants for: {string.Join(", ", debugNames)}");
+                Logger.Info($"Rehydrating debug variants: {string.Join(", ", debugNames)}");
                 RehydrateCellFormulas(formula, debugNames);
             }
+
+            return normalNames.Count > 0 || debugNames.Count > 0;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Rehydration error: {ex.Message}");
+            Logger.Error("Rehydration cell", ex);
+            return false;
         }
     }
 
