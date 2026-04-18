@@ -44,6 +44,7 @@ Source: "{#BuildOutput}\formula-boss64.dna"; DestDir: "{app}"; Flags: ignorevers
 ; Core managed assemblies (unpacked per .dna config)
 Source: "{#BuildOutput}\formula-boss.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\FormulaBoss.Runtime.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildOutput}\Taglo.Excel.Common.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Supporting config files
 Source: "{#BuildOutput}\formula-boss.deps.json"; DestDir: "{app}"; Flags: ignoreversion
