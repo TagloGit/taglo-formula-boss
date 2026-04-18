@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- Version — single source of truth for all assemblies -->
-    <Version>0.1.13</Version>
+    <Version>0.1.14</Version>
 
     <!-- Enforce code style during build -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
