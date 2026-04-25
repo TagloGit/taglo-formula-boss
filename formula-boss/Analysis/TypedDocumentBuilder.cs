@@ -103,13 +103,13 @@ internal static class TypedDocumentBuilder
 
     private static void EmitTypedRow(StringBuilder sb, string rowTypeName, IReadOnlyList<string> columns)
     {
-        sb.AppendLine($"class {rowTypeName} {{");
+        // Inherit ExcelArray so synthetic Row exposes the same LINQ/ExcelArray surface
+        // (Skip, Where, Map, FirstOrDefault, ...) as the runtime Row : ExcelArray type.
+        sb.AppendLine($"class {rowTypeName} : ExcelArray {{");
+        sb.AppendLine($"{rowTypeName}() : base(new object[0,0]) {{}}");
 
-        // Indexer for bracket access
+        // Row-specific members not present on ExcelArray
         sb.AppendLine("public ExcelScalar this[string columnName] => default!;");
-        sb.AppendLine("public ExcelScalar this[int index] => default!;");
-        sb.AppendLine("public int RowCount => 0;");
-        sb.AppendLine("public int ColCount => 0;");
         sb.AppendLine("public int ColumnCount => 0;");
 
         var mapping = ColumnMapper.BuildMapping(columns.ToArray());

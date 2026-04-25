@@ -1,5 +1,9 @@
+using FormulaBoss.Compilation;
 using FormulaBoss.UI;
 using FormulaBoss.UI.Completion;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 using Xunit;
 
@@ -161,5 +165,61 @@ public class SyntheticDocumentBuilderTests
 
         var (source, _) = SyntheticDocumentBuilder.Build(formula, textUp, TwoTableMetadata);
         Assert.Contains("ExcelArray r = default!", source);
+    }
+
+    [Fact]
+    public void Build_TypedRowClass_InheritsExcelArray()
+    {
+        var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
+        Assert.Contains("class __SalesRow : ExcelArray", source);
+    }
+
+    [Fact]
+    public void BuildForDiagnostics_LinqOnRow_CompilesWithoutDiagnostics()
+    {
+        // Mirrors the issue's repro: LINQ-style methods on a Row resolved via .First()
+        // should be valid C# in the synthetic document.
+        var formula = "=`Sales.Rows.First().Skip(1).FirstOrDefault(p => p != null)`";
+
+        AssertSyntheticDiagnosticFree(formula, TwoTableMetadata);
+    }
+
+    [Fact]
+    public void BuildForDiagnostics_ExcelArrayMethodsOnRow_CompilesWithoutDiagnostics()
+    {
+        // ExcelArray surface (Where, Map, Skip, Take, Count) on a Row.
+        var formula = "=`Sales.Rows.First().Skip(1).Where(s => s != null).Map(s => s).Take(2).Count()`";
+
+        AssertSyntheticDiagnosticFree(formula, TwoTableMetadata);
+    }
+
+    private static void AssertSyntheticDiagnosticFree(string formula, WorkbookMetadata metadata)
+    {
+        var result = SyntheticDocumentBuilder.BuildForDiagnostics(formula, metadata);
+        Assert.NotNull(result);
+
+        var syntaxTree = CSharpSyntaxTree.ParseText(result.Source);
+        var compilation = CSharpCompilation.Create(
+            "DiagnosticCheck",
+            new[] { syntaxTree },
+            MetadataReferenceProvider.GetMetadataReferences(),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        // Only check diagnostics that fall within the embedded expression — errors elsewhere
+        // (e.g. ambiguous overloads in the synthetic stubs) aren't what this test is verifying.
+        var exprStart = result.ExpressionStartInSynthetic;
+        var exprEnd = exprStart + result.ExpressionLength;
+        var errors = compilation.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Where(d =>
+            {
+                var span = d.Location.SourceSpan;
+                return span.Start >= exprStart && span.End <= exprEnd;
+            })
+            .Select(d => d.ToString())
+            .ToList();
+
+        Assert.True(errors.Count == 0,
+            $"Expected no diagnostic errors on embedded expression but got:\n{string.Join("\n", errors)}\n\nSource:\n{result.Source}");
     }
 }
