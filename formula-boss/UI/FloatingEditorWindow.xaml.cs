@@ -266,13 +266,10 @@ public partial class FloatingEditorWindow
 
         _completionPopup = new CompletionPopup(FormulaEditor.TextArea)
         {
-            CloseWhenCaretAtBeginning = true
+            CloseWhenCaretAtBeginning = true,
+            StartOffset = FormulaEditor.CaretOffset - wordLength,
+            IsColumnCompletion = items.Any(i => i is ColumnCompletionData)
         };
-
-        if (wordLength > 0)
-        {
-            _completionPopup.StartOffset = FormulaEditor.CaretOffset - wordLength;
-        }
 
         foreach (var item in items)
         {
