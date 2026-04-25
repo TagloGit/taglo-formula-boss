@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -26,6 +27,7 @@ internal sealed class CompletionPopup
 
     private readonly TextArea _textArea;
     private int _endOffset;
+    private int _startOffset = -1;
 
     public CompletionPopup(TextArea textArea)
     {
@@ -58,9 +60,27 @@ internal sealed class CompletionPopup
 
     public CompletionList CompletionList { get; }
 
-    public int StartOffset { get; set; }
+    /// <summary>
+    ///     Offset of the start of the user's typed prefix (i.e. where insertion replaces from).
+    ///     Defaults to -1 as a sentinel; if not assigned by the caller before <see cref="Show"/>,
+    ///     it is initialized to the caret offset (an empty replacement segment).
+    /// </summary>
+    public int StartOffset
+    {
+        get => _startOffset;
+        set => _startOffset = value;
+    }
 
     public bool CloseWhenCaretAtBeginning { get; set; }
+
+    /// <summary>
+    ///     True when the popup is hosting column completions (dot-rewrite or bracket).
+    ///     The value-add of these completions is the bracket transformation on commit,
+    ///     not filtering — so when AvalonEdit's filter empties the visible list because
+    ///     the typed prefix exactly matches an item, the popup stays open with that item
+    ///     selected so Enter/Tab still triggers the rewrite.
+    /// </summary>
+    public bool IsColumnCompletion { get; set; }
 
     public bool IsOpen => _popup.IsOpen;
 
@@ -69,6 +89,14 @@ internal sealed class CompletionPopup
     public void Show()
     {
         _endOffset = _textArea.Caret.Offset;
+
+        // Defensive default: if caller forgot to set StartOffset, treat the segment
+        // as empty (no prefix to replace) rather than [0, caret) which would replace
+        // the entire formula on commit.
+        if (_startOffset < 0 || _startOffset > _endOffset)
+        {
+            _startOffset = _endOffset;
+        }
 
         _textArea.Document.Changing += OnDocumentChanging;
         _textArea.Caret.PositionChanged += OnCaretPositionChanged;
@@ -141,6 +169,14 @@ internal sealed class CompletionPopup
         var endOffset = _endOffset;
         Close();
 
+        // Defensive: a corrupted [start, end) range (e.g. start=0 with non-empty doc when
+        // the popup opened with no prefix) would otherwise replace text outside the typed
+        // prefix span. Refuse to commit a non-empty completion with an invalid range.
+        if (startOffset < 0 || endOffset < startOffset || endOffset > _textArea.Document.TextLength)
+        {
+            return;
+        }
+
         var segment = new AnchorSegment(_textArea.Document, startOffset, endOffset - startOffset);
         item.Complete(_textArea, segment, e);
     }
@@ -186,15 +222,58 @@ internal sealed class CompletionPopup
         var text = _textArea.Document.GetText(StartOffset, caretOffset - StartOffset);
         CompletionList.SelectItem(text);
 
-        // If filtering left no visible items, close
+        // If filtering left no visible items, close — except for column completion,
+        // where the typed prefix exactly matching an item (e.g. column "1" + user types "1")
+        // can cause AvalonEdit to drop the item from the visible list. In that case keep
+        // the popup open with the matching item selected so Enter/Tab still rewrites to
+        // bracket syntax.
         if (CompletionList.ListBox?.Items.Count == 0)
         {
+            if (IsColumnCompletion && TryReselectExactColumnMatch(text))
+            {
+                _popup.HorizontalOffset = 0;
+                return;
+            }
+
             Close();
             return;
         }
 
         // Force popup to reposition to follow the caret
         _popup.HorizontalOffset = 0;
+    }
+
+    /// <summary>
+    ///     When AvalonEdit's filter has emptied the visible list, look for a column
+    ///     completion item whose text exactly matches the typed prefix. If found, repopulate
+    ///     the listbox with just that item and select it so a subsequent Enter/Tab triggers
+    ///     <see cref="OnInsertionRequested"/>.
+    /// </summary>
+    private bool TryReselectExactColumnMatch(string typedPrefix)
+    {
+        if (string.IsNullOrEmpty(typedPrefix) || CompletionList.ListBox == null)
+        {
+            return false;
+        }
+
+        ICompletionData? match = null;
+        foreach (var data in CompletionList.CompletionData)
+        {
+            if (data.Text.Equals(typedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                match = data;
+                break;
+            }
+        }
+
+        if (match == null)
+        {
+            return false;
+        }
+
+        CompletionList.ListBox.ItemsSource = new ObservableCollection<ICompletionData> { match };
+        CompletionList.SelectedItem = match;
+        return true;
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
