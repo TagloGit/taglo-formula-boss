@@ -192,8 +192,10 @@ public class SemanticAnalysisServiceTests
     [Fact]
     public void FormatTypeForDisplay_ExcelScalar_UnchangedName()
     {
+        // Use the bracket indexer on Row to obtain ExcelScalar — column names are not
+        // emitted as dot-access properties on the synthetic Row.
         var display = _service.FormatTypeForDisplay(
-            GetTypeForExpression("Sales.Rows.First(r => true).Amount"),
+            GetTypeForExpression("Sales.Rows.First(r => true)[\"Amount\"]"),
             TwoTableMetadata);
         Assert.Equal("ExcelScalar", display);
     }

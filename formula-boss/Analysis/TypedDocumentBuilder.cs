@@ -61,7 +61,7 @@ internal static class TypedDocumentBuilder
             return tableTypeNames;
         }
 
-        foreach (var (tableName, columns) in metadata.TableColumns)
+        foreach (var tableName in metadata.TableColumns.Keys)
         {
             var safeTableName = ColumnMapper.Sanitise(tableName);
             if (string.IsNullOrEmpty(safeTableName))
@@ -88,7 +88,7 @@ internal static class TypedDocumentBuilder
                 [typeof(Column)] = nameof(Column)
             };
 
-            EmitTypedRow(sb, rowTypeName, columns);
+            EmitTypedRow(sb, rowTypeName);
             EmitSyntheticCollection(sb, typeof(RowCollection), rowCollTypeName, typeMap, rowTypeName);
             EmitSyntheticCollection(sb, typeof(RowGroup), rowGroupTypeName, typeMap, rowTypeName);
             EmitSyntheticCollection(sb, typeof(GroupedRowCollection), groupedCollTypeName, typeMap,
@@ -101,22 +101,19 @@ internal static class TypedDocumentBuilder
         return tableTypeNames;
     }
 
-    private static void EmitTypedRow(StringBuilder sb, string rowTypeName, IReadOnlyList<string> columns)
+    private static void EmitTypedRow(StringBuilder sb, string rowTypeName)
     {
         // Inherit ExcelArray so synthetic Row exposes the same LINQ/ExcelArray surface
         // (Skip, Where, Map, FirstOrDefault, ...) as the runtime Row : ExcelArray type.
+        // Column names are surfaced separately by CompletionHelpers.BuildRowCompletions
+        // as bracket-inserting items, so they're deliberately not emitted as properties
+        // on the synthetic Row.
         sb.AppendLine($"class {rowTypeName} : ExcelArray {{");
         sb.AppendLine($"{rowTypeName}() : base(new object[0,0]) {{}}");
 
         // Row-specific members not present on ExcelArray
         sb.AppendLine("public ExcelScalar this[string columnName] => default!;");
         sb.AppendLine("public int ColumnCount => 0;");
-
-        var mapping = ColumnMapper.BuildMapping(columns.ToArray());
-        foreach (var (sanitised, _) in mapping)
-        {
-            sb.AppendLine($"public ExcelScalar {sanitised} => default!;");
-        }
 
         sb.AppendLine("}");
         sb.AppendLine();

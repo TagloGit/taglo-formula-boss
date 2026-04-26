@@ -30,13 +30,16 @@ public class SyntheticDocumentBuilderTests
     }
 
     [Fact]
-    public void Build_GeneratesTypedRowClass_WithColumnProperties()
+    public void Build_TypedRowClass_DoesNotEmitColumnNameProperties()
     {
+        // Column names are surfaced by CompletionHelpers.BuildRowCompletions as bracket-
+        // inserting items; emitting them as synthetic properties on Row would duplicate
+        // that path and force the completion provider to strip them out again.
         var (source, _) = SyntheticDocumentBuilder.Build("=`Sales.`", "=`Sales.", TwoTableMetadata);
         Assert.Contains("class __SalesRow", source);
-        Assert.Contains("public ExcelScalar Date", source);
-        Assert.Contains("public ExcelScalar Amount", source);
-        Assert.Contains("public ExcelScalar Region", source);
+        Assert.DoesNotContain("public ExcelScalar Date", source);
+        Assert.DoesNotContain("public ExcelScalar Amount", source);
+        Assert.DoesNotContain("public ExcelScalar Region", source);
     }
 
     [Fact]
@@ -106,23 +109,6 @@ public class SyntheticDocumentBuilderTests
         Assert.True(offset <= source.Length);
         // The character before the caret should be '.'
         Assert.Equal('.', source[offset - 1]);
-    }
-
-    [Fact]
-    public void Build_SanitisesColumnNamesWithSpaces()
-    {
-        var metadata = new WorkbookMetadata(
-            new[] { "Data" },
-            Array.Empty<string>(),
-            new Dictionary<string, IReadOnlyList<string>>
-            {
-                ["Data"] = new[] { "First Name", "Last Name", "Age" }
-            });
-
-        var (source, _) = SyntheticDocumentBuilder.Build("=`Data.`", "=`Data.", metadata);
-        Assert.Contains("public ExcelScalar FirstName", source);
-        Assert.Contains("public ExcelScalar LastName", source);
-        Assert.Contains("public ExcelScalar Age", source);
     }
 
     [Fact]
