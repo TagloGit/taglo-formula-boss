@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -27,7 +27,6 @@ internal sealed class CompletionPopup
 
     private readonly TextArea _textArea;
     private int _endOffset;
-    private int _startOffset = -1;
 
     public CompletionPopup(TextArea textArea)
     {
@@ -62,14 +61,10 @@ internal sealed class CompletionPopup
 
     /// <summary>
     ///     Offset of the start of the user's typed prefix (i.e. where insertion replaces from).
-    ///     Defaults to -1 as a sentinel; if not assigned by the caller before <see cref="Show"/>,
+    ///     Defaults to -1 as a sentinel; if not assigned by the caller before <see cref="Show" />,
     ///     it is initialized to the caret offset (an empty replacement segment).
     /// </summary>
-    public int StartOffset
-    {
-        get => _startOffset;
-        set => _startOffset = value;
-    }
+    public int StartOffset { get; set; } = -1;
 
     public bool CloseWhenCaretAtBeginning { get; set; }
 
@@ -93,9 +88,9 @@ internal sealed class CompletionPopup
         // Defensive default: if caller forgot to set StartOffset, treat the segment
         // as empty (no prefix to replace) rather than [0, caret) which would replace
         // the entire formula on commit.
-        if (_startOffset < 0 || _startOffset > _endOffset)
+        if (StartOffset < 0 || StartOffset > _endOffset)
         {
-            _startOffset = _endOffset;
+            StartOffset = _endOffset;
         }
 
         _textArea.Document.Changing += OnDocumentChanging;
@@ -247,7 +242,7 @@ internal sealed class CompletionPopup
     ///     When AvalonEdit's filter has emptied the visible list, look for a column
     ///     completion item whose text exactly matches the typed prefix. If found, repopulate
     ///     the listbox with just that item and select it so a subsequent Enter/Tab triggers
-    ///     <see cref="OnInsertionRequested"/>.
+    ///     <see cref="OnInsertionRequested" />.
     /// </summary>
     private bool TryReselectExactColumnMatch(string typedPrefix)
     {
