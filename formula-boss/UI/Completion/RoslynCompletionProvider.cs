@@ -36,13 +36,6 @@ internal sealed class RoslynCompletionProvider
             return (items, true);
         }
 
-        // Row dot context: show column names that insert as bracket syntax
-        if (ctx.Type == DslType.Row)
-        {
-            var items = CompletionHelpers.GetDotColumnCompletions(textUpToCaret, fullText, metadata);
-            return (items, false);
-        }
-
         // Outside DSL: use top-level completions (table names, LET variables).
         // Check cursor context (InsideDsl), not whether formula contains backticks elsewhere.
         if (!ctx.InsideDsl)
@@ -63,23 +56,31 @@ internal sealed class RoslynCompletionProvider
         var roslynItems = await _workspace.GetCompletionsAsync(
             syntheticSource, caretOffset, cancellationToken);
 
-        if (roslynItems.Count == 0)
-        {
-            return (Array.Empty<CompletionData>(), false);
-        }
-
-        // Get the type before the dot once for both Row and Table detection
+        // Get the type before the dot once for both Row and Table detection.
+        // We need this even when Roslyn returns no items (e.g. lambda parameter on Row)
+        // so we can still emit column completions.
         var typeName = metadata != null
             ? await _workspace.GetTypeBeforeDotAsync(caretOffset, cancellationToken)
             : null;
 
-        // Check if the expression before the dot is a Row type — if so,
-        // replace Roslyn's property completions with bracket-inserting column completions
+        // Check if the expression before the dot is a Row type — if so, augment Roslyn's
+        // completions (LINQ/ExcelArray surface) with bracket-inserting column completions.
+        // Filter the synthetic column-name properties from Roslyn so they don't duplicate
+        // the bracket-syntax versions emitted by BuildRowCompletions.
         var rowTableName = ResolveTableNameFromType(typeName, metadata, @"^__(.+)Row$");
         if (rowTableName != null)
         {
             var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, rowTableName);
-            return (columnItems, false);
+            var sanitisedColumns = GetSanitisedColumnNames(rowTableName, metadata);
+            var roslynResult = MapCompletionItems(roslynItems);
+            roslynResult.RemoveAll(item => sanitisedColumns.Contains(item.Text));
+            roslynResult.AddRange(columnItems);
+            return (roslynResult, false);
+        }
+
+        if (roslynItems.Count == 0)
+        {
+            return (Array.Empty<CompletionData>(), false);
         }
 
         // Check if the expression before the dot is a Table type — if so,
@@ -95,6 +96,29 @@ internal sealed class RoslynCompletionProvider
 
         var result = MapCompletionItems(roslynItems);
         return (result, false);
+    }
+
+    /// <summary>
+    ///     Returns the set of sanitised column-name property identifiers emitted on the
+    ///     synthetic Row class for a given table. Used to strip these synthetic stubs
+    ///     from Roslyn's completion list so they don't duplicate the bracket-syntax
+    ///     column completions.
+    /// </summary>
+    private static HashSet<string> GetSanitisedColumnNames(string tableName, WorkbookMetadata? metadata)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        if (metadata == null ||
+            !metadata.TableColumns.TryGetValue(tableName, out var columns))
+        {
+            return result;
+        }
+
+        foreach (var (sanitised, _) in ColumnMapper.BuildMapping(columns.ToArray()))
+        {
+            result.Add(sanitised);
+        }
+
+        return result;
     }
 
     /// <summary>

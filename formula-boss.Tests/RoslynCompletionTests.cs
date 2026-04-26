@@ -223,8 +223,35 @@ public class RoslynCompletionTests : IDisposable
         Assert.Contains("Amount", texts);
         Assert.Contains("Region", texts);
 
-        // Items should be ColumnCompletionData (bracket-inserting), not plain CompletionData
-        Assert.All(items, item => Assert.IsType<ColumnCompletionData>(item));
+        // Column-name items insert as bracket syntax (ColumnCompletionData);
+        // LINQ/ExcelArray members are regular CompletionData and must coexist.
+        var columnItems = items.Where(i => i is ColumnCompletionData).Select(i => i.Text).ToList();
+        Assert.Contains("Date", columnItems);
+        Assert.Contains("Amount", columnItems);
+        Assert.Contains("Region", columnItems);
+    }
+
+    [Fact]
+    public async Task RowAfterFirst_AlsoShowsLinqAndExcelArrayMembers()
+    {
+        // Issue #325: a Row obtained via .First()/.Single() should expose its LINQ surface
+        // (Skip, Where, FirstOrDefault, Map, ...) alongside the column headers.
+        var formula = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).`)";
+        var textUp = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Skip", texts);
+        Assert.Contains("Where", texts);
+        Assert.Contains("FirstOrDefault", texts);
+        Assert.Contains("Map", texts);
+
+        // LINQ members must be plain CompletionData so they insert as `.Skip(...)`,
+        // not as bracket syntax.
+        Assert.All(items.Where(i => i.Text is "Skip" or "Where" or "FirstOrDefault" or "Map"),
+            item => Assert.IsNotType<ColumnCompletionData>(item));
     }
 
     [Fact]
@@ -240,7 +267,45 @@ public class RoslynCompletionTests : IDisposable
         Assert.Contains("Date", texts);
         Assert.Contains("Amount", texts);
         Assert.Contains("Region", texts);
-        Assert.All(items, item => Assert.IsType<ColumnCompletionData>(item));
+
+        var columnItems = items.Where(i => i is ColumnCompletionData).Select(i => i.Text).ToList();
+        Assert.Contains("Date", columnItems);
+        Assert.Contains("Amount", columnItems);
+        Assert.Contains("Region", columnItems);
+    }
+
+    [Fact]
+    public async Task RowLambdaParam_ShowsColumnsAndLinqMembers()
+    {
+        // Lambda parameter on a Row context (.Rows.Where(r => r.)) should also expose
+        // the LINQ surface alongside columns.
+        var formula = "=LET(t, Sales, `t.Rows.Where(r => r.`)";
+        var textUp = "=LET(t, Sales, `t.Rows.Where(r => r.";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var texts = items.Select(i => i.Text).ToList();
+        Assert.Contains("Date", texts);
+        Assert.Contains("Skip", texts);
+        Assert.Contains("FirstOrDefault", texts);
+    }
+
+    [Fact]
+    public async Task Row_ColumnNamesNotDuplicated()
+    {
+        // The synthetic Row class emits column-name properties for Roslyn; the bracket-
+        // syntax versions come from BuildRowCompletions. The merge must not list a
+        // column twice.
+        var formula = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).`)";
+        var textUp = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        Assert.Single(items, i => i.Text == "Date");
+        Assert.Single(items, i => i.Text == "Amount");
+        Assert.Single(items, i => i.Text == "Region");
     }
 
     [Fact]
