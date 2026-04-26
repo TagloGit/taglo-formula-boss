@@ -84,19 +84,21 @@ public class TypedDocumentBuilderTests
     }
 
     [Fact]
-    public void EmitTableTypes_Row_HasColumnProperties()
+    public void EmitTableTypes_Row_HasIndexerAndColumnCount_ButNoColumnNameProperties()
     {
+        // Column names are surfaced by CompletionHelpers.BuildRowCompletions as bracket-
+        // inserting items, not as synthetic dot-access properties on the Row stub.
         var sb = new StringBuilder();
         TypedDocumentBuilder.AppendUsings(sb);
         TypedDocumentBuilder.EmitTableTypes(sb, SingleTableMetadata);
         var source = sb.ToString();
 
         Assert.Contains("class __SalesRow : ExcelArray {", source);
-        Assert.Contains("public ExcelScalar Date => default!;", source);
-        Assert.Contains("public ExcelScalar Amount => default!;", source);
-        Assert.Contains("public ExcelScalar Region => default!;", source);
         Assert.Contains("public ExcelScalar this[string columnName] => default!;", source);
         Assert.Contains("public int ColumnCount => 0;", source);
+        Assert.DoesNotContain("public ExcelScalar Date => default!;", source);
+        Assert.DoesNotContain("public ExcelScalar Amount => default!;", source);
+        Assert.DoesNotContain("public ExcelScalar Region => default!;", source);
     }
 
     [Fact]

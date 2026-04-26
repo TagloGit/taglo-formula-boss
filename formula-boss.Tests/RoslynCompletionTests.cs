@@ -313,9 +313,9 @@ public class RoslynCompletionTests : IDisposable
     [Fact]
     public async Task Row_ColumnNamesNotDuplicated()
     {
-        // The synthetic Row class emits column-name properties for Roslyn; the bracket-
-        // syntax versions come from BuildRowCompletions. The merge must not list a
-        // column twice.
+        // Column names are surfaced only via BuildRowCompletions (as bracket-inserting
+        // items). Guards against a future regression that re-emits them as synthetic
+        // properties on Row, which would duplicate them in the merged list.
         var formula = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).`)";
         var textUp = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).";
 

@@ -63,23 +63,14 @@ internal sealed class RoslynCompletionProvider
             ? await _workspace.GetTypeBeforeDotAsync(caretOffset, cancellationToken)
             : null;
 
-        // Check if the expression before the dot is a Row type — if so, augment Roslyn's
-        // completions (LINQ/ExcelArray surface) with bracket-inserting column completions.
-        // Filter the synthetic column-name properties from Roslyn so they don't duplicate
-        // the bracket-syntax versions emitted by BuildRowCompletions.
-        // Columns are listed first because they're the most common Row completion target —
-        // the AvalonEdit CompletionList renders items in insertion order.
+        // If the expression before the dot is a Row, augment Roslyn's completions with
+        // bracket-inserting column items. Run this before the empty-roslyn early return
+        // so column completions still appear when Roslyn produces nothing (e.g. lambda
+        // parameter syntax).
         var rowTableName = ResolveTableNameFromType(typeName, metadata, @"^__(.+)Row$");
         if (rowTableName != null)
         {
-            var sanitisedColumns = GetSanitisedColumnNames(rowTableName, metadata);
-            var linqItems = MapCompletionItems(roslynItems);
-            linqItems.RemoveAll(item => sanitisedColumns.Contains(item.Text));
-
-            var rowResult = new List<CompletionData>();
-            rowResult.AddRange(CompletionHelpers.BuildRowCompletions(metadata, false, rowTableName));
-            rowResult.AddRange(linqItems);
-            return (rowResult, false);
+            return (BuildAugmentedCompletions(roslynItems, rowTableName, metadata, columnsFirst: true), false);
         }
 
         if (roslynItems.Count == 0)
@@ -87,15 +78,10 @@ internal sealed class RoslynCompletionProvider
             return (Array.Empty<CompletionData>(), false);
         }
 
-        // Check if the expression before the dot is a Table type — if so,
-        // augment Roslyn's completions with bracket-inserting column completions
         var tableTableName = ResolveTableNameFromType(typeName, metadata, @"^__(.+)Table$");
         if (tableTableName != null)
         {
-            var roslynResult = MapCompletionItems(roslynItems);
-            var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, tableTableName);
-            roslynResult.AddRange(columnItems);
-            return (roslynResult, false);
+            return (BuildAugmentedCompletions(roslynItems, tableTableName, metadata, columnsFirst: false), false);
         }
 
         var result = MapCompletionItems(roslynItems);
@@ -103,23 +89,27 @@ internal sealed class RoslynCompletionProvider
     }
 
     /// <summary>
-    ///     Returns the set of sanitised column-name property identifiers emitted on the
-    ///     synthetic Row class for a given table. Used to strip these synthetic stubs
-    ///     from Roslyn's completion list so they don't duplicate the bracket-syntax
-    ///     column completions.
+    ///     Combines Roslyn's completion items with bracket-inserting column completions for the
+    ///     given table. Columns appear first (Row) or last (Table) per <paramref name="columnsFirst" />,
+    ///     matching how the AvalonEdit CompletionList renders items in insertion order.
     /// </summary>
-    private static HashSet<string> GetSanitisedColumnNames(string tableName, WorkbookMetadata? metadata)
+    private static IReadOnlyList<CompletionData> BuildAugmentedCompletions(
+        IReadOnlyList<CompletionItem> roslynItems, string tableName, WorkbookMetadata? metadata,
+        bool columnsFirst)
     {
-        var result = new HashSet<string>(StringComparer.Ordinal);
-        if (metadata == null ||
-            !metadata.TableColumns.TryGetValue(tableName, out var columns))
-        {
-            return result;
-        }
+        var memberItems = MapCompletionItems(roslynItems);
+        var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, tableName);
 
-        foreach (var (sanitised, _) in ColumnMapper.BuildMapping(columns.ToArray()))
+        var result = new List<CompletionData>(memberItems.Count + columnItems.Count);
+        if (columnsFirst)
         {
-            result.Add(sanitised);
+            result.AddRange(columnItems);
+            result.AddRange(memberItems);
+        }
+        else
+        {
+            result.AddRange(memberItems);
+            result.AddRange(columnItems);
         }
 
         return result;
