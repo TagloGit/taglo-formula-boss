@@ -91,7 +91,7 @@ public class TypedDocumentBuilderTests
         TypedDocumentBuilder.EmitTableTypes(sb, SingleTableMetadata);
         var source = sb.ToString();
 
-        Assert.Contains("class __SalesRow {", source);
+        Assert.Contains("class __SalesRow : ExcelArray {", source);
         Assert.Contains("public ExcelScalar Date => default!;", source);
         Assert.Contains("public ExcelScalar Amount => default!;", source);
         Assert.Contains("public ExcelScalar Region => default!;", source);
