@@ -308,6 +308,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             return;
         }
 
+        // Track UDF names already compiled in this pass. Two cells can reference the same
+        // UDF name with diverging _src_ values (e.g. one cell was edited, another wasn't);
+        // re-compiling the second emits ExcelDNA's "repeated function name" warning.
+        // First-write-wins keeps the workbook consistent with the cell processed first.
+        var processedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var sheets = workbook.Worksheets;
         var sheetCount = (int)sheets.Count;
         var totalHits = 0;
@@ -320,7 +326,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 sheet = sheets[i];
                 usedRange = sheet.UsedRange;
-                totalHits += ScanRangeForCallSites(usedRange);
+                totalHits += ScanRangeForCallSites(usedRange, processedNames);
             }
             catch (Exception ex)
             {
@@ -348,7 +354,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         }
     }
 
-    private int ScanRangeForCallSites(dynamic usedRange)
+    private int ScanRangeForCallSites(dynamic usedRange, HashSet<string> processedNames)
     {
         // Bulk-read all formulas in a single interop call. For multi-cell ranges
         // Formula2 returns a 2D array; for a 1x1 range it returns the bare value.
@@ -368,7 +374,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             {
                 for (var c = 0; c < cols; c++)
                 {
-                    if (ProcessFormulaCell(arr.GetValue(rowBase + r, colBase + c) as string))
+                    if (ProcessFormulaCell(arr.GetValue(rowBase + r, colBase + c) as string, processedNames))
                     {
                         hits++;
                     }
@@ -378,10 +384,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             return hits;
         }
 
-        return ProcessFormulaCell(raw as string) ? 1 : 0;
+        return ProcessFormulaCell(raw as string, processedNames) ? 1 : 0;
     }
 
-    private bool ProcessFormulaCell(string? formula)
+    private bool ProcessFormulaCell(string? formula, HashSet<string> processedNames)
     {
         if (string.IsNullOrEmpty(formula) || !formula.Contains(CodeEmitter.UdfPrefix))
         {
@@ -394,13 +400,13 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             var normalNames = LetFormulaReconstructor.GetNormalCallSites(formula);
             if (normalNames.Count > 0)
             {
-                RehydrateCellFormulas(formula, normalNames);
+                RehydrateCellFormulas(formula, normalNames, processedNames);
             }
 
             var debugNames = LetFormulaReconstructor.GetDebugCallSites(formula);
             if (debugNames.Count > 0)
             {
-                RehydrateCellFormulas(formula, debugNames);
+                RehydrateCellFormulas(formula, debugNames, processedNames);
             }
 
             return normalNames.Count > 0 || debugNames.Count > 0;
@@ -414,9 +420,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
     /// <summary>
     ///     Compiles UDFs for the given call site names by extracting DSL source
-    ///     from the matching _src_ bindings in the formula.
+    ///     from the matching _src_ bindings in the formula. Names already in
+    ///     <paramref name="processedNames" /> are skipped (first-write-wins).
     /// </summary>
-    private void RehydrateCellFormulas(string formula, List<string> names)
+    private void RehydrateCellFormulas(string formula, List<string> names, HashSet<string> processedNames)
     {
         if (!LetFormulaParser.TryParse(formula, out var structure) || structure == null)
         {
@@ -443,6 +450,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
         foreach (var name in names)
         {
+            if (!processedNames.Add(name))
+            {
+                Debug.WriteLine($"Rehydration: skipped {name} (already compiled in this pass)");
+                continue;
+            }
+
             if (sourceMap.TryGetValue(name, out var source))
             {
                 try

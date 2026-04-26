@@ -177,7 +177,9 @@ public class DynamicCompiler
     {
         foreach (var type in assembly.GetExportedTypes())
         {
-            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
+            // DeclaredOnly so we don't pick up inherited object.Equals/ReferenceEquals as UDFs.
+            var methods = type.GetMethods(
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
             foreach (var method in methods)
             {
@@ -220,7 +222,8 @@ public class DynamicCompiler
     {
         foreach (var type in assembly.GetExportedTypes())
         {
-            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
+            var methods = type.GetMethods(
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
             foreach (var method in methods)
             {

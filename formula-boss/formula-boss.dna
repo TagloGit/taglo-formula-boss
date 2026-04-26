@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <DnaLibrary Name="Formula Boss" RuntimeVersion="v4.0">
-  <!-- Keep formula-boss.dll unpacked so Roslyn can reference RuntimeHelpers for dynamic compilation -->
-  <ExternalLibrary Path="formula-boss.dll" ExplicitExports="false" LoadFromBytes="false" Pack="false" ExplicitRegistration="false" />
+  <!-- Keep formula-boss.dll unpacked so Roslyn can reference RuntimeHelpers for dynamic compilation.
+       ExplicitExports="true" so only [ExcelFunction]/[ExcelCommand]-marked methods are registered;
+       this stops ExcelDNA from scanning every public static method (which both leaks internal
+       helpers as UDFs and trips a collectibility error when introspecting signatures with custom
+       types — see issue #323). -->
+  <ExternalLibrary Path="formula-boss.dll" ExplicitExports="true" LoadFromBytes="false" Pack="false" ExplicitRegistration="false" />
 
   <!-- Keep ExcelDna.Integration.dll unpacked so Roslyn can reference it for dynamic compilation -->
   <Reference Path="ExcelDna.Integration.dll" Pack="false" />
