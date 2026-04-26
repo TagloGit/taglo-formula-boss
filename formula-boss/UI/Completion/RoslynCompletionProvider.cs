@@ -67,15 +67,19 @@ internal sealed class RoslynCompletionProvider
         // completions (LINQ/ExcelArray surface) with bracket-inserting column completions.
         // Filter the synthetic column-name properties from Roslyn so they don't duplicate
         // the bracket-syntax versions emitted by BuildRowCompletions.
+        // Columns are listed first because they're the most common Row completion target —
+        // the AvalonEdit CompletionList renders items in insertion order.
         var rowTableName = ResolveTableNameFromType(typeName, metadata, @"^__(.+)Row$");
         if (rowTableName != null)
         {
-            var columnItems = CompletionHelpers.BuildRowCompletions(metadata, false, rowTableName);
             var sanitisedColumns = GetSanitisedColumnNames(rowTableName, metadata);
-            var roslynResult = MapCompletionItems(roslynItems);
-            roslynResult.RemoveAll(item => sanitisedColumns.Contains(item.Text));
-            roslynResult.AddRange(columnItems);
-            return (roslynResult, false);
+            var linqItems = MapCompletionItems(roslynItems);
+            linqItems.RemoveAll(item => sanitisedColumns.Contains(item.Text));
+
+            var rowResult = new List<CompletionData>();
+            rowResult.AddRange(CompletionHelpers.BuildRowCompletions(metadata, false, rowTableName));
+            rowResult.AddRange(linqItems);
+            return (rowResult, false);
         }
 
         if (roslynItems.Count == 0)

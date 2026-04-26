@@ -292,6 +292,25 @@ public class RoslynCompletionTests : IDisposable
     }
 
     [Fact]
+    public async Task Row_ColumnsListedBeforeLinqMembers()
+    {
+        // Columns are the most common completion target on a Row — list them first so the
+        // user sees them before having to scroll past the inherited ExcelArray surface.
+        var formula = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).`)";
+        var textUp = "=LET(t, Sales, `t.Rows.First(r => r[\"Amount\"] > 100).";
+
+        var (items, _) = await _provider.GetCompletionsAsync(
+            textUp, formula, SalesMetadata, CancellationToken.None);
+
+        var lastColumnIndex = items.ToList().FindLastIndex(i => i is ColumnCompletionData);
+        var firstLinqIndex = items.ToList().FindIndex(i => i.Text is "Skip" or "Where" or "FirstOrDefault");
+        Assert.True(lastColumnIndex >= 0 && firstLinqIndex >= 0,
+            "Both column and LINQ items should be present");
+        Assert.True(lastColumnIndex < firstLinqIndex,
+            $"Columns should precede LINQ members but lastColumn={lastColumnIndex}, firstLinq={firstLinqIndex}");
+    }
+
+    [Fact]
     public async Task Row_ColumnNamesNotDuplicated()
     {
         // The synthetic Row class emits column-name properties for Roslyn; the bracket-
